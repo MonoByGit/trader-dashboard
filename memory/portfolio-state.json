@@ -1,0 +1,12 @@
+{
+  "asOf": "2026-04-17T00:00:00Z",
+  "cashBalance": 100000,
+  "totalEquity": 100000,
+  "dayStartEquity": 100000,
+  "dailyPnl": 0,
+  "dailyPnlPct": 0,
+  "positions": [],
+  "openOrderIds": [],
+  "tradingEnabled": true,
+  "circuitBreakerTripped": false
+}
