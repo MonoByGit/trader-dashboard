@@ -62,7 +62,7 @@ Only the following ETF tickers are accepted:
 ```
 SPY  QQQ  IWM  DIA
 XLF  XLE  XLK  XLV
-GLD  TLT
+XLI  XLY
 ```
 
 Any other symbol is rejected regardless of stated rationale.
