@@ -8,6 +8,7 @@ export interface TradeProposal {
   id: string;                    // uuid
   symbol: string;                // e.g. "SPY"
   side: OrderSide;
+  // must be > 0, validated at runtime
   quantity: number;
   orderType: OrderType;
   limitPrice?: number;
@@ -36,6 +37,7 @@ export interface ValidatedTrade {
 export interface Position {
   symbol: string;
   quantity: number;
+  // must be > 0, validated at runtime
   avgEntryPrice: number;
   currentPrice: number;
   unrealizedPnl: number;
@@ -62,6 +64,7 @@ export interface RoutineResult {
   executedAt: string;
   success: boolean;
   summary: string;
+  // proposals that were generated but never submitted to validation pipeline
   tradesProposed: TradeProposal[];
   tradesExecuted: ValidatedTrade[];
   tradesRejected: ValidatedTrade[];
