@@ -5,6 +5,7 @@ import { Pill } from '@/components/ui/Pill';
 import { Segmented } from '@/components/ui/Segmented';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { EquityChart } from '@/components/charts/EquityChart';
+import { SessionKickoff } from '@/components/ui/SessionKickoff';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
 
@@ -27,6 +28,11 @@ interface Position {
 }
 interface Decision { id: string; symbol: string; decision: string; ts: string; agentNote?: string; rationale: string; criteria?: Record<string, string>; routine: string; orderId?: string; }
 
+interface KickoffOption {
+  symbol: string; thesis: string; rationale: string; confidence: number;
+  criteria: Record<string, 'pass' | 'fail'>; entryZone: string; stopLevel: string;
+}
+
 interface OverviewPageProps {
   portfolio: Portfolio;
   mode: string;
@@ -35,10 +41,11 @@ interface OverviewPageProps {
   onTriggerRoutine: (r: unknown) => void;
   onClosePosition: (p: Position) => void;
   onOpenKillSwitch: () => void;
+  onKickoffSelect: (opt: KickoffOption) => void;
   liveTick: boolean;
 }
 
-export function OverviewPage({ portfolio, mode, onOpenDecision, onTriggerRoutine, onClosePosition, onOpenKillSwitch, liveTick }: OverviewPageProps) {
+export function OverviewPage({ portfolio, mode, onOpenDecision, onTriggerRoutine, onClosePosition, onOpenKillSwitch, onKickoffSelect, liveTick }: OverviewPageProps) {
   const [range, setRange] = useState('1D');
   const isEmpty = mode === 'empty';
 
@@ -86,6 +93,8 @@ export function OverviewPage({ portfolio, mode, onOpenDecision, onTriggerRoutine
           </div>
         </div>
       </div>
+
+      {isEmpty && <SessionKickoff onSelect={onKickoffSelect}/>}
 
       {!isEmpty && (
         <div className="news-strip">

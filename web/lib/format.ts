@@ -26,6 +26,11 @@ export const fmt = {
       return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
     } catch { return '—'; }
   },
+  timeLocal: (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
+    } catch { return '—'; }
+  },
   timeS: (iso: string): string => {
     try {
       const d = new Date(iso);

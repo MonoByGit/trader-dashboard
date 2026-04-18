@@ -17,7 +17,7 @@ interface Thread {
 
 function relTime(iso: string) {
   const d = new Date(iso);
-  const now = MOCK.now;
+  const now = new Date();
   const diffMin = Math.round((now.getTime() - d.getTime()) / 60000);
   if (diffMin < 1) return 'just now';
   if (diffMin < 60) return `${diffMin}m`;
@@ -30,8 +30,7 @@ function relTime(iso: string) {
 
 function dateLabel(iso: string) {
   const d = new Date(iso);
-  const now = MOCK.now;
-  const today = new Date(now); today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
   const dDay = new Date(d); dDay.setHours(0,0,0,0);
   const diffDays = Math.round((today.getTime() - dDay.getTime()) / 86400000);
   if (diffDays === 0) return 'Today';
@@ -305,7 +304,7 @@ function MessageBubble({ m }: { m: Message }) {
       <div className="msg-body-wrap">
         <div className="msg-head">
           <span className="msg-name">{mine?'You':'Momentum-1'}</span>
-          <span className="msg-time">{fmt.time(m.at)}</span>
+          <span className="msg-time">{fmt.timeLocal(m.at)}</span>
         </div>
         <div className="msg-bubble">
           {m.body.split('\n').map((line, i) => <p key={i}>{line || '\u00A0'}</p>)}

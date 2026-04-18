@@ -182,6 +182,19 @@ export function DashboardShell() {
     setConfirmKill(false);
   };
 
+  const handleKickoffSelect = async (opt: { symbol: string; thesis: string; rationale: string; confidence: number; entryZone: string; stopLevel: string }) => {
+    const threadId = `kickoff-${Date.now()}`;
+    const threadTitle = `Sessie: ${opt.symbol} — ${opt.thesis.slice(0, 60)}`;
+    const message = `Ik heb ${opt.symbol} gekozen als focus voor vandaag. Thesis: ${opt.thesis}\n\nRationale: ${opt.rationale}\n\nEntry zone: ${opt.entryZone} · Stop: ${opt.stopLevel}\n\nBevestig mijn keuze en geef me een concreet plan: wat watch je, wanneer ga je in, wanneer stap je uit?`;
+    fetch('/api/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId, threadTitle, message }),
+    }).catch(() => null);
+    setPage('conversations');
+    showToastMsg(`Sessie gestart: ${opt.symbol}. Conversations geopend.`);
+  };
+
   const doTriggerRoutine = async () => {
     const r = confirmRoutine!;
     setConfirmRoutine(null);
@@ -208,7 +221,7 @@ export function DashboardShell() {
 
   const currentPage = (() => {
     switch (page) {
-      case 'overview': return <OverviewPage portfolio={portfolio} mode={tweaks.mode} tweaks={tweaks} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} liveTick={liveTick}/>;
+      case 'overview': return <OverviewPage portfolio={portfolio} mode={tweaks.mode} tweaks={tweaks} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect} liveTick={liveTick}/>;
       case 'positions': return <PositionsPage portfolio={portfolio} mode={tweaks.mode} onClose={handleClosePosition}/>;
       case 'decisions': return <DecisionLogPage mode={tweaks.mode} onOpenDecision={setSelectedDecision}/>;
       case 'conversations': return <ConversationsPage/>;
