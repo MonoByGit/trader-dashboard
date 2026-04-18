@@ -180,6 +180,8 @@ input, select, textarea { font-family: inherit; color: inherit; }
 
 .icon-btn {
   width: 28px; height: 28px;
+  min-width: 28px;
+  flex-shrink: 0;
   display: grid; place-items: center;
   border-radius: 4px;
   color: var(--text-secondary);

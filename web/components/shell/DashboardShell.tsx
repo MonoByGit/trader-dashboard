@@ -8,6 +8,7 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Modal } from '@/components/ui/Modal';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
+import { useAccount, usePositions } from '@/hooks/useAlpaca';
 import { OverviewPage } from '@/components/pages/OverviewPage';
 import { PositionsPage } from '@/components/pages/PositionsPage';
 import { DecisionLogPage } from '@/components/pages/DecisionLogPage';
@@ -68,6 +69,8 @@ export function DashboardShell() {
   const [toast, setToast] = useState<string | null>(null);
   const [leftOpen, setLeftOpen] = useState(() => { try { return localStorage.getItem('trader-left') !== 'false'; } catch { return true; } });
   const [rightOpen, setRightOpen] = useState(() => { try { return localStorage.getItem('trader-right') !== 'false'; } catch { return true; } });
+  const live = useAccount(30000);
+  const livePositions = usePositions(15000);
   const [guards, setGuards] = useState<Guards>(MOCK.guards as Guards);
   const [portfolio, setPortfolio] = useState<Portfolio>(() => tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio);
   const [liveTick, setLiveTick] = useState(false);
@@ -148,7 +151,12 @@ export function DashboardShell() {
     showToastMsg(`Routine "${r.name}" handmatig getriggerd.`);
   };
 
-  const dayPos = portfolio.dailyPnl >= 0;
+  const liveEquity = live.data?.equity ?? portfolio.totalEquity;
+  const liveCash = live.data?.cash ?? portfolio.cashBalance;
+  const liveDayPnl = live.data?.dayPnl ?? portfolio.dailyPnl;
+  const liveDayPnlPct = live.data?.dayPnlPct ?? portfolio.dailyPnlPct;
+  const livePositionCount = livePositions.data.length > 0 ? livePositions.data.length : portfolio.positions.length;
+  const dayPos = liveDayPnl >= 0;
 
   const currentPage = (() => {
     switch (page) {
@@ -268,12 +276,16 @@ export function DashboardShell() {
         {/* Right panel / Inspector */}
         <div className="right-panel">
           <div className="prop-group">
-            <div className="prop-group-title">Portfolio <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(portfolio.dailyPnlPct)}</Pill></div>
-            <div className="prop-row"><span className="k">Equity</span><span className="v">{fmt.usd(portfolio.totalEquity)}</span></div>
-            <div className="prop-row"><span className="k">Cash</span><span className="v">{fmt.usd(portfolio.cashBalance)}</span></div>
-            <div className="prop-row"><span className="k">Day P&amp;L</span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(portfolio.dailyPnl)}</span></div>
-            <div className="prop-row"><span className="k">Deployed</span><span className="v">{((1 - portfolio.cashBalance/portfolio.totalEquity)*100).toFixed(1)}%</span></div>
-            <div className="prop-row"><span className="k">Open</span><span className="v">{portfolio.positions.length} / 3</span></div>
+            <div className="prop-group-title">
+              Portfolio{' '}
+              <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(liveDayPnlPct)}</Pill>
+              {live.data && <span style={{fontSize:9,color:'var(--text-tertiary)',marginLeft:4}}>LIVE</span>}
+            </div>
+            <div className="prop-row"><span className="k">Equity</span><span className="v">{fmt.usd(liveEquity)}</span></div>
+            <div className="prop-row"><span className="k">Cash</span><span className="v">{fmt.usd(liveCash)}</span></div>
+            <div className="prop-row"><span className="k">Day P&amp;L</span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(liveDayPnl)}</span></div>
+            <div className="prop-row"><span className="k">Deployed</span><span className="v">{((1 - liveCash/liveEquity)*100).toFixed(1)}%</span></div>
+            <div className="prop-row"><span className="k">Open</span><span className="v">{livePositionCount} / 3</span></div>
           </div>
 
           <div className="prop-group">
@@ -324,17 +336,17 @@ export function DashboardShell() {
         <div className="left">
           <div className="row" style={{gap:6}}><div className="dot-live"/> <span className="text-secondary">Alpaca Paper · connected</span></div>
           <span className="statusbar-clock">
-            <span className="mkt-dot open"/>
-            <span className="text-secondary">Market OPEN</span>
-            <span className="text-tertiary">· closes 16:00 ET (2h 18m)</span>
+            <span className={`mkt-dot ${live.data?.marketOpen ? 'open' : 'closed'}`}/>
+            <span className="text-secondary">Market {live.data ? (live.data.marketOpen ? 'OPEN' : 'CLOSED') : 'OPEN'}</span>
+            {live.data?.nextClose && <span className="text-tertiary">· closes {new Date(live.data.nextClose).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'})} ET</span>}
           </span>
           <span>VIX 18.4</span>
           <span>SPY {fmt.usd(MOCK.watchlist[0].price)}</span>
         </div>
         <div className="right">
-          <span>BP <span className="mono text-secondary">{fmt.usd(portfolio.totalEquity * 1.95, 0)}</span></span>
-          <span title="Pattern Day Trader counter">Daytrades <span className="mono text-secondary">1/3</span></span>
-          <span>{portfolio.positions.length} pos · {fmt.usd(portfolio.totalEquity,0)} equity</span>
+          <span>BP <span className="mono text-secondary">{fmt.usd(live.data?.buyingPower ?? portfolio.totalEquity * 1.95, 0)}</span></span>
+          <span title="Pattern Day Trader counter">Daytrades <span className="mono text-secondary">{live.data?.daytrades ?? 1}/3</span></span>
+          <span>{livePositionCount} pos · {fmt.usd(liveEquity,0)} equity</span>
           <span>guards: <span className="text-pos">OK</span></span>
           <span>v0.1.0-paper</span>
         </div>
