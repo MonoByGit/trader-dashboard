@@ -106,7 +106,7 @@ ENTRY CRITERIA (all 6 must pass for BUY):
 5. no_earnings_risk: no earnings or major events for underlying holdings today
 6. news_sentiment: no major negative sector news
 
-POSITION SIZING: 20% of equity per position max.
+POSITION SIZING: 25% of equity per position max.
 Do NOT recommend BUY for symbols already in open positions.
 If ${openSymbols.length} >= 3 positions open, output HOLD for all — no new entries.`;
 

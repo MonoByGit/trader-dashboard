@@ -11,7 +11,7 @@ export const MODELS = {
   // Daily execution — multi-criteria reasoning + narrative
   sonnet: 'claude-sonnet-4-6',
   // Weekly strategy review — deep analysis
-  opus: 'claude-opus-4-7',
+  opus: 'claude-opus-4-5',
   // Fast structured ops — order sizing, midday checks
   flash: 'gemini-2.0-flash',
   // News/sentiment grounding with Google Search
@@ -31,7 +31,9 @@ export async function claudeJson<T>(
     messages: [{ role: 'user', content: user }],
   });
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
-  const match = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\{[\s\S]*\})/);
+  const match = text.match(/```json\s*([\s\S]*?)```/)
+    ?? text.match(/```\s*([\s\S]*?)```/)
+    ?? text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
   if (!match) throw new Error('No JSON in Claude response: ' + text.slice(0, 200));
   return JSON.parse(match[1]);
 }

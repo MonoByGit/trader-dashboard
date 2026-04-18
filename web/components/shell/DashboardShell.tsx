@@ -128,15 +128,32 @@ export function DashboardShell() {
   const showToastMsg = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3400); };
 
   const handleClosePosition = (p: Position) => setConfirmClose(p);
-  const doClose = () => {
+  const doClose = async () => {
     const p = confirmClose!;
+    try {
+      const res = await fetch('/api/alpaca/positions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: p.symbol }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToastMsg(`Fout bij sluiten: ${err.error ?? res.status}`);
+        setConfirmClose(null);
+        return;
+      }
+    } catch {
+      showToastMsg(`Verbindingsfout bij sluiten van ${p.symbol}.`);
+      setConfirmClose(null);
+      return;
+    }
     setPortfolio(prev => ({
       ...prev,
       positions: prev.positions.filter(x => x.symbol !== p.symbol),
       cashBalance: +(prev.cashBalance + p.marketValue).toFixed(2)
     }));
     setConfirmClose(null);
-    showToastMsg(`Ik heb ${p.symbol} gesloten op ${fmt.usd(p.currentPrice)} · ${fmt.signedUsd(p.unrealizedPnl)}.`);
+    showToastMsg(`${p.symbol} gesloten op ${fmt.usd(p.currentPrice)} · ${fmt.signedUsd(p.unrealizedPnl)}.`);
   };
 
   const doKillSwitch = () => {
@@ -145,10 +162,21 @@ export function DashboardShell() {
     setConfirmKill(false);
   };
 
-  const doTriggerRoutine = () => {
+  const doTriggerRoutine = async () => {
     const r = confirmRoutine!;
     setConfirmRoutine(null);
-    showToastMsg(`Routine "${r.name}" handmatig getriggerd.`);
+    showToastMsg(`Routine "${r.name}" wordt uitgevoerd…`);
+    try {
+      const res = await fetch('/api/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routine: r.id }),
+      });
+      const data = await res.json();
+      showToastMsg(res.ok ? `"${r.name}" voltooid.` : `Fout: ${data.error ?? res.status}`);
+    } catch {
+      showToastMsg(`Verbindingsfout bij "${r.name}".`);
+    }
   };
 
   const liveEquity = live.data?.equity ?? portfolio.totalEquity;
@@ -259,7 +287,7 @@ export function DashboardShell() {
               <div style={{width:28,height:28,borderRadius:6,background:'var(--bg-input)',border:'1px solid var(--border-strong)',display:'grid',placeItems:'center',color:'var(--text-secondary)'}}><BrandLogo size={16}/></div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:11,fontWeight:500}}>Momentum-1</div>
-                <div style={{fontSize:10,color:'var(--text-tertiary)'}}>claude-haiku · paper</div>
+                <div style={{fontSize:10,color:'var(--text-tertiary)'}}>claude-sonnet · paper</div>
               </div>
               <Pill kind="pos" dot pulse/>
             </div>

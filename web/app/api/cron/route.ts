@@ -14,13 +14,15 @@ function requireAuth(req: Request): boolean {
 }
 
 async function saveDecision(d: Record<string, unknown>) {
-  const id = `d-${Date.now()}-${d.symbol}`;
-  const payload = { id, ts: new Date().toISOString(), ...d };
-  await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/decisions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).catch(() => null);
+  const id = `d-${Date.now()}-${String(d.symbol)}`;
+  if (!hasDb()) return;
+  await initDb();
+  await dbRun(
+    `INSERT INTO decisions (id, ts, routine, symbol, decision, criteria, rationale, agent_note, confidence, order_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING`,
+    [id, new Date().toISOString(), d.routine, d.symbol, d.decision,
+     JSON.stringify(d.criteria ?? null), d.rationale, d.agentNote, d.confidence, d.orderId ?? null]
+  );
 }
 
 async function runPremarket() {
@@ -171,6 +173,12 @@ export async function POST(req: Request) {
       case 'market-open':  result = await runMarketOpen(); break;
       case 'midday':       result = await runMidday(); break;
       case 'eod':          result = await runEod(); break;
+      case 'weekly': {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+        const r = await fetch(`${appUrl}/api/agent/review`, { method: 'POST' });
+        result = await r.json();
+        break;
+      }
       default: return NextResponse.json({ error: 'Unknown routine' }, { status: 400 });
     }
     return NextResponse.json(result);

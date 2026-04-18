@@ -110,21 +110,24 @@ export function ConversationsPage() {
 
   const markRead = (id: string) => setThreads(ts => ts.map(t => t.id === id ? { ...t, unread: 0 } : t));
 
-  const startNew = () => {
+  const startNew = async () => {
     if (!newTitle.trim() || !newBody.trim()) return;
-    const id = 't-' + String(threads.length + 1).padStart(3, '0');
+    const id = `t-${Date.now()}`;
+    const title = newTitle.trim();
+    const body = newBody.trim();
     const t: Thread = {
-      id, kind: 'user_initiated', title: newTitle.trim(), tags: [], status: 'open', unread: 0,
+      id, kind: 'user_initiated', title, tags: [], status: 'open', unread: 0,
       createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), context: null,
-      messages: [{ from: 'user', at: new Date().toISOString(), body: newBody.trim() }]
+      messages: [{ from: 'user', at: new Date().toISOString(), body }]
     };
     setThreads(ts => [t, ...ts]);
     setSelectedId(id);
     setNewTitle(''); setNewBody('');
     setComposingNew(false);
-    setTimeout(() => {
-      setThreads(ts => ts.map(x => x.id === id ? { ...x, lastAt: new Date().toISOString(), messages: [...x.messages, { from: 'agent', at: new Date().toISOString(), body: 'Goede vraag. Laat me er even induiken. Ik kom terug met data.' }] } : x));
-    }, 2200);
+    setReplying(true);
+    const reply = await fetchAgentReply(id, title, body);
+    setReplying(false);
+    setThreads(ts => ts.map(x => x.id === id ? { ...x, lastAt: new Date().toISOString(), messages: [...x.messages, { from: 'agent', at: new Date().toISOString(), body: reply }] } : x));
   };
 
   return (

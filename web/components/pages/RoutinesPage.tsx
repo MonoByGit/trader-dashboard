@@ -11,15 +11,15 @@ const ROUTINE_MAP: Record<string, string> = {
   'market-open': 'market-open',
   midday: 'midday',
   close: 'eod',
-  weekly: 'eod',
+  weekly: 'weekly',
 };
 
 async function triggerRoutine(routineId: string): Promise<{ ok: boolean; msg: string }> {
   const cronKey = ROUTINE_MAP[routineId] ?? routineId;
   try {
-    const res = await fetch('/api/cron', {
+    const res = await fetch('/api/trigger', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ''}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ routine: cronKey }),
     });
     const data = await res.json();

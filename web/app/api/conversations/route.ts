@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const system = `Je bent Momentum-1, een autonome trading agent die US ETFs verhandelt op Alpaca paper trading.
 Strategie: ${strategy.name}. Symbolen: ${strategy.symbols.join(', ')}.
 ${account ? `Portfolio: $${parseFloat(account.equity).toFixed(0)} equity, $${parseFloat(account.cash).toFixed(0)} cash.` : ''}
-${positions.length > 0 ? `Open posities: ${positions.map(p => `${p.symbol} (${p.unrealized_pl >= '0' ? '+' : ''}$${parseFloat(p.unrealized_pl).toFixed(0)})`).join(', ')}.` : 'Geen open posities.'}
+${positions.length > 0 ? `Open posities: ${positions.map(p => `${p.symbol} (${parseFloat(p.unrealized_pl) >= 0 ? '+' : ''}$${parseFloat(p.unrealized_pl).toFixed(0)})`).join(', ')}.` : 'Geen open posities.'}
 Je bent in gesprek met Dusty, de eigenaar en leerling. Schrijf in het Nederlands. Wees analytisch, direct en to the point.
 Deel inzichten, patronen en leermomenten. Stel proactief vragen terug als dat relevant is.`;
 
