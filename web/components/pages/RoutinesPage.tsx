@@ -1,11 +1,48 @@
 'use client';
+import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { MOCK } from '@/lib/mock';
 
 interface Routine { id: string; name: string; time: string; lastRun: string; summary: string; status: string; nextRun: string; }
 
+const ROUTINE_MAP: Record<string, string> = {
+  premarket: 'premarket',
+  'market-open': 'market-open',
+  midday: 'midday',
+  close: 'eod',
+  weekly: 'eod',
+};
+
+async function triggerRoutine(routineId: string): Promise<{ ok: boolean; msg: string }> {
+  const cronKey = ROUTINE_MAP[routineId] ?? routineId;
+  try {
+    const res = await fetch('/api/cron', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ''}` },
+      body: JSON.stringify({ routine: cronKey }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, msg: data.error ?? 'Mislukt' };
+    return { ok: true, msg: `Routine "${cronKey}" voltooid.` };
+  } catch (e) {
+    return { ok: false, msg: String(e) };
+  }
+}
+
 export function RoutinesPage({ onTrigger }: { onTrigger: (r: Routine) => void }) {
+  const [running, setRunning] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+
+  const handleRun = async (r: Routine) => {
+    setRunning(r.id);
+    setLastResult(null);
+    const result = await triggerRoutine(r.id);
+    setRunning(null);
+    setLastResult({ id: r.id, ...result });
+    if (result.ok) onTrigger(r);
+  };
+
   return (
     <>
       <div className="page-head"><div><h1>Routines</h1><div className="subtitle text-secondary">Elke routine heeft een vast tijdslot en beperkte scope. Handmatig triggeren alleen voor tests.</div></div></div>
@@ -25,8 +62,14 @@ export function RoutinesPage({ onTrigger }: { onTrigger: (r: Routine) => void })
                     {r.status==='done'&&<Pill kind="pos" dot>DONE</Pill>}
                     {r.status==='next'&&<Pill kind="accent" dot pulse>UP NEXT</Pill>}
                     {r.status==='scheduled'&&<Pill kind="muted">SCHEDULED</Pill>}
+                    {running===r.id&&<Pill kind="accent" dot pulse>RUNNING</Pill>}
+                    {lastResult?.id===r.id&&<Pill kind={lastResult.ok?'pos':'neg'}>{lastResult.ok?'✓ Klaar':'Fout'}</Pill>}
                   </td>
-                  <td><button className="btn outline" onClick={() => onTrigger(r)}><Icon name="play" size={10}/> Run</button></td>
+                  <td>
+                    <button className="btn outline" disabled={running===r.id} onClick={() => handleRun(r)}>
+                      <Icon name={running===r.id?'clock':'play'} size={10}/> {running===r.id?'Bezig...':'Run'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

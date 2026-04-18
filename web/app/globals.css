@@ -896,8 +896,8 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   display: grid; place-items: center;
   font-size: 9px; font-weight: 600; color: white;
 }
-.conv-bubble.agent { background: linear-gradient(135deg, var(--accent), #7c5cff); }
-.conv-bubble.user { background: linear-gradient(135deg, #ffa629, #f24822); }
+.conv-bubble.agent { background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text-secondary); }
+.conv-bubble.user { background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text-secondary); }
 .conv-row-title {
   font-size: 12px; font-weight: 500; color: var(--text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -957,8 +957,8 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   display: grid; place-items: center;
   color: white; font-size: 10px; font-weight: 600; overflow: hidden;
 }
-.avatar-user { background: linear-gradient(135deg, #ffa629, #f24822); }
-.avatar-agent { background: linear-gradient(135deg, var(--accent), #7c5cff); }
+.avatar-user { background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text-secondary); }
+.avatar-agent { background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text-secondary); }
 .msg-body-wrap { min-width: 0; }
 .msg-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
 .msg-name { font-size: 11px; font-weight: 500; color: var(--text-primary); }

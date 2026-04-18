@@ -211,7 +211,7 @@ export function DashboardShell() {
           <button className="icon-btn" title="Notifications" aria-label="Notifications"><Icon name="bell" size={14}/></button>
           <button className={`icon-btn${showTweaks ? ' active' : ''}`} title="Tweaks" aria-label="Tweaks" onClick={() => setShowTweaks(s => !s)}><Icon name="tweak" size={14}/></button>
           <div style={{width:1,height:20,background:'var(--border-subtle)',margin:'0 4px'}}/>
-          <div style={{width:26,height:26,borderRadius:'50%',background:'linear-gradient(135deg,#ffa629,#f24822)',color:'white',display:'grid',placeItems:'center',fontSize:10,fontWeight:600}}>DM</div>
+          <div style={{width:26,height:26,borderRadius:'50%',background:'var(--bg-input)',border:'1px solid var(--border-strong)',color:'var(--text-secondary)',display:'grid',placeItems:'center'}}><Icon name="user" size={13}/></div>
         </div>
       </div>
 
@@ -256,7 +256,7 @@ export function DashboardShell() {
           <div style={{padding:12,borderTop:'1px solid var(--border-subtle)'}}>
             <div style={{fontSize:10,color:'var(--text-tertiary)',textTransform:'uppercase',letterSpacing:0.05,marginBottom:6}}>Agent</div>
             <div style={{display:'flex',alignItems:'center',gap:8,padding:8,background:'var(--bg-app)',borderRadius:6}}>
-              <div style={{width:28,height:28,borderRadius:6,background:'linear-gradient(135deg,var(--accent),#7c5cff)',display:'grid',placeItems:'center',color:'#fff'}}><BrandLogo size={16}/></div>
+              <div style={{width:28,height:28,borderRadius:6,background:'var(--bg-input)',border:'1px solid var(--border-strong)',display:'grid',placeItems:'center',color:'var(--text-secondary)'}}><BrandLogo size={16}/></div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:11,fontWeight:500}}>Momentum-1</div>
                 <div style={{fontSize:10,color:'var(--text-tertiary)'}}>claude-haiku · paper</div>

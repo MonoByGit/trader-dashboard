@@ -164,7 +164,7 @@ export function ConversationsPage() {
                   <div className="conv-kind-icon">
                     {t.kind==='agent_initiated'
                       ? <div className="conv-bubble agent"><Icon name="bolt" size={9}/></div>
-                      : <div className="conv-bubble user">DM</div>}
+                      : <div className="conv-bubble user"><Icon name="user" size={9}/></div>}
                   </div>
                   <div className="conv-row-title-wrap">
                     <div className="conv-row-title">{t.title}</div>
@@ -296,8 +296,8 @@ function MessageBubble({ m }: { m: Message }) {
     <div className={`msg${mine?' mine':' theirs'}`}>
       <div className="msg-avatar">
         {mine
-          ? <div className="avatar-user">DM</div>
-          : <div className="avatar-agent" style={{color:'#fff'}}><BrandLogo size={16}/></div>}
+          ? <div className="avatar-user"><Icon name="user" size={13}/></div>
+          : <div className="avatar-agent"><BrandLogo size={16}/></div>}
       </div>
       <div className="msg-body-wrap">
         <div className="msg-head">
