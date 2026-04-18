@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
-import { claudeText, MODELS } from '@/lib/ai';
+import { anthropic, MODELS } from '@/lib/ai';
 import { alpaca } from '@/lib/alpaca';
 import strategy from '@/strategy.json';
 
-const memThreads: Record<string, unknown[]> = {};
+const memThreads: Record<string, Array<{ from_role: string; body: string }>> = {};
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const threadId = searchParams.get('threadId');
 
   if (!hasDb()) {
-    return NextResponse.json(threadId ? (memThreads[threadId] ?? []) : []);
+    if (threadId) return NextResponse.json(memThreads[threadId] ?? []);
+    return NextResponse.json([]);
   }
 
   await initDb();
@@ -36,18 +37,37 @@ ${positions.length > 0 ? `Open posities: ${positions.map(p => `${p.symbol} (${pa
 Je bent in gesprek met Dusty, de eigenaar en leerling. Schrijf in het Nederlands. Wees analytisch, direct en to the point.
 Deel inzichten, patronen en leermomenten. Stel proactief vragen terug als dat relevant is.`;
 
-  const reply = await claudeText(MODELS.sonnet, system, message, 1024);
+  // Fetch thread history for multi-turn context
+  let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  if (hasDb()) {
+    await initDb();
+    const rows = await dbQuery<{ from_role: string; body: string }>(
+      `SELECT from_role, body FROM conversations WHERE thread_id=$1 ORDER BY created_at ASC LIMIT 20`,
+      [threadId]
+    );
+    history = rows.map(r => ({ role: r.from_role === 'user' ? 'user' : 'assistant', content: r.body }));
+  } else if (memThreads[threadId]) {
+    history = memThreads[threadId].map(r => ({ role: r.from_role === 'user' ? 'user' : 'assistant', content: r.body }));
+  }
 
-  const userMsg = { id: `msg-${Date.now()}-u`, threadId, from: 'user', body: message, createdAt: new Date().toISOString() };
-  const agentMsg = { id: `msg-${Date.now()}-a`, threadId, from: 'agent', body: reply, createdAt: new Date().toISOString() };
+  const msg = await anthropic.messages.create({
+    model: MODELS.sonnet,
+    max_tokens: 1024,
+    system,
+    messages: [...history, { role: 'user', content: message }],
+  });
+  const reply = msg.content[0].type === 'text' ? msg.content[0].text : '';
+
+  const now = new Date().toISOString();
+  const userMsg = { id: `msg-${Date.now()}-u`, threadId, from: 'user', body: message, createdAt: now };
+  const agentMsg = { id: `msg-${Date.now()}-a`, threadId, from: 'agent', body: reply, createdAt: now };
 
   if (!hasDb()) {
     if (!memThreads[threadId]) memThreads[threadId] = [];
-    memThreads[threadId].push(userMsg, agentMsg);
+    memThreads[threadId].push({ from_role: 'user', body: message }, { from_role: 'agent', body: reply });
     return NextResponse.json({ reply, agentMsg });
   }
 
-  await initDb();
   await dbRun(
     `INSERT INTO threads (id, title, kind, status, last_at) VALUES ($1,$2,'user_initiated','open',NOW())
      ON CONFLICT (id) DO UPDATE SET last_at=NOW()`,

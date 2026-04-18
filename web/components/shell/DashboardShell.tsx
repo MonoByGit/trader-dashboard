@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
 import { useAccount, usePositions } from '@/hooks/useAlpaca';
+import { useUnread } from '@/hooks/useUnread';
 import { OverviewPage } from '@/components/pages/OverviewPage';
 import { PositionsPage } from '@/components/pages/PositionsPage';
 import { DecisionLogPage } from '@/components/pages/DecisionLogPage';
@@ -71,11 +72,17 @@ export function DashboardShell() {
   const [rightOpen, setRightOpen] = useState(() => { try { return localStorage.getItem('trader-right') !== 'false'; } catch { return true; } });
   const live = useAccount(30000);
   const livePositions = usePositions(15000);
+  const unread = useUnread(90000);
   const [guards, setGuards] = useState<Guards>(MOCK.guards as Guards);
   const [portfolio, setPortfolio] = useState<Portfolio>(() => tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio);
   const [liveTick, setLiveTick] = useState(false);
 
-  useEffect(() => { try { localStorage.setItem('trader-page', page); } catch {} }, [page]);
+  useEffect(() => {
+    try { localStorage.setItem('trader-page', page); } catch {}
+    if (page === 'decisions') unread.markSeen('decisions');
+    if (page === 'conversations') unread.markSeen('conversations');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
   useEffect(() => { try { localStorage.setItem('trader-left', String(leftOpen)); } catch {} }, [leftOpen]);
   useEffect(() => { try { localStorage.setItem('trader-right', String(rightOpen)); } catch {} }, [rightOpen]);
   useEffect(() => {
@@ -95,6 +102,13 @@ export function DashboardShell() {
     }
   }, [tweaks]);
   useEffect(() => { setPortfolio(tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio); }, [tweaks.mode]);
+
+  // Load kill switch state from backend on mount
+  useEffect(() => {
+    fetch('/api/guards').then(r => r.json()).then(d => {
+      setGuards(g => ({ ...g, tradingEnabled: d.tradingEnabled }));
+    }).catch(() => null);
+  }, []);
 
   useEffect(() => {
     if (tweaks.mode !== 'active') return;
@@ -157,8 +171,14 @@ export function DashboardShell() {
   };
 
   const doKillSwitch = () => {
-    setGuards(g => ({ ...g, tradingEnabled: !g.tradingEnabled }));
-    showToastMsg(guards.tradingEnabled ? 'Kill switch geactiveerd. Geen nieuwe orders meer.' : 'Trading heractiveerd.');
+    const next = !guards.tradingEnabled;
+    setGuards(g => ({ ...g, tradingEnabled: next }));
+    fetch('/api/guards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tradingEnabled: next }),
+    }).catch(() => null);
+    showToastMsg(next ? 'Trading heractiveerd.' : 'Kill switch geactiveerd. Geen nieuwe orders meer.');
     setConfirmKill(false);
   };
 
@@ -229,6 +249,12 @@ export function DashboardShell() {
           </div>
         </div>
         <div className="toolbar-right">
+          <button
+            className={`btn outline${tweaks.mode === 'active' ? ' active' : ''}`}
+            style={{fontSize:10,padding:'3px 8px',height:24,opacity: tweaks.mode === 'active' ? 1 : 0.5}}
+            title="Toggle demo data on/off"
+            onClick={() => updateTweak('mode', tweaks.mode === 'active' ? 'empty' : 'active')}
+          >DEMO</button>
           <button className={`icon-btn panel-toggle${rightOpen ? ' active' : ''}`} title="Toggle right panel (⌘])" aria-label="Toggle right panel" onClick={() => setRightOpen(v => !v)}>
             <Icon name="sidebarRight" size={14}/>
           </button>
@@ -253,8 +279,9 @@ export function DashboardShell() {
               <div key={p.id} className={`nav-row${page === p.id ? ' active' : ''}`} onClick={() => setPage(p.id)}>
                 <div className="nav-icon"><Icon name={p.icon as Parameters<typeof Icon>[0]['name']} size={13}/></div>
                 <span>{p.label}</span>
-                {p.id === 'decisions' && <span className="nav-badge">{(MOCK.decisions as unknown[]).length}</span>}
-                {p.id === 'positions' && <span className="nav-badge">{portfolio.positions.length}/3</span>}
+                {p.id === 'decisions' && unread.decisions > 0 && <span className="nav-badge unread">{unread.decisions}</span>}
+                {p.id === 'conversations' && unread.conversations > 0 && <span className="nav-badge unread">{unread.conversations}</span>}
+                {p.id === 'positions' && <span className="nav-badge">{livePositionCount}/3</span>}
               </div>
             ))}
           </div>
@@ -391,8 +418,8 @@ export function DashboardShell() {
             <div className="tweak-row"><span className="tk-label">Theme</span>
               <Segmented value={tweaks.theme} onChange={v => updateTweak('theme', v)} options={[{label:'Dark',value:'dark'},{label:'Light',value:'light'}]}/>
             </div>
-            <div className="tweak-row"><span className="tk-label">Session state</span>
-              <Segmented value={tweaks.mode} onChange={v => updateTweak('mode', v)} options={[{label:'Active',value:'active'},{label:'Empty',value:'empty'}]}/>
+            <div className="tweak-row"><span className="tk-label">Demo data</span>
+              <Segmented value={tweaks.mode} onChange={v => updateTweak('mode', v)} options={[{label:'On',value:'active'},{label:'Off',value:'empty'}]}/>
             </div>
             <div className="tweak-row"><span className="tk-label">Density</span>
               <Segmented value={tweaks.density} onChange={v => updateTweak('density', v)} options={[{label:'Comfy',value:'comfortable'},{label:'Compact',value:'compact'}]}/>

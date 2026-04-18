@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
 import { claudeJson, claudeText, geminiText, MODELS } from '@/lib/ai';
-import { dbRun, initDb, hasDb } from '@/lib/db';
+import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import strategy from '@/strategy.json';
 
 const WATCHLIST = strategy.symbols;
@@ -80,6 +80,15 @@ Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
 }
 
 async function runMarketOpen() {
+  // Kill switch check
+  if (hasDb()) {
+    await initDb();
+    const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key='trading_enabled'`);
+    if (rows.length > 0 && rows[0].value === 'false') {
+      return { skipped: true, reason: 'Kill switch activated' };
+    }
+  }
+
   const [account, positions, clock] = await Promise.all([
     alpaca.account(),
     alpaca.positions(),
@@ -97,6 +106,13 @@ async function runMarketOpen() {
   const barsData = await alpaca.bars(WATCHLIST, '1Day', 30);
   const bars = barsData.bars ?? {};
 
+  // Last known prices for server-side position sizing guard
+  const lastPrices: Record<string, number> = {};
+  for (const s of WATCHLIST) {
+    const b = bars[s] ?? [];
+    if (b.length > 0) lastPrices[s] = b[b.length - 1].c;
+  }
+
   const candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
     MODELS.sonnet,
     `Je bent Momentum-1. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.`,
@@ -108,6 +124,15 @@ async function runMarketOpen() {
   for (const c of candidates) {
     if (c.action !== 'buy' || openSymbols.includes(c.symbol)) continue;
     if (openSymbols.length + orders.length >= strategy.rules.max_positions) break;
+
+    // Server-side position size guard — cap Claude's qty recommendation
+    const lastPrice = lastPrices[c.symbol];
+    if (lastPrice) {
+      const maxNotional = equity * strategy.rules.position_size_pct;
+      const maxQty = Math.floor(maxNotional / lastPrice);
+      c.qty = Math.max(1, Math.min(c.qty, maxQty));
+    }
+
     try {
       const order = await alpaca.placeOrder({
         symbol: c.symbol, qty: c.qty, side: 'buy',
