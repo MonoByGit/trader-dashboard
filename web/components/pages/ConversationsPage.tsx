@@ -40,12 +40,18 @@ function dateLabel(iso: string) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function pickAgentReply(userMsg: string) {
-  const lower = userMsg.toLowerCase();
-  if (lower.match(/waarom|why|explain|uitleg/)) return 'Goede vraag. Ik zet de redenatie op een rij en kom terug. Kort: ik volg de 6 entry-criteria en de exit-ladder strikt; als iets afwijkt, staat dat in de decision log met rationale.';
-  if (lower.match(/research|onderzoek|backtest|test/)) return 'Begrepen, ik zet een research brief klaar. Ik log dit onder "open vragen" en review het tijdens de volgende Weekly Review (vrijdag 16:30).';
-  if (lower.match(/stop|close|flat/)) return 'Akkoord. Ik laat bestaande posities door de exit-ladder afgehandeld worden. Wil je dat ik direct handmatig flatten, of wachten tot EOD (16:10)?';
-  return 'Genoteerd. Ik neem dit mee in de volgende routine en log het onder dit thread.';
+async function fetchAgentReply(threadId: string, threadTitle: string, message: string): Promise<string> {
+  try {
+    const res = await fetch('/api/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId, threadTitle, message }),
+    });
+    const data = await res.json();
+    return data.reply ?? 'Kon geen antwoord genereren. Probeer opnieuw.';
+  } catch {
+    return 'Verbindingsfout. Probeer opnieuw.';
+  }
 }
 
 export function ConversationsPage() {
@@ -78,20 +84,23 @@ export function ConversationsPage() {
     unread: threads.reduce((s, t) => s + (t.unread || 0), 0),
   };
 
-  const sendReply = () => {
-    if (!draft.trim() || !selected) return;
+  const [replying, setReplying] = useState(false);
+
+  const sendReply = async () => {
+    if (!draft.trim() || !selected || replying) return;
     const body = draft.trim();
-    setThreads(ts => ts.map(t => {
-      if (t.id !== selected.id) return t;
-      return { ...t, lastAt: new Date().toISOString(), unread: 0, messages: [...t.messages, { from: 'user', at: new Date().toISOString(), body }] };
+    setThreads(ts => ts.map(t => t.id !== selected.id ? t : {
+      ...t, lastAt: new Date().toISOString(), unread: 0,
+      messages: [...t.messages, { from: 'user', at: new Date().toISOString(), body }],
     }));
     setDraft('');
-    setTimeout(() => {
-      setThreads(ts => ts.map(t => {
-        if (t.id !== selected.id) return t;
-        return { ...t, lastAt: new Date().toISOString(), messages: [...t.messages, { from: 'agent', at: new Date().toISOString(), body: pickAgentReply(body) }] };
-      }));
-    }, 1800);
+    setReplying(true);
+    const reply = await fetchAgentReply(selected.id, selected.title, body);
+    setReplying(false);
+    setThreads(ts => ts.map(t => t.id !== selected.id ? t : {
+      ...t, lastAt: new Date().toISOString(),
+      messages: [...t.messages, { from: 'agent', at: new Date().toISOString(), body: reply }],
+    }));
   };
 
   const toggleClose = () => {
@@ -247,7 +256,7 @@ export function ConversationsPage() {
                     </div>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
                       <span className="text-tertiary" style={{fontSize:10}}>⌘ + Enter</span>
-                      <button className="btn primary" onClick={sendReply} disabled={!draft.trim()}><Icon name="send" size={11}/> Send</button>
+                      <button className="btn primary" onClick={sendReply} disabled={!draft.trim() || replying}><Icon name="send" size={11}/> {replying ? 'Denkt...' : 'Send'}</button>
                     </div>
                   </div>
                 </div>

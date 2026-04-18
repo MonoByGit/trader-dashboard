@@ -1,0 +1,40 @@
+{
+  "name": "Momentum Breakout",
+  "version": "1.0",
+  "description": "Momentum breakout op grote US ETFs. Geen overnachten. Strakke stops.",
+  "symbols": ["QQQ", "SPY", "XLK", "XLI", "XLY", "IWM", "XLF", "XLE", "XLV", "XLU"],
+  "rules": {
+    "max_positions": 3,
+    "position_size_pct": 0.25,
+    "hold_overnight": false,
+    "hard_stop_pct": 0.02,
+    "trailing_stop_pct": 0.03,
+    "take_profit_pct": 0.05,
+    "cash_floor_pct": 0.10,
+    "vix_threshold": 30,
+    "breakout_chase_limit_pct": 0.03,
+    "rsi_min": 50,
+    "rsi_max": 75,
+    "volume_ratio_min": 1.1
+  },
+  "entry_criteria": [
+    "trend_above_sma20",
+    "momentum_rsi",
+    "volume_above_avg",
+    "vix_below_limit",
+    "no_earnings_risk",
+    "news_sentiment"
+  ],
+  "schedule_et": {
+    "premarket": "08:30",
+    "market_open": "09:35",
+    "midday": "12:30",
+    "eod": "16:10"
+  },
+  "agent": {
+    "name": "Momentum-1",
+    "language": "nl",
+    "auto_trade_paper": true,
+    "initiate_conversations": true
+  }
+}
