@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/Segmented';
 import { Modal } from '@/components/ui/Modal';
@@ -53,9 +53,12 @@ async function fetchAgentReply(threadId: string, threadTitle: string, message: s
   }
 }
 
-export function ConversationsPage() {
-  const [threads, setThreads] = useState<Thread[]>(() => (MOCK.threads as Thread[]).map(t => ({ ...t, messages: [...t.messages] })));
-  const [selectedId, setSelectedId] = useState<string>(threads[0]?.id || '');
+export function ConversationsPage({ pendingThread, onKickoffHandled }: { pendingThread?: Thread | null; onKickoffHandled?: () => void }) {
+  const [threads, setThreads] = useState<Thread[]>(() => {
+    const base = (MOCK.threads as Thread[]).map(t => ({ ...t, messages: [...t.messages] }));
+    return pendingThread ? [pendingThread, ...base] : base;
+  });
+  const [selectedId, setSelectedId] = useState<string>(() => pendingThread?.id || threads[0]?.id || '');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterKind, setFilterKind] = useState('all');
   const [q, setQ] = useState('');
@@ -84,6 +87,22 @@ export function ConversationsPage() {
   };
 
   const [replying, setReplying] = useState(false);
+
+  useEffect(() => {
+    if (!pendingThread) return;
+    const userMsg = pendingThread.messages.find(m => m.from === 'user');
+    if (!userMsg) return;
+    setReplying(true);
+    fetchAgentReply(pendingThread.id, pendingThread.title, userMsg.body).then(reply => {
+      setReplying(false);
+      setThreads(ts => ts.map(t => t.id === pendingThread.id ? {
+        ...t, lastAt: new Date().toISOString(),
+        messages: [...t.messages, { from: 'agent', at: new Date().toISOString(), body: reply }],
+      } : t));
+      onKickoffHandled?.();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingThread?.id]);
 
   const sendReply = async () => {
     if (!draft.trim() || !selected || replying) return;

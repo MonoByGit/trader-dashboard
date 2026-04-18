@@ -1174,6 +1174,19 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 .news-sym { font-weight: 500; color: var(--text-primary); padding: 1px 6px; border-radius: 3px; background: var(--accent-dim); font-family: var(--font-mono); font-size: 10px; }
 .news-sep { color: var(--text-tertiary); opacity: 0.4; flex-shrink: 0; }
 
+/* Routines grid */
+.routines-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.routine-card {
+  background: var(--bg-app); border: 1px solid var(--border-subtle); border-radius: 8px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  transition: border-color 0.12s;
+}
+.routine-card:hover { border-color: var(--border-strong); }
+.routine-card.next { border-color: var(--accent); }
+.r-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+.r-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.r-status { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+
 /* Skeleton loading */
 .skeleton { background: linear-gradient(90deg, var(--border-subtle) 25%, var(--bg-card-hover) 50%, var(--border-subtle) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Segmented } from '@/components/ui/Segmented';
@@ -37,6 +37,7 @@ interface OverviewPageProps {
   portfolio: Portfolio;
   mode: string;
   tweaks: Record<string, unknown>;
+  marketOpen: boolean | null;
   onOpenDecision: (d: Decision) => void;
   onTriggerRoutine: (r: unknown) => void;
   onClosePosition: (p: Position) => void;
@@ -45,15 +46,21 @@ interface OverviewPageProps {
   liveTick: boolean;
 }
 
-export function OverviewPage({ portfolio, mode, onOpenDecision, onTriggerRoutine, onClosePosition, onOpenKillSwitch, onKickoffSelect, liveTick }: OverviewPageProps) {
+export function OverviewPage({ portfolio, mode, marketOpen, onOpenDecision, onTriggerRoutine, onClosePosition, onOpenKillSwitch, onKickoffSelect, liveTick }: OverviewPageProps) {
   const [range, setRange] = useState('1D');
+  const [now, setNow] = useState(() => new Date());
   const isEmpty = mode === 'empty';
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const equityPoints = range === '1D' ? MOCK.equityIntraday : MOCK.equityDaily.slice(range === '1W' ? -7 : range === '1M' ? -30 : 0);
 
   const dailyPos = portfolio.dailyPnl >= 0;
   const nextRoutine = MOCK.routines.find(r => r.status === 'next') || MOCK.routines[3];
-  const countdownMs = new Date(nextRoutine.nextRun).getTime() - MOCK.now.getTime();
+  const countdownMs = new Date(nextRoutine.nextRun).getTime() - now.getTime();
   const hrs = Math.max(0, Math.floor(countdownMs / 3600000));
   const mins = Math.max(0, Math.floor((countdownMs % 3600000) / 60000));
 
@@ -84,12 +91,14 @@ export function OverviewPage({ portfolio, mode, onOpenDecision, onTriggerRoutine
         </div>
         <div className="meta">
           <div className="meta-row">
-            <span>{MOCK.now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}</span>
+            <span>{now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}</span>
             <span className="meta-sep">·</span>
-            <span>{fmt.timeS(MOCK.now.toISOString())} ET</span>
+            <span>{now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })} ET</span>
           </div>
           <div className="meta-row">
-            <Pill kind="pos" dot pulse>MARKET OPEN</Pill>
+            <Pill kind={marketOpen ? 'pos' : 'muted'} dot={!!marketOpen} pulse={!!marketOpen}>
+              {marketOpen === null ? 'CHECKING…' : marketOpen ? 'MARKET OPEN' : 'MARKET CLOSED'}
+            </Pill>
           </div>
         </div>
       </div>

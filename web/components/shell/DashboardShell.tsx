@@ -76,6 +76,7 @@ export function DashboardShell() {
   const [guards, setGuards] = useState<Guards>(MOCK.guards as Guards);
   const [portfolio, setPortfolio] = useState<Portfolio>(() => tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio);
   const [liveTick, setLiveTick] = useState(false);
+  const [pendingKickoffThread, setPendingKickoffThread] = useState<{ id: string; kind: string; title: string; tags: string[]; status: string; unread: number; createdAt: string; lastAt: string; context: null; messages: Array<{ from: string; at: string; body: string }> } | null>(null);
 
   useEffect(() => {
     try { localStorage.setItem('trader-page', page); } catch {}
@@ -182,15 +183,16 @@ export function DashboardShell() {
     setConfirmKill(false);
   };
 
-  const handleKickoffSelect = async (opt: { symbol: string; thesis: string; rationale: string; confidence: number; entryZone: string; stopLevel: string }) => {
+  const handleKickoffSelect = (opt: { symbol: string; thesis: string; rationale: string; confidence: number; entryZone: string; stopLevel: string }) => {
     const threadId = `kickoff-${Date.now()}`;
     const threadTitle = `Sessie: ${opt.symbol} — ${opt.thesis.slice(0, 60)}`;
     const message = `Ik heb ${opt.symbol} gekozen als focus voor vandaag. Thesis: ${opt.thesis}\n\nRationale: ${opt.rationale}\n\nEntry zone: ${opt.entryZone} · Stop: ${opt.stopLevel}\n\nBevestig mijn keuze en geef me een concreet plan: wat watch je, wanneer ga je in, wanneer stap je uit?`;
-    fetch('/api/conversations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ threadId, threadTitle, message }),
-    }).catch(() => null);
+    setPendingKickoffThread({
+      id: threadId, kind: 'user_initiated', title: threadTitle,
+      tags: [opt.symbol, 'kickoff'], status: 'open', unread: 0,
+      createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), context: null,
+      messages: [{ from: 'user', at: new Date().toISOString(), body: message }],
+    });
     setPage('conversations');
     showToastMsg(`Sessie gestart: ${opt.symbol}. Conversations geopend.`);
   };
@@ -221,10 +223,10 @@ export function DashboardShell() {
 
   const currentPage = (() => {
     switch (page) {
-      case 'overview': return <OverviewPage portfolio={portfolio} mode={tweaks.mode} tweaks={tweaks} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect} liveTick={liveTick}/>;
+      case 'overview': return <OverviewPage portfolio={portfolio} mode={tweaks.mode} tweaks={tweaks} marketOpen={live.data?.marketOpen ?? null} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect} liveTick={liveTick}/>;
       case 'positions': return <PositionsPage portfolio={portfolio} mode={tweaks.mode} onClose={handleClosePosition}/>;
       case 'decisions': return <DecisionLogPage mode={tweaks.mode} onOpenDecision={setSelectedDecision}/>;
-      case 'conversations': return <ConversationsPage/>;
+      case 'conversations': return <ConversationsPage pendingThread={pendingKickoffThread} onKickoffHandled={() => setPendingKickoffThread(null)}/>;
       case 'routines': return <RoutinesPage onTrigger={r => setConfirmRoutine(r as Routine)}/>;
       case 'risk': return <RiskPage guards={guards} onOpenKill={() => setConfirmKill(true)} onResetBreaker={() => showToastMsg('Geen breaker getript. Reset niet nodig.')}/>;
       case 'strategy': return <StrategyPage/>;

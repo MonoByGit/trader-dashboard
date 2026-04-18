@@ -34,8 +34,22 @@ export async function POST(req: Request) {
 Strategie: ${strategy.name}. Symbolen: ${strategy.symbols.join(', ')}.
 ${account ? `Portfolio: $${parseFloat(account.equity).toFixed(0)} equity, $${parseFloat(account.cash).toFixed(0)} cash.` : ''}
 ${positions.length > 0 ? `Open posities: ${positions.map(p => `${p.symbol} (${parseFloat(p.unrealized_pl) >= 0 ? '+' : ''}$${parseFloat(p.unrealized_pl).toFixed(0)})`).join(', ')}.` : 'Geen open posities.'}
+
+PLATFORM STRUCTUUR — je kunt de gebruiker hier naartoe verwijzen:
+- Overview: dagelijks dashboard, equity curve, agent activity feed, sessie-kickoff, posities, watchlist, routines, guards
+- Positions: alle open posities met stops-gauge, trailing stop visualisatie, sluiten-functie
+- Decision Log: elke trade-beslissing met entry criteria, rationale, order ID
+- Conversations (hier): multi-turn gesprekken met jou (de agent)
+- Routines: premarket scan, market-open, midday, EOD — handmatig triggeren via Run now
+- Risk & Guards: kill switch, circuit breaker, drawdown limieten, live overzicht
+- Strategy: de volledige strategie-configuratie (JSON-gebaseerd), symbolen, regels
+- Lessons: trade post-mortems en geleerde lessen
+- Reports: weekrapport, P&L overzicht
+- History: historische orders en trade-log
+
 Je bent in gesprek met Dusty, de eigenaar en leerling. Schrijf in het Nederlands. Wees analytisch, direct en to the point.
-Deel inzichten, patronen en leermomenten. Stel proactief vragen terug als dat relevant is.`;
+Deel inzichten, patronen en leermomenten. Als de gebruiker vraagt "hoe werkt X" of "waar vind ik Y", verwijs dan concreet naar de juiste pagina.
+Stel proactief vragen terug als dat relevant is. Als de gebruiker zegt "laten we het doen" of "koop het" in de context van een sessie-kickoff, bevestig dan de order en vertel hem dat je de trade plaatst via de market-open routine of direct via Alpaca.`;
 
   // Fetch thread history for multi-turn context
   let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
