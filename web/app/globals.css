@@ -1205,117 +1205,184 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Drawer backdrop — hidden on desktop, shown on mobile when a panel is open */
+/* Mobile-only chrome (hamburger, bottom-sheet trigger/sheet, backdrop) is
+   hidden by default and revealed inside the phone breakpoint below. */
 .drawer-backdrop { display: none; }
+.mobile-only { display: none !important; }
+.sheet-trigger { display: none; }
+.sheet { display: none; }
 
-/* =============== Mobile shell (responsive + installable PWA) ===============
-   The same desktop components/CSS are reused; below they reflow for phones.
-   The side panels become slide-in overlay drawers, the document scrolls
-   naturally (the desktop shell otherwise locks html/body), and every
-   multi-column grid stacks. */
+/* =============== Mobile shell (true phone UX) ===============
+   A dense 3-pane desktop IDE does not "reflow" to a phone gracefully, so on
+   small screens we switch to mobile-native patterns while keeping the exact
+   same dark Linear styling and every feature:
+   - left Pages panel becomes a hamburger drawer
+   - right inspector panel becomes a bottom sheet (no sidebars on a phone)
+   - one full-width scrolling column, zero horizontal overflow
+   The desktop layout above is untouched. */
 @media (max-width: 768px) {
-  /* Unlock document scroll — the desktop shell pins html/body */
-  html, body { overflow: auto; height: auto; min-height: 100dvh; }
+  /* Kill horizontal overflow for good; allow natural vertical scroll. */
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: auto;
+    min-height: 100dvh;
+    width: 100%;
+  }
 
   .app {
     height: auto;
     min-height: 100dvh;
     width: 100%;
-    grid-template-rows: 44px 1fr auto;
+    max-width: 100vw;
+    overflow-x: hidden;
+    grid-template-rows: 48px 1fr;
   }
 
-  /* Toolbar stays pinned; drop the center page-tabs (nav lives in the drawer) */
+  /* Reveal mobile-only controls (hamburger, sheet trigger). */
+  .mobile-only { display: inline-flex !important; }
+  .sheet-trigger { display: flex; }
+  .sheet { display: block; }
+
+  /* Toolbar: hamburger + brand left, essential actions right. */
   .toolbar {
     position: sticky; top: 0;
     grid-template-columns: auto 1fr auto;
-    padding: 0 6px;
-    gap: 4px;
+    padding: 0 10px;
+    gap: 8px;
   }
   .toolbar-center { display: none; }
-  .toolbar-left { gap: 4px; }
   .file-name { display: none; }
-  .toolbar-right { gap: 2px; }
+  .panel-toggle { display: none; }        /* desktop sidebar toggles */
   .toolbar-right .btn.outline { display: none; } /* DEMO toggle */
+  .toolbar-right { gap: 4px; }
 
-  /* Single-column body; the panels float as overlay drawers */
+  /* Single full-width column; panels leave the flow. */
   .main,
   .main.left-closed,
   .main.right-closed,
-  .main.left-closed.right-closed { grid-template-columns: 1fr; overflow: visible; min-height: 0; }
+  .main.left-closed.right-closed {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    min-height: 0;
+  }
 
-  .main .left-panel,
-  .main .right-panel {
+  /* The inspector lives in the bottom sheet on mobile, not as a sidebar. */
+  .right-panel { display: none !important; }
+
+  /* Left Pages panel = slide-in drawer from the left. */
+  .main .left-panel {
     position: fixed;
-    top: 44px; bottom: 0;
-    width: min(84vw, 320px);
+    top: 48px; bottom: 0; left: 0;
+    width: min(82vw, 300px);
     z-index: 60;
     overflow-y: auto;
     overflow-x: hidden;
+    transform: translateX(-100%);
     transition: transform var(--t-med);
     box-shadow: var(--shadow-float);
+    border-right: 1px solid var(--border-subtle);
   }
-  .main .left-panel { left: 0; border-right: 1px solid var(--border-subtle); transform: translateX(0); }
-  .main .right-panel { right: 0; border-left: 1px solid var(--border-subtle); transform: translateX(0); }
-  .main.left-closed .left-panel { transform: translateX(-100%); border-right: none; }
-  .main.right-closed .right-panel { transform: translateX(100%); border-left: none; }
+  .main:not(.left-closed) .left-panel { transform: translateX(0); }
 
-  /* Backdrop behind an open drawer */
+  /* Backdrop behind drawer or sheet. */
   .drawer-backdrop {
     display: block;
-    position: fixed; inset: 44px 0 0 0;
+    position: fixed; inset: 0;
     background: var(--bg-overlay);
     z-index: 55;
   }
 
-  .canvas { overflow: visible; padding: 12px; background-image: none; }
-  .canvas-inner { gap: 12px; }
+  .canvas { overflow-x: hidden; padding: 12px; background-image: none; }
+  .canvas-inner { gap: 12px; max-width: 100%; }
 
-  /* Stack every multi-column layout */
-  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-  .grid-2, .grid-3,
-  .conv-grid, .lessons-grid, .reports-grid,
-  .routines-grid,
-  .lessons-stats, .lesson-stats-grid,
-  .report-kpis, .pb-list, .gates-grid { grid-template-columns: 1fr; }
+  /* Stack EVERY multi-column layout. !important is required because several
+     of these grids set grid-template-columns via inline styles. */
+  .kpi-grid, .grid-2, .grid-3,
+  .conv-grid, .lessons-grid, .reports-grid, .routines-grid,
+  .lessons-stats, .lesson-stats-grid, .report-kpis, .pb-list, .gates-grid {
+    grid-template-columns: 1fr !important;
+  }
+  /* GuardSnapshot uses an inline repeat(6,1fr); 2-up reads fine on a phone. */
+  .card-body[style*="repeat(6"] { grid-template-columns: repeat(2, 1fr) !important; }
 
-  /* Wide tables scroll horizontally inside their card */
+  /* Wide data tables scroll horizontally inside their own card. */
   .card-body, .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table.data { min-width: 520px; }
+  table.data { min-width: 480px; }
 
-  /* Detail panes that were height-locked get natural height */
+  /* Unlock height-locked detail panes. */
   .conv-grid, .lessons-grid, .reports-grid { height: auto; }
   .lessons-list-col, .reports-sidebar, .lesson-detail, .report-detail { max-height: none; }
-  .conv-detail, .conv-inbox { height: auto; min-height: 360px; }
+  .conv-detail, .conv-inbox { height: auto; min-height: 340px; }
 
-  /* Page heading scales down */
-  .page-head { grid-template-columns: 1fr; gap: 12px; }
+  /* Page heading. */
+  .page-head { grid-template-columns: 1fr; gap: 10px; }
   .page-head .meta { align-items: flex-start; }
-  .page-head h1 { font-size: 19px; }
+  .page-head h1 { font-size: 18px; }
+  .page-head .subtitle { font-size: 12px; max-width: 100%; }
 
-  /* Modals fit small screens */
+  /* Modals fit the screen. */
   .modal { min-width: 0; width: calc(100vw - 24px); max-width: 480px; }
 
-  /* Dense status bar scrolls instead of overflowing */
-  .statusbar {
-    overflow-x: auto;
-    white-space: nowrap;
-    scrollbar-width: none;
-    gap: 12px;
-  }
-  .statusbar::-webkit-scrollbar { display: none; }
-  .statusbar .left, .statusbar .right { gap: 12px; flex-shrink: 0; }
+  /* The dense desktop status bar is hidden; its info lives in the sheet. */
+  .statusbar { display: none; }
 
-  /* Tweaks popover spans the width */
-  .tweaks-panel { right: 12px; left: 12px; width: auto; bottom: 32px; }
+  /* Leave room above the sheet trigger so content isn't covered. */
+  .canvas-inner { padding-bottom: 72px; }
 
-  /* Larger tap targets in the side panels */
-  .nav-row { height: 40px; }
+  /* Tweaks popover spans the width, above the sheet trigger. */
+  .tweaks-panel { right: 12px; left: 12px; width: auto; bottom: 76px; }
+
+  /* Comfortable tap targets. */
+  .nav-row { height: 44px; }
   .icon-btn { -webkit-tap-highlight-color: transparent; }
+
+  /* ---- Bottom sheet (inspector) ---- */
+  .sheet-trigger {
+    position: fixed;
+    left: 12px; right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    height: 48px; z-index: 45;
+    align-items: center; justify-content: center; gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 13px; font-weight: 500;
+    box-shadow: var(--shadow-float);
+  }
+  .sheet-trigger:active { background: var(--bg-card-hover); }
+
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 70;
+    max-height: 86dvh;
+    overflow-y: auto;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border-strong);
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+    transition: transform var(--t-med);
+    box-shadow: var(--shadow-float);
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .sheet.open { transform: translateY(0); }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 10px auto 2px; }
+  .sheet-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 16px 10px;
+    position: sticky; top: 0;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 1;
+  }
+  .sheet-head .sheet-title { font-size: 13px; font-weight: 600; }
 }
 
-@media (max-width: 440px) {
-  .kpi-grid { grid-template-columns: 1fr; }
+@media (max-width: 400px) {
+  .kpi-grid { grid-template-columns: 1fr !important; }
   .toolbar-right [aria-label="Notifications"] { display: none; }
+  .card-body[style*="repeat(6"] { grid-template-columns: repeat(2, 1fr) !important; }
 }
 
 /* Print */
