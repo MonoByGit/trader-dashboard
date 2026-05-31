@@ -6,6 +6,7 @@ import { Pill } from '@/components/ui/Pill';
 import { Toggle } from '@/components/ui/Toggle';
 import { Segmented } from '@/components/ui/Segmented';
 import { Modal } from '@/components/ui/Modal';
+import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
 import { useAccount, usePositions } from '@/hooks/useAlpaca';
@@ -351,28 +352,28 @@ export function DashboardShell() {
               <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(liveDayPnlPct)}</Pill>
               {live.data && <span style={{fontSize:9,color:'var(--text-tertiary)',marginLeft:4}}>LIVE</span>}
             </div>
-            <div className="prop-row"><span className="k">Equity</span><span className="v">{fmt.usd(liveEquity)}</span></div>
-            <div className="prop-row"><span className="k">Cash</span><span className="v">{fmt.usd(liveCash)}</span></div>
-            <div className="prop-row"><span className="k">Day P&amp;L</span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(liveDayPnl)}</span></div>
-            <div className="prop-row"><span className="k">Deployed</span><span className="v">{((1 - liveCash/liveEquity)*100).toFixed(1)}%</span></div>
-            <div className="prop-row"><span className="k">Open</span><span className="v">{livePositionCount} / 3</span></div>
+            <div className="prop-row"><span className="k">Equity <InfoTip id="equity"/></span><span className="v">{fmt.usd(liveEquity)}</span></div>
+            <div className="prop-row"><span className="k">Cash <InfoTip id="cash"/></span><span className="v">{fmt.usd(liveCash)}</span></div>
+            <div className="prop-row"><span className="k">Day P&amp;L <InfoTip id="day-pnl"/></span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(liveDayPnl)}</span></div>
+            <div className="prop-row"><span className="k">Deployed <InfoTip id="deployed"/></span><span className="v">{((1 - liveCash/liveEquity)*100).toFixed(1)}%</span></div>
+            <div className="prop-row"><span className="k">Open <InfoTip id="max-positions"/></span><span className="v">{livePositionCount} / 3</span></div>
           </div>
 
           <div className="prop-group">
-            <div className="prop-group-title">Market Gates</div>
-            <GateRow label="VIX" v="18.4" ok lim="< 30"/>
-            <GateRow label="Earnings day" v="No" ok/>
-            <GateRow label="Open buffer" v="09:30-09:35" ok msg="Past"/>
-            <GateRow label="Pre-close" v="15:40-16:00" ok msg="Clear"/>
-            <GateRow label="Half-day" v="No" ok/>
+            <div className="prop-group-title">Market Gates <InfoTip id="gate"/></div>
+            <GateRow label="VIX" tip="vix" v="18.4" ok lim="< 30"/>
+            <GateRow label="Earnings day" tip="earnings-day" v="No" ok/>
+            <GateRow label="Open buffer" tip="open-buffer" v="09:30-09:35" ok msg="Past"/>
+            <GateRow label="Pre-close" tip="pre-close" v="15:40-16:00" ok msg="Clear"/>
+            <GateRow label="Half-day" tip="half-day" v="No" ok/>
           </div>
 
           <div className="prop-group">
-            <div className="prop-group-title">Risk Guards</div>
-            <div className="prop-row"><span className="k">Kill switch</span><span className="v full">{guards.tradingEnabled?<Pill kind="pos" dot pulse>ENABLED</Pill>:<Pill kind="neg" dot>DISABLED</Pill>}</span></div>
-            <div className="prop-row"><span className="k">Breaker</span><span className="v full">{guards.circuitBreakerTripped?<Pill kind="neg" dot>TRIPPED</Pill>:<Pill kind="muted">Standby</Pill>}</span></div>
-            <div className="prop-row"><span className="k">Day DD</span><span className="v">{guards.dailyDrawdownPct.toFixed(2)}%</span></div>
-            <div className="prop-row"><span className="k">Consec L</span><span className="v">{guards.consecLosses} / {guards.consecLossesLimit}</span></div>
+            <div className="prop-group-title">Risk Guards <InfoTip id="circuit-breaker"/></div>
+            <div className="prop-row"><span className="k">Kill switch <InfoTip id="kill-switch"/></span><span className="v full">{guards.tradingEnabled?<Pill kind="pos" dot pulse>ENABLED</Pill>:<Pill kind="neg" dot>DISABLED</Pill>}</span></div>
+            <div className="prop-row"><span className="k">Breaker <InfoTip id="circuit-breaker"/></span><span className="v full">{guards.circuitBreakerTripped?<Pill kind="neg" dot>TRIPPED</Pill>:<Pill kind="muted">Standby</Pill>}</span></div>
+            <div className="prop-row"><span className="k">Day DD <InfoTip id="daily-drawdown"/></span><span className="v">{guards.dailyDrawdownPct.toFixed(2)}%</span></div>
+            <div className="prop-row"><span className="k">Consec L <InfoTip id="consec-losses"/></span><span className="v">{guards.consecLosses} / {guards.consecLossesLimit}</span></div>
           </div>
 
           <div className="prop-group">
@@ -529,10 +530,10 @@ export function DashboardShell() {
   );
 }
 
-function GateRow({ label, v, ok, lim, msg }: { label: string; v: string; ok?: boolean; lim?: string; msg?: string }) {
+function GateRow({ label, v, ok, lim, msg, tip }: { label: string; v: string; ok?: boolean; lim?: string; msg?: string; tip?: string }) {
   return (
     <div className="prop-row">
-      <span className="k">{label}</span>
+      <span className="k">{label}{tip && <InfoTip id={tip}/>}</span>
       <span className="v" style={{display:'flex',alignItems:'center',gap:6}}>
         <span style={{color:ok?'var(--pos)':'var(--neg)'}}>{msg||v}</span>
         {lim && <span className="text-tertiary">{lim}</span>}

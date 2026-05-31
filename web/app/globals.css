@@ -1212,3 +1212,68 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   .main { grid-template-columns: 1fr !important; }
   .canvas { overflow: visible !important; }
 }
+
+/* --- Info tooltips / glossary (added for the learning layer) --- */
+.tip-wrap { position: relative; display: inline-flex; align-items: center; }
+.tip-trigger { display: inline-flex; align-items: center; cursor: help; outline: none; }
+.tip-trigger:focus-visible { outline: 1px solid var(--border-focus); outline-offset: 2px; border-radius: 3px; }
+
+.tip-dot {
+  color: var(--text-tertiary);
+  margin-left: 4px;
+  flex-shrink: 0;
+  transition: color var(--t-fast);
+  vertical-align: middle;
+}
+.tip-wrap:hover .tip-dot { color: var(--accent); }
+
+.tip-term {
+  border-bottom: 1px dotted var(--text-tertiary);
+  cursor: help;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+.tip-wrap:hover .tip-term { border-bottom-color: var(--accent); color: var(--text-primary); }
+
+.tip-pop {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  width: max-content;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+  animation: tip-in var(--t-fast);
+}
+.tip-pop.above { bottom: calc(100% + 7px); }
+.tip-pop.below { top: calc(100% + 7px); }
+
+@keyframes tip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(2px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.tip-title { font-size: 11px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.01em; }
+.tip-plain { font-size: 11px; line-height: 1.5; color: var(--text-secondary); }
+.tip-tech {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  padding-top: 5px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* On small screens, keep the popover within the viewport edges. */
+@media (max-width: 640px) {
+  .tip-pop { max-width: 220px; }
+}

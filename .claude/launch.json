@@ -4,9 +4,9 @@
     {
       "name": "trader-dashboard",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--", "-p", "3017"],
       "cwd": "web",
-      "port": 3000
+      "port": 3017
     }
   ]
 }

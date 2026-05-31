@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
 import { claudeJson, claudeText, geminiText, MODELS } from '@/lib/ai';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
+import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib/telegram';
+import { captureEvent } from '@/lib/openbrain';
 import strategy from '@/strategy.json';
 
 const WATCHLIST = strategy.symbols;
@@ -23,6 +25,32 @@ async function saveDecision(d: Record<string, unknown>) {
     [id, new Date().toISOString(), d.routine, d.symbol, d.decision,
      JSON.stringify(d.criteria ?? null), d.rationale, d.agentNote, d.confidence, d.orderId ?? null]
   );
+}
+
+// Detect filled stop-loss legs today and ping Telegram once per order.
+// Dedup uses the settings table (key = notified:<orderId>) so midday and eod
+// never double-notify. Fully fail-safe.
+async function notifyStopFills() {
+  if (!hasDb()) return;
+  try {
+    await initDb();
+    const orders = await alpaca.orders(50);
+    const today = new Date().toISOString().split('T')[0];
+    for (const o of orders) {
+      if (o.side !== 'sell' || o.status !== 'filled' || !o.filled_at) continue;
+      if (!o.filled_at.startsWith(today)) continue;
+      const isStop = o.type === 'stop' || o.type === 'stop_limit' || !!o.stop_price;
+      if (!isStop) continue;
+      const key = `notified:${o.id}`;
+      const seen = await dbQuery(`SELECT 1 FROM settings WHERE key=$1`, [key]);
+      if (seen.length) continue;
+      const exit = parseFloat(o.filled_avg_price ?? o.stop_price ?? '0');
+      await sendMessage(stopHitMessage(o.symbol, exit));
+      await dbRun(`INSERT INTO settings (key, value) VALUES ($1, '1') ON CONFLICT (key) DO NOTHING`, [key]);
+    }
+  } catch (e) {
+    console.error('[notifyStopFills]', e);
+  }
 }
 
 async function runPremarket() {
@@ -120,7 +148,7 @@ async function runMarketOpen() {
     1024
   );
 
-  const orders = [];
+  const orders: { symbol: string; qty: number; orderId: string; stop?: number; takeProfit?: number }[] = [];
   for (const c of candidates) {
     if (c.action !== 'buy' || openSymbols.includes(c.symbol)) continue;
     if (openSymbols.length + orders.length >= strategy.rules.max_positions) break;
@@ -133,13 +161,30 @@ async function runMarketOpen() {
       c.qty = Math.max(1, Math.min(c.qty, maxQty));
     }
 
+    // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.
+    // These fire at Alpaca even if no cron runs — the hard stop is never bypassable.
+    const stopPrice = lastPrice ? +(lastPrice * (1 - strategy.rules.hard_stop_pct)).toFixed(2) : undefined;
+    const takeProfitPrice = lastPrice ? +(lastPrice * (1 + strategy.rules.take_profit_pct)).toFixed(2) : undefined;
+
     try {
-      const order = await alpaca.placeOrder({
-        symbol: c.symbol, qty: c.qty, side: 'buy',
-        type: 'market', time_in_force: 'day',
+      const order = await alpaca.placeOrder(
+        lastPrice
+          ? {
+              symbol: c.symbol, qty: c.qty, side: 'buy',
+              type: 'market', time_in_force: 'day',
+              order_class: 'bracket',
+              stop_loss: { stop_price: stopPrice! },
+              take_profit: { limit_price: takeProfitPrice! },
+            }
+          : { symbol: c.symbol, qty: c.qty, side: 'buy', type: 'market', time_in_force: 'day' }
+      );
+      orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id, stop: stopPrice, takeProfit: takeProfitPrice });
+      await saveDecision({
+        routine: 'market-open', symbol: c.symbol, decision: 'BUY', rationale: c.reason,
+        agentNote: stopPrice ? `Bracket order: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${c.reason}` : c.reason,
+        orderId: order.id, confidence: 0.8,
       });
-      orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id });
-      await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'BUY', rationale: c.reason, agentNote: c.reason, orderId: order.id, confidence: 0.8 });
+      if (lastPrice) await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice!, takeProfitPrice!));
     } catch (e) {
       await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: String(e), agentNote: 'Order mislukt.', confidence: 0 });
     }
@@ -148,6 +193,7 @@ async function runMarketOpen() {
 }
 
 async function runMidday() {
+  await notifyStopFills();
   const positions = await alpaca.positions();
   if (positions.length === 0) return { routine: 'midday', note: 'Geen posities.' };
   const notes = positions.map(p => `${p.symbol}: entry $${p.avg_entry_price}, now $${p.current_price}, P&L ${p.unrealized_pl}`);
@@ -161,6 +207,7 @@ async function runMidday() {
 }
 
 async function runEod() {
+  await notifyStopFills();
   const positions = await alpaca.positions();
   const closed = [];
   for (const p of positions) {
@@ -185,6 +232,18 @@ async function runEod() {
       [`report-${Date.now()}`, JSON.stringify({ equityStart: lastEquity, equityEnd: equity, closed }), report]
     );
   }
+
+  // Daily Telegram digest.
+  await sendMessage(eodDigestMessage(lastEquity, equity, closed, report));
+
+  // Significant P&L event to Open Brain (drawdown or spike beyond 1.5%).
+  const dayPct = lastEquity > 0 ? ((equity - lastEquity) / lastEquity) * 100 : 0;
+  if (Math.abs(dayPct) >= 1.5) {
+    await captureEvent(
+      `Dag-P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% ($${(equity - lastEquity).toFixed(2)}). Equity $${lastEquity.toFixed(0)} naar $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}.`
+    );
+  }
+
   return { routine: 'eod', closed, equity, report: report.slice(0, 200) };
 }
 

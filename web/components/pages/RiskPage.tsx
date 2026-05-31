@@ -1,6 +1,7 @@
 'use client';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
+import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
 
 interface Guards {
@@ -31,7 +32,7 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProp
       <div className="grid-2">
         <div className="card" style={{borderColor:g.tradingEnabled?'var(--border-subtle)':'var(--neg)'}}>
           <div className="card-head">
-            <h3><Icon name={g.tradingEnabled?'unlock':'lock'} size={12}/> Kill Switch</h3>
+            <h3><Icon name={g.tradingEnabled?'unlock':'lock'} size={12}/> Kill Switch <InfoTip id="kill-switch"/></h3>
             <Pill kind={g.tradingEnabled?'pos':'neg'} dot pulse={g.tradingEnabled}>{g.tradingEnabled?'TRADING_ENABLED':'DISABLED'}</Pill>
           </div>
           <div className="card-body">
@@ -46,7 +47,7 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProp
         </div>
         <div className="card" style={{borderColor:g.circuitBreakerTripped?'var(--neg)':'var(--border-subtle)'}}>
           <div className="card-head">
-            <h3><Icon name="shield" size={12}/> Circuit Breaker</h3>
+            <h3><Icon name="shield" size={12}/> Circuit Breaker <InfoTip id="circuit-breaker"/></h3>
             <Pill kind={g.circuitBreakerTripped?'neg':'pos'} dot pulse={!g.circuitBreakerTripped}>{g.circuitBreakerTripped?'TRIPPED':'STANDBY'}</Pill>
           </div>
           <div className="card-body">
@@ -65,17 +66,17 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProp
         <div className="card-body">
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
             {[
-              {label:'Daily drawdown',v:g.dailyDrawdownPct,max:g.dailyDrawdownLimit,suffix:'%'},
-              {label:'Peak drawdown',v:g.peakDrawdownPct,max:g.peakDrawdownLimit,suffix:'%'},
-              {label:'Consecutive losses',v:g.consecLosses,max:g.consecLossesLimit,suffix:''},
-              {label:'Orders / 10 min window',v:g.tradesLast10Min,max:g.tradesLast10MinLimit,suffix:''},
+              {label:'Daily drawdown',v:g.dailyDrawdownPct,max:g.dailyDrawdownLimit,suffix:'%',tip:'daily-drawdown'},
+              {label:'Peak drawdown',v:g.peakDrawdownPct,max:g.peakDrawdownLimit,suffix:'%',tip:'peak-drawdown'},
+              {label:'Consecutive losses',v:g.consecLosses,max:g.consecLossesLimit,suffix:'',tip:'consec-losses'},
+              {label:'Orders / 10 min window',v:g.tradesLast10Min,max:g.tradesLast10MinLimit,suffix:'',tip:'circuit-breaker'},
             ].map((m, i) => {
               const p = barPct(m.v, m.max);
               const col = p > 80 ? 'var(--neg)' : p > 50 ? 'var(--warn)' : 'var(--pos)';
               return (
                 <div key={i}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:6}}>
-                    <span className="text-secondary">{m.label}</span>
+                    <span className="text-secondary" style={{display:'inline-flex',alignItems:'center'}}>{m.label}<InfoTip id={m.tip}/></span>
                     <span className="mono"><span style={{color:col}}>{m.v}{m.suffix}</span> <span className="text-tertiary">/ {m.max}{m.suffix}</span></span>
                   </div>
                   <div style={{height:4,background:'var(--border-subtle)',borderRadius:2,overflow:'hidden'}}>
@@ -96,7 +97,7 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProp
             <tbody>
               <tr><td>Max open positions</td><td className="num">{g.openPositions}</td><td className="num">{g.maxOpenPositions}</td><td><LimitBar v={g.openPositions} max={g.maxOpenPositions}/></td><td><Pill kind="pos">OK</Pill></td></tr>
               <tr><td>Daily trades</td><td className="num">{g.dailyTrades}</td><td className="num">{g.maxDailyTrades}</td><td><LimitBar v={g.dailyTrades} max={g.maxDailyTrades}/></td><td><Pill kind="pos">OK</Pill></td></tr>
-              <tr><td>Cash reserve</td><td className="num">{g.cashReservePct.toFixed(1)}%</td><td className="num">≥ {g.cashReserveMin}%</td><td><LimitBar v={g.cashReservePct} max={100} invert/></td><td><Pill kind="pos">OK</Pill></td></tr>
+              <tr><td><span style={{display:'inline-flex',alignItems:'center'}}>Cash reserve<InfoTip id="cash-floor"/></span></td><td className="num">{g.cashReservePct.toFixed(1)}%</td><td className="num">≥ {g.cashReserveMin}%</td><td><LimitBar v={g.cashReservePct} max={100} invert/></td><td><Pill kind="pos">OK</Pill></td></tr>
               <tr><td>Max single order</td><td className="num">$30,000</td><td className="num">{fmt.usd(g.maxOrderSize,0)}</td><td><LimitBar v={25} max={100}/></td><td><Pill kind="muted">Static</Pill></td></tr>
               <tr><td>Min order size</td><td className="num">$500</td><td className="num">{fmt.usd(g.minOrderSize,0)}</td><td><LimitBar v={100} max={100}/></td><td><Pill kind="muted">Static</Pill></td></tr>
             </tbody>

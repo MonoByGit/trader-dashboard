@@ -2,7 +2,7 @@
   "name": "Momentum Breakout",
   "version": "1.0",
   "description": "Momentum breakout op grote US ETFs. Geen overnachten. Strakke stops.",
-  "symbols": ["QQQ", "SPY", "XLK", "XLI", "XLY", "IWM", "XLF", "XLE", "XLV", "XLU"],
+  "symbols": ["QQQ", "SPY", "XLK", "XLI", "XLY", "IWM", "XLF", "XLE", "XLV", "DIA"],
   "rules": {
     "max_positions": 3,
     "position_size_pct": 0.25,

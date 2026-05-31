@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
 import { claudeText, MODELS } from '@/lib/ai';
+import { captureWeeklyHighlight } from '@/lib/openbrain';
 
 export async function POST() {
   try {
@@ -25,6 +26,9 @@ Open positions: ${(await alpaca.positions()).map(p => p.symbol).join(', ') || 'n
 Write a comprehensive weekly strategy review with lessons learned and adjustments for next week.`;
 
     const review = await claudeText(MODELS.opus, system, userPrompt, 2048);
+
+    // Sync the weekly highlights into Dusty's permanent memory (fail-safe).
+    await captureWeeklyHighlight(review.slice(0, 1500));
 
     return NextResponse.json({
       date: new Date().toISOString().split('T')[0],
