@@ -69,8 +69,11 @@ export function DashboardShell() {
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmRoutine, setConfirmRoutine] = useState<Routine | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [leftOpen, setLeftOpen] = useState(() => { try { return localStorage.getItem('trader-left') !== 'false'; } catch { return true; } });
-  const [rightOpen, setRightOpen] = useState(() => { try { return localStorage.getItem('trader-right') !== 'false'; } catch { return true; } });
+  // v2-sleutels: oude builds bewaarden trader-left/right=false op mobiel,
+  // waardoor de panelen dichtbleven. Nieuwe sleutels -> iedereen start met
+  // beide panelen open, exact zoals desktop.
+  const [leftOpen, setLeftOpen] = useState(() => { try { return localStorage.getItem('trader-left2') !== 'false'; } catch { return true; } });
+  const [rightOpen, setRightOpen] = useState(() => { try { return localStorage.getItem('trader-right2') !== 'false'; } catch { return true; } });
   const live = useAccount(30000);
   const livePositions = usePositions(15000);
   const unread = useUnread(90000);
@@ -85,17 +88,8 @@ export function DashboardShell() {
     if (page === 'conversations') unread.markSeen('conversations');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
-  useEffect(() => { try { localStorage.setItem('trader-left', String(leftOpen)); } catch {} }, [leftOpen]);
-  useEffect(() => { try { localStorage.setItem('trader-right', String(rightOpen)); } catch {} }, [rightOpen]);
-  // On phones both side panels start collapsed and act as overlay drawers.
-  // Run after mount (post-hydration) so the server/client markup matches.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (window.matchMedia('(max-width: 768px)').matches) {
-      setLeftOpen(false);
-      setRightOpen(false);
-    }
-  }, []);
+  useEffect(() => { try { localStorage.setItem('trader-left2', String(leftOpen)); } catch {} }, [leftOpen]);
+  useEffect(() => { try { localStorage.setItem('trader-right2', String(rightOpen)); } catch {} }, [rightOpen]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === '[') { e.preventDefault(); setLeftOpen(v => !v); }
@@ -149,9 +143,6 @@ export function DashboardShell() {
   }, [tweaks.mode]);
 
   const updateTweak = (k: keyof typeof TWEAK_DEFAULTS, v: string | boolean) => setTweaks(t => ({ ...t, [k]: v }));
-
-  const isMobile = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
-  const goPage = (id: PageId) => { setPage(id); if (isMobile()) setLeftOpen(false); };
 
   const showToastMsg = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3400); };
 
@@ -304,7 +295,7 @@ export function DashboardShell() {
           <div className="panel-section">
             <div className="panel-header">Pages <span className="count">{PAGES.length}</span></div>
             {PAGES.map(p => (
-              <div key={p.id} className={`nav-row${page === p.id ? ' active' : ''}`} onClick={() => goPage(p.id)}>
+              <div key={p.id} className={`nav-row${page === p.id ? ' active' : ''}`} onClick={() => setPage(p.id)}>
                 <div className="nav-icon"><Icon name={p.icon as Parameters<typeof Icon>[0]['name']} size={13}/></div>
                 <span>{p.label}</span>
                 {p.id === 'decisions' && unread.decisions > 0 && <span className="nav-badge unread">{unread.decisions}</span>}
@@ -413,11 +404,6 @@ export function DashboardShell() {
           </div>
         </div>
       </div>
-
-      {/* Drawer backdrop (mobile only — CSS hides it on desktop) */}
-      {(leftOpen || rightOpen) && (
-        <div className="drawer-backdrop" onClick={() => { setLeftOpen(false); setRightOpen(false); }} />
-      )}
 
       {/* Status bar */}
       <div className="statusbar">
