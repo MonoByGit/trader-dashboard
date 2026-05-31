@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
 import { claudeText, MODELS } from '@/lib/ai';
+import { dbQuery, initDb, hasDb } from '@/lib/db';
+
+export async function GET() {
+  if (!hasDb()) return NextResponse.json(null);
+  try {
+    await initDb();
+    const rows = await dbQuery<{
+      id: string;
+      date: string;
+      generated_at: string;
+      kpis: { equityStart?: number; equityEnd?: number; closed?: number } | null;
+      narrative: string | null;
+    }>(
+      `SELECT id, date, generated_at, kpis, narrative
+       FROM agent_reports ORDER BY generated_at DESC LIMIT 1`
+    );
+    return NextResponse.json(rows[0] ?? null);
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
+}
 
 export async function POST() {
   try {
