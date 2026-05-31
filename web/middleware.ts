@@ -8,7 +8,7 @@ export function middleware(req: NextRequest) {
   // Escape-hatch: forceer desktop en onthoud het.
   if (req.nextUrl.searchParams.get('desktop') === '1') {
     const res = NextResponse.next();
-    res.cookies.set('view', 'desktop', { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set('view', 'desktop', { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' });
     return res;
   }
 
