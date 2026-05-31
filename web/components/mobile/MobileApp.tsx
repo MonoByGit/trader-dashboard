@@ -41,8 +41,13 @@ export function MobileApp() {
   const [drawerTop, setDrawerTop] = useState(0);
   const heroRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Demo (dummy) data aan/uit. Aan = de rijke voorbeelddata; uit = de echte
+  // (mogelijk lege) Alpaca-rekening. Default demo aan zolang de bot nog niet
+  // live handelt, zodat het dashboard gevuld oogt.
+  const [dummy, setDummy] = useState(() => { try { return localStorage.getItem('trader-m-dummy') !== '0'; } catch { return true; } });
 
   useEffect(() => { try { localStorage.setItem('trader-m-tab', tab); } catch {} }, [tab]);
+  const toggleDummy = () => setDummy(d => { const n = !d; try { localStorage.setItem('trader-m-dummy', n ? '1' : '0'); } catch {} if (!n) live.refresh?.(); showToast(n ? 'Demo-data aan.' : 'Live Alpaca-data aan.'); return n; });
   // Open/sluit de equity-drawer; meet de header-onderkant zodat de drawer daar
   // precies onder begint te zakken (safe-area-proof, geen vaste hoogte aanname).
   const toggleEquity = () => setEquityOpen(o => { if (!o && heroRef.current) setDrawerTop(Math.round(heroRef.current.getBoundingClientRect().bottom)); return !o; });
@@ -53,8 +58,9 @@ export function MobileApp() {
     fetch('/api/decisions').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setDecisions(d); }).catch(() => null);
   }, []);
 
-  // Lichte prijsdrift zodat cijfers leven, identiek aan desktop-shell.
+  // Lichte prijsdrift zodat cijfers leven (alleen in demo-modus).
   useEffect(() => {
+    if (!dummy) return;
     const interval = setInterval(() => {
       setPortfolio(p => {
         const positions = p.positions.map(pos => {
@@ -68,22 +74,44 @@ export function MobileApp() {
       });
     }, 3500);
     return () => clearInterval(interval);
-  }, []);
+  }, [dummy]);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
 
-  const liveEquity = live.data?.equity ?? portfolio.totalEquity;
-  const liveCash = live.data?.cash ?? portfolio.cashBalance;
-  const liveDayPnl = live.data?.dayPnl ?? portfolio.dailyPnl;
-  const liveDayPnlPct = live.data?.dayPnlPct ?? portfolio.dailyPnlPct;
-  const buyingPower = live.data?.buyingPower ?? portfolio.totalEquity * 1.95;
-  const openCount = livePositions.data.length > 0 ? livePositions.data.length : portfolio.positions.length;
+  // Effectieve portfolio: demo = mock; live = echte Alpaca-rekening + posities.
+  const livePos: Position[] = livePositions.data.map(p => ({
+    symbol: p.symbol, name: p.symbol, sector: '—', qty: p.qty,
+    avgEntryPrice: p.avgEntryPrice, currentPrice: p.currentPrice, highWatermark: p.currentPrice,
+    entryAt: '', stopLoss: 0, trailingStop: 0, takeProfit: 0, sma20: 0,
+    marketValue: p.marketValue, costBasis: p.costBasis,
+    unrealizedPnl: p.unrealizedPnl, unrealizedPnlPct: p.unrealizedPnlPct, sparkline: [],
+  } as Position));
+  const effPortfolio: Portfolio = dummy ? portfolio : ({
+    totalEquity: live.data?.equity ?? 0,
+    cashBalance: live.data?.cash ?? 0,
+    dayStartEquity: live.data ? live.data.equity - live.data.dayPnl : 0,
+    dailyPnl: live.data?.dayPnl ?? 0,
+    dailyPnlPct: (live.data?.dayPnlPct ?? 0) * 100,
+    allTimePnl: 0, allTimePnlPct: 0,
+    tradingEnabled: guards.tradingEnabled, circuitBreakerTripped: false,
+    positions: livePos,
+  } as Portfolio);
+
+  const liveEquity = effPortfolio.totalEquity;
+  const liveCash = effPortfolio.cashBalance;
+  const liveDayPnl = effPortfolio.dailyPnl;
+  const liveDayPnlPct = effPortfolio.dailyPnlPct;
+  const buyingPower = dummy ? portfolio.totalEquity * 1.95 : (live.data?.buyingPower ?? 0);
+  const openCount = effPortfolio.positions.length;
   const deployedPct = liveEquity > 0 ? (1 - liveCash / liveEquity) * 100 : 0;
   const dayPos = liveDayPnl >= 0;
+  const activeDecisions = dummy ? (MOCK.decisions as MDecision[]) : decisions;
 
-  const agentNote = portfolio.positions.length === 0
-    ? 'Alle posities gesloten. Geen nieuwe entries vandaag, EOD draait zo.'
-    : 'Ik monitor QQQ en XLK. Trailing stops ademen met de hoogtepunten. Volgende volledige check: midday.';
+  const agentNote = !dummy
+    ? (effPortfolio.positions.length === 0 ? 'Live Alpaca-rekening — geen open posities. De bot heeft nog niet gehandeld.' : 'Live posities van je Alpaca-rekening.')
+    : (effPortfolio.positions.length === 0
+        ? 'Alle posities gesloten. Geen nieuwe entries vandaag, EOD draait zo.'
+        : 'Ik monitor QQQ en XLK. Trailing stops ademen met de hoogtepunten. Volgende volledige check: midday.');
 
   const doKill = () => {
     const next = !guards.tradingEnabled;
@@ -133,15 +161,15 @@ export function MobileApp() {
         {tab === 'overview' && (
           <MobileOverview
             cash={liveCash} buyingPower={buyingPower} deployedPct={deployedPct} openCount={openCount}
-            dayPnl={liveDayPnl} dayPnlPct={liveDayPnlPct} intraday={MOCK.equityIntraday.map(p => p.v)}
-            positions={portfolio.positions} agentNote={agentNote} marketOpen={live.data?.marketOpen ?? null}
+            dayPnl={liveDayPnl} dayPnlPct={liveDayPnlPct} intraday={dummy ? MOCK.equityIntraday.map(p => p.v) : []}
+            positions={effPortfolio.positions} agentNote={agentNote} marketOpen={live.data?.marketOpen ?? null}
             onOpenPosition={setSelPos} onGoPositions={() => setTab('positions')}
           />
         )}
-        {tab === 'positions' && <MobilePositions positions={portfolio.positions} onOpenPosition={setSelPos} />}
-        {tab === 'activity' && <MobileActivity decisions={decisions} onOpenDecision={setSelDec} />}
+        {tab === 'positions' && <MobilePositions positions={effPortfolio.positions} onOpenPosition={setSelPos} />}
+        {tab === 'activity' && <MobileActivity decisions={activeDecisions} onOpenDecision={setSelDec} />}
         {tab === 'reports' && <MobileReports reports={MOCK.reports} />}
-        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} dataLive={!!live.data} onRefresh={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — dummy data weergegeven.'); }} />}
+        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} dummy={dummy} onToggleDummy={toggleDummy} />}
       </div>
 
       {/* Bottom tab bar */}

@@ -21,7 +21,7 @@ const TILES: { id: SubView; icon: Parameters<typeof Icon>[0]['name']; title: str
   { id: 'history', icon: 'history', title: 'Historie', desc: 'Gesloten posities' },
 ];
 
-export function MobileMore({ guards, onToggleKill, dataLive, onRefresh }: { guards: Guards; onToggleKill: () => void; dataLive: boolean; onRefresh: () => void }) {
+export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy }: { guards: Guards; onToggleKill: () => void; dummy: boolean; onToggleDummy: () => void }) {
   const [view, setView] = useState<SubView | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -29,13 +29,13 @@ export function MobileMore({ guards, onToggleKill, dataLive, onRefresh }: { guar
 
   return (
     <>
-      <button className="m-row" onClick={onRefresh}>
-        <span style={{ color: dataLive ? 'var(--pos)' : 'var(--neg)', display: 'flex' }}><Icon name="wifi" size={18} /></span>
+      <button className="m-row" onClick={onToggleDummy}>
+        <span style={{ color: dummy ? 'var(--warn)' : 'var(--pos)', display: 'flex' }}><Icon name="wifi" size={18} /></span>
         <div className="m-row-main">
           <div style={{ fontSize: 13, fontWeight: 600 }}>Databron</div>
-          <div className="m-row-sub">{dataLive ? 'Live · Alpaca paper' : 'Dummy data — geen live verbinding'}</div>
+          <div className="m-row-sub">{dummy ? 'Dummy data (demo) · tik voor live' : 'Live · Alpaca paper · tik voor demo'}</div>
         </div>
-        <Icon name="refresh" size={15} />
+        <Pill kind={dummy ? 'warn' : 'pos'} dot>{dummy ? 'DEMO' : 'LIVE'}</Pill>
       </button>
 
       <div className="m-more-grid">
@@ -53,7 +53,7 @@ export function MobileMore({ guards, onToggleKill, dataLive, onRefresh }: { guar
       {view && mounted && createPortal(
         <div className="m-subview">
           <div className="m-subhead">
-            <button className="m-back" onClick={() => setView(null)}><Icon name="chev" size={14} /> Meer</button>
+            <button className="m-back" onClick={() => setView(null)}><span style={{ display: 'flex', transform: 'rotate(180deg)' }}><Icon name="chevR" size={14} /></span> Meer</button>
             <span className="m-subtitle">{title}</span>
           </div>
           <div className="m-scroll" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
