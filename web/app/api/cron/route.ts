@@ -4,6 +4,7 @@ import { claudeJson, claudeText, geminiText, MODELS } from '@/lib/ai';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib/telegram';
 import { captureEvent } from '@/lib/openbrain';
+import { computePositionSize } from '@/lib/sizing';
 import strategy from '@/strategy.json';
 
 const WATCHLIST = strategy.symbols;
@@ -126,6 +127,7 @@ async function runMarketOpen() {
   if (!clock.is_open) return { skipped: true, reason: 'Market closed' };
 
   const equity = parseFloat(account.equity);
+  const availableCash = parseFloat(account.cash);
   const openSymbols = positions.map(p => p.symbol);
   if (openSymbols.length >= strategy.rules.max_positions) {
     return { skipped: true, reason: 'Max positions reached' };
@@ -153,38 +155,49 @@ async function runMarketOpen() {
     if (c.action !== 'buy' || openSymbols.includes(c.symbol)) continue;
     if (openSymbols.length + orders.length >= strategy.rules.max_positions) break;
 
-    // Server-side position size guard — cap Claude's qty recommendation
+    // Volatility-targeting position sizing (vervangt de vaste 25%-cap).
+    // Bepaalt de grootte op basis van de beweeglijkheid van het symbool, met
+    // de basis-cap, een fractionele Kelly-limiet en de cash-bodem als grenzen.
+    // (Kelly-historie volgt zodra er genoeg gesloten trades zijn; tot dan
+    // sized het op vol-target of de basis-cap.)
     const lastPrice = lastPrices[c.symbol];
-    if (lastPrice) {
-      const maxNotional = equity * strategy.rules.position_size_pct;
-      const maxQty = Math.floor(maxNotional / lastPrice);
-      c.qty = Math.max(1, Math.min(c.qty, maxQty));
+    if (!lastPrice) {
+      await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: 'Geen prijsdata beschikbaar.', agentNote: 'Sizing overgeslagen, geen laatste prijs.', confidence: 0 });
+      continue;
     }
+    const sizing = computePositionSize({
+      symbol: c.symbol,
+      closes: (bars[c.symbol] ?? []).map((b: { c: number }) => b.c),
+      price: lastPrice,
+      equity,
+      availableCash,
+    });
+    if (sizing.shares <= 0) {
+      await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: sizing.note, agentNote: sizing.note, confidence: 0 });
+      continue;
+    }
+    c.qty = sizing.shares;
 
     // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.
     // These fire at Alpaca even if no cron runs — the hard stop is never bypassable.
-    const stopPrice = lastPrice ? +(lastPrice * (1 - strategy.rules.hard_stop_pct)).toFixed(2) : undefined;
-    const takeProfitPrice = lastPrice ? +(lastPrice * (1 + strategy.rules.take_profit_pct)).toFixed(2) : undefined;
+    const stopPrice = +(lastPrice * (1 - strategy.rules.hard_stop_pct)).toFixed(2);
+    const takeProfitPrice = +(lastPrice * (1 + strategy.rules.take_profit_pct)).toFixed(2);
 
     try {
-      const order = await alpaca.placeOrder(
-        lastPrice
-          ? {
-              symbol: c.symbol, qty: c.qty, side: 'buy',
-              type: 'market', time_in_force: 'day',
-              order_class: 'bracket',
-              stop_loss: { stop_price: stopPrice! },
-              take_profit: { limit_price: takeProfitPrice! },
-            }
-          : { symbol: c.symbol, qty: c.qty, side: 'buy', type: 'market', time_in_force: 'day' }
-      );
+      const order = await alpaca.placeOrder({
+        symbol: c.symbol, qty: c.qty, side: 'buy',
+        type: 'market', time_in_force: 'day',
+        order_class: 'bracket',
+        stop_loss: { stop_price: stopPrice },
+        take_profit: { limit_price: takeProfitPrice },
+      });
       orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id, stop: stopPrice, takeProfit: takeProfitPrice });
       await saveDecision({
         routine: 'market-open', symbol: c.symbol, decision: 'BUY', rationale: c.reason,
-        agentNote: stopPrice ? `Bracket order: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${c.reason}` : c.reason,
-        orderId: order.id, confidence: 0.8,
+        agentNote: `${sizing.note} Bracket: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${c.reason}`,
+        confidence: 0.8, orderId: order.id,
       });
-      if (lastPrice) await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice!, takeProfitPrice!));
+      await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice, takeProfitPrice));
     } catch (e) {
       await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: String(e), agentNote: 'Order mislukt.', confidence: 0 });
     }
