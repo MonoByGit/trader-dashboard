@@ -1211,11 +1211,25 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Mobiel = exact dezelfde desktop-UI, alleen mee-geschaald zodat de volledige
-   breedte op het scherm past. Geen herontwerp: het hele dashboard wordt op
-   desktopbreedte (1280px) gerenderd en door de browser teruggeschaald naar de
-   schermbreedte. Zie de viewport-meta in app/layout.tsx (width=1280).
-   Daarom hier GEEN mobiele reflow-regels. */
+/* Mobiel = exact dezelfde desktop-UI, als geheel mee-geschaald zodat de volle
+   breedte past. We renderen het dashboard op vaste desktopbreedte (1280px) en
+   schalen het GEHEEL met een CSS transform naar de schermbreedte.
+
+   De schaalfactor wordt PUUR IN CSS berekend met calc(100vw / 1280px): een
+   lengte gedeeld door een lengte geeft een kaal getal, precies wat scale()
+   nodig heeft. Geen JS, geen CSS-variabele, geen viewport-meta-truc — dus geen
+   timing-bugs en het werkt op iOS Safari (waar viewport-meta-aanpassingen via
+   JS genegeerd worden en Next altijd initial-scale=1 forceert).
+   Actief onder 820px (telefoons en smalle tablets). */
+@media (max-width: 820px) {
+  html, body { width: 100%; overflow-x: hidden; }
+  .app {
+    width: 1280px;
+    height: calc(100dvh / (100vw / 1280px));   /* = 1280px hoogte-equivalent, terug-geschaald */
+    transform: scale(calc(100vw / 1280px));
+    transform-origin: top left;
+  }
+}
 
 /* Print */
 @media print {
