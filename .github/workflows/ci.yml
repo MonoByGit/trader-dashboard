@@ -1,0 +1,47 @@
+name: CI
+
+# Bewaakt de deploy-route: elke PR naar main moet hier groen zijn voordat
+# hij gemerged en door Railway gedeployed wordt. Vangt type- en lint-fouten
+# (zoals de ternary-als-statement die de build eerder brak) plus echte
+# build-fouten, vóórdat ze main bereiken.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: typecheck, lint & build (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        # Dummy waarden zodat module-initialisatie (Alpaca/AI clients) niet
+        # struikelt over ontbrekende secrets; de build voert geen API-calls uit.
+        env:
+          ANTHROPIC_API_KEY: dummy
+          GOOGLE_AI_API_KEY: dummy
+          ALPACA_API_KEY: dummy
+          ALPACA_SECRET_KEY: dummy
+          CRON_SECRET: dummy
+        run: npm run build
