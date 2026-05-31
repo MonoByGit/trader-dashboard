@@ -121,9 +121,6 @@ export function MobileApp() {
             <button className={`m-hpill icon${equityOpen ? ' active' : ''}`} onClick={toggleEquity} aria-label="Equity tonen of verbergen">
               <Icon name="eye" size={15} />
             </button>
-            <button className="m-hpill icon" onClick={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — dummy data weergegeven.'); }} aria-label={live.data ? 'Live data' : 'Dummy data'} style={{ color: live.data ? 'var(--pos)' : 'var(--neg)' }}>
-              <Icon name="wifi" size={15} />
-            </button>
             <button className={`m-hpill icon${guards.tradingEnabled ? '' : ' tripped'}`} onClick={() => setConfirmKill(true)} aria-label="Kill switch">
               <Icon name={guards.tradingEnabled ? 'unlock' : 'lock'} size={14} />
             </button>
@@ -144,7 +141,7 @@ export function MobileApp() {
         {tab === 'positions' && <MobilePositions positions={portfolio.positions} onOpenPosition={setSelPos} />}
         {tab === 'activity' && <MobileActivity decisions={decisions} onOpenDecision={setSelDec} />}
         {tab === 'reports' && <MobileReports reports={MOCK.reports} />}
-        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} />}
+        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} dataLive={!!live.data} onRefresh={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — dummy data weergegeven.'); }} />}
       </div>
 
       {/* Bottom tab bar */}

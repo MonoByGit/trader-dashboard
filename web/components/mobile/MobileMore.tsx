@@ -21,7 +21,7 @@ const TILES: { id: SubView; icon: Parameters<typeof Icon>[0]['name']; title: str
   { id: 'history', icon: 'history', title: 'Historie', desc: 'Gesloten posities' },
 ];
 
-export function MobileMore({ guards, onToggleKill }: { guards: Guards; onToggleKill: () => void }) {
+export function MobileMore({ guards, onToggleKill, dataLive, onRefresh }: { guards: Guards; onToggleKill: () => void; dataLive: boolean; onRefresh: () => void }) {
   const [view, setView] = useState<SubView | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -29,6 +29,15 @@ export function MobileMore({ guards, onToggleKill }: { guards: Guards; onToggleK
 
   return (
     <>
+      <button className="m-row" onClick={onRefresh}>
+        <span style={{ color: dataLive ? 'var(--pos)' : 'var(--neg)', display: 'flex' }}><Icon name="wifi" size={18} /></span>
+        <div className="m-row-main">
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Databron</div>
+          <div className="m-row-sub">{dataLive ? 'Live · Alpaca paper' : 'Dummy data — geen live verbinding'}</div>
+        </div>
+        <Icon name="refresh" size={15} />
+      </button>
+
       <div className="m-more-grid">
         {TILES.map(t => (
           <button key={t.id} className="m-more-tile" onClick={() => setView(t.id)}>

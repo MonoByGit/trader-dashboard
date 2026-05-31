@@ -91,7 +91,7 @@
   animation: m-fade 160ms ease;
 }
 .m-topdrawer {
-  background: var(--bg-card);
+  background: var(--bg-app); /* zelfde kleur als de header -> naadloze verlenging */
   border-bottom: 1px solid var(--border-strong);
   border-bottom-left-radius: 18px;
   border-bottom-right-radius: 18px;
