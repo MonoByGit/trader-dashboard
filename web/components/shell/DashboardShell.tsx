@@ -87,6 +87,15 @@ export function DashboardShell() {
   }, [page]);
   useEffect(() => { try { localStorage.setItem('trader-left', String(leftOpen)); } catch {} }, [leftOpen]);
   useEffect(() => { try { localStorage.setItem('trader-right', String(rightOpen)); } catch {} }, [rightOpen]);
+  // On phones both side panels start collapsed and act as overlay drawers.
+  // Run after mount (post-hydration) so the server/client markup matches.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      setLeftOpen(false);
+      setRightOpen(false);
+    }
+  }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === '[') { e.preventDefault(); setLeftOpen(v => !v); }
@@ -140,6 +149,9 @@ export function DashboardShell() {
   }, [tweaks.mode]);
 
   const updateTweak = (k: keyof typeof TWEAK_DEFAULTS, v: string | boolean) => setTweaks(t => ({ ...t, [k]: v }));
+
+  const isMobile = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  const goPage = (id: PageId) => { setPage(id); if (isMobile()) setLeftOpen(false); };
 
   const showToastMsg = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3400); };
 
@@ -292,7 +304,7 @@ export function DashboardShell() {
           <div className="panel-section">
             <div className="panel-header">Pages <span className="count">{PAGES.length}</span></div>
             {PAGES.map(p => (
-              <div key={p.id} className={`nav-row${page === p.id ? ' active' : ''}`} onClick={() => setPage(p.id)}>
+              <div key={p.id} className={`nav-row${page === p.id ? ' active' : ''}`} onClick={() => goPage(p.id)}>
                 <div className="nav-icon"><Icon name={p.icon as Parameters<typeof Icon>[0]['name']} size={13}/></div>
                 <span>{p.label}</span>
                 {p.id === 'decisions' && unread.decisions > 0 && <span className="nav-badge unread">{unread.decisions}</span>}
@@ -402,6 +414,11 @@ export function DashboardShell() {
         </div>
       </div>
 
+      {/* Drawer backdrop (mobile only — CSS hides it on desktop) */}
+      {(leftOpen || rightOpen) && (
+        <div className="drawer-backdrop" onClick={() => { setLeftOpen(false); setRightOpen(false); }} />
+      )}
+
       {/* Status bar */}
       <div className="statusbar">
         <div className="left">
@@ -420,7 +437,6 @@ export function DashboardShell() {
           <span>{livePositionCount} pos · {fmt.usd(liveEquity,0)} equity</span>
           <span>guards: <span className="text-pos">OK</span></span>
           <span>v0.1.0-paper</span>
-          <a href="/m" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Mobiele weergave</a>
         </div>
       </div>
 

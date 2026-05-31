@@ -4,8 +4,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Momentum-1',
     short_name: 'Momentum-1',
-    description: 'Momentum-1 trading dashboard, glanceable mobiele weergave',
-    start_url: '/m',
+    description: 'Momentum-1 trading dashboard',
+    start_url: '/',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
