@@ -420,6 +420,7 @@ export function DashboardShell() {
           <span>{livePositionCount} pos · {fmt.usd(liveEquity,0)} equity</span>
           <span>guards: <span className="text-pos">OK</span></span>
           <span>v0.1.0-paper</span>
+          <a href="/m" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Mobiele weergave</a>
         </div>
       </div>
 
