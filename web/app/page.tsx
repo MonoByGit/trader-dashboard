@@ -1,5 +1,5 @@
-import { DashboardShell } from "@/components/shell/DashboardShell";
+import { ResponsiveRoot } from "@/components/shell/ResponsiveRoot";
 
 export default function Home() {
-  return <DashboardShell />;
+  return <ResponsiveRoot />;
 }
