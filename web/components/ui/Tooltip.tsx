@@ -78,8 +78,8 @@ function Popover({ title, plain, tech, children }: PopoverProps) {
         role="button"
         tabIndex={0}
         aria-label={`Uitleg: ${title}`}
-        onClick={(e) => { e.stopPropagation(); open ? close() : setOpen(true); }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open ? close() : setOpen(true); } }}
+        onClick={(e) => { e.stopPropagation(); if (open) { close(); } else { setOpen(true); } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (open) { close(); } else { setOpen(true); } } }}
         className="tip-trigger"
       >
         {children}
