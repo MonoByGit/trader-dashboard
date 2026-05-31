@@ -36,9 +36,11 @@ export function MobileApp() {
   const [selDec, setSelDec] = useState<MDecision | null>(null);
   const [confirmClose, setConfirmClose] = useState<Position | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
+  const [equityShown, setEquityShown] = useState(() => { try { return localStorage.getItem('trader-m-eq') === '1'; } catch { return false; } });
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => { try { localStorage.setItem('trader-m-tab', tab); } catch {} }, [tab]);
+  const toggleEquity = () => setEquityShown(v => { const n = !v; try { localStorage.setItem('trader-m-eq', n ? '1' : '0'); } catch {} return n; });
 
   // Kill switch state + decisions uit backend (val terug op mock).
   useEffect(() => {
@@ -100,28 +102,36 @@ export function MobileApp() {
 
   return (
     <div className="m-app">
-      {/* Hero */}
+      {/* Header — compact, één rij */}
       <div className="m-hero">
         <div className="m-hero-top">
           <div className="m-brand">
             <BrandLogo size={22} />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="m-brand-name">Momentum-1</div>
               <div className="m-brand-sub">Paper · Alpaca</div>
             </div>
           </div>
-          <button className={`m-kill${guards.tradingEnabled ? '' : ' tripped'}`} onClick={() => setConfirmKill(true)}>
-            <Icon name={guards.tradingEnabled ? 'unlock' : 'lock'} size={13} />
-            {guards.tradingEnabled ? 'Live' : 'Gestopt'}
-          </button>
+          <div className="m-hero-actions">
+            <button className={`m-hpill${equityShown ? ' active' : ''}`} onClick={toggleEquity} aria-label={equityShown ? 'Equity verbergen' : 'Equity tonen'}>
+              <Icon name="eye" size={13} /> Equity
+            </button>
+            <button className="m-hpill" onClick={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — mock weergegeven.'); }} aria-label="Databron">
+              <span className="m-hpill-dot" style={{ background: live.data ? 'var(--pos)' : 'var(--neg)' }} />
+              {live.data ? 'Live' : 'Mock'}
+            </button>
+            <button className={`m-hpill icon${guards.tradingEnabled ? '' : ' tripped'}`} onClick={() => setConfirmKill(true)} aria-label="Kill switch">
+              <Icon name={guards.tradingEnabled ? 'unlock' : 'lock'} size={14} />
+            </button>
+          </div>
         </div>
-        <div className="m-hero-equity-label">Equity</div>
-        <div className="m-hero-equity">{fmt.usd(liveEquity)}</div>
-        <div className="m-hero-pnl">
-          <span className={dayPos ? 'pos' : 'neg'}>{fmt.signedUsd(liveDayPnl)}</span>
-          <span className={dayPos ? 'pos' : 'neg'}>{fmt.pct(liveDayPnlPct)}</span>
-          <span className="live">{live.data ? 'LIVE' : 'vandaag'}</span>
-        </div>
+        {equityShown && (
+          <div className="m-hero-equity-row">
+            <span className="val">{fmt.usd(liveEquity)}</span>
+            <span className={dayPos ? 'pos' : 'neg'}>{fmt.signedUsd(liveDayPnl)} · {fmt.pct(liveDayPnlPct)}</span>
+            <span className="lbl">vandaag</span>
+          </div>
+        )}
       </div>
 
       {/* Content */}

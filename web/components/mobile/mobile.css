@@ -28,23 +28,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 8px;
 }
 .m-brand {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .m-brand-name {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .m-brand-sub {
   font-size: 10px;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
-.m-kill {
+/* Header-pillen (equity-toggle, databron-status, kill switch) */
+.m-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.m-hpill {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -54,46 +67,29 @@
   border: 1px solid var(--border-strong);
   background: var(--bg-input);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
-.m-kill.tripped {
-  border-color: var(--neg);
-  color: var(--neg);
-  background: var(--neg-dim);
-}
-.m-hero-equity-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-  margin-bottom: 2px;
-}
-.m-hero-equity {
-  font-family: var(--font-mono);
-  font-size: 34px;
-  font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-}
-.m-hero-pnl {
+.m-hpill:active { background: var(--bg-card-hover); }
+.m-hpill.icon { padding: 0; width: 32px; justify-content: center; }
+.m-hpill.icon.tripped { border-color: var(--neg); color: var(--neg); background: var(--neg-dim); }
+.m-hpill.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.m-hpill-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+
+/* Equity-bedrag op een eigen tweede regel (alleen als getoond) */
+.m-hero-equity-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 12px;
   font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 500;
 }
-.m-hero-pnl .live {
-  font-family: var(--font-ui);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  color: var(--text-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
+.m-hero-equity-row .val { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.m-hero-equity-row .pos { color: var(--pos); font-size: 13px; }
+.m-hero-equity-row .neg { color: var(--neg); font-size: 13px; }
+.m-hero-equity-row .lbl { font-family: var(--font-ui); font-size: 11px; color: var(--text-tertiary); }
 
 /* ---- Scrollable content -------------------------------------------------- */
 .m-scroll {
