@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
 import { Icon } from '@/components/ui/Icon';
@@ -22,6 +23,8 @@ const TILES: { id: SubView; icon: Parameters<typeof Icon>[0]['name']; title: str
 
 export function MobileMore({ guards, onToggleKill }: { guards: Guards; onToggleKill: () => void }) {
   const [view, setView] = useState<SubView | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const title = TILES.find(t => t.id === view)?.title ?? '';
 
   return (
@@ -38,7 +41,7 @@ export function MobileMore({ guards, onToggleKill }: { guards: Guards; onToggleK
         ))}
       </div>
 
-      {view && (
+      {view && mounted && createPortal(
         <div className="m-subview">
           <div className="m-subhead">
             <button className="m-back" onClick={() => setView(null)}><Icon name="chev" size={14} /> Meer</button>
@@ -52,7 +55,8 @@ export function MobileMore({ guards, onToggleKill }: { guards: Guards; onToggleK
             {view === 'lessons' && <LessonsView />}
             {view === 'history' && <HistoryView />}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

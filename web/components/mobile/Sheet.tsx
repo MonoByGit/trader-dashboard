@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/Icon';
 
 // Bottom-sheet drill-down (Trading 212 / Binance-stijl). Tik buiten of op de
-// kruis-knop sluit. Body scrollt; head + grip blijven staan.
+// kruis-knop sluit. Body scrollt; head + grip blijven staan. Via een portal naar
+// document.body zodat de sheet het hele scherm dekt (boven de hero, onder de
+// island) en niet door de scroll-container wordt afgesneden.
 export function Sheet({ open, title, sub, onClose, children }: {
   open: boolean;
   title: string;
@@ -12,6 +15,8 @@ export function Sheet({ open, title, sub, onClose, children }: {
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -19,8 +24,8 @@ export function Sheet({ open, title, sub, onClose, children }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  if (!open || !mounted) return null;
+  return createPortal(
     <div className="m-sheet-backdrop" onClick={onClose}>
       <div className="m-sheet" onClick={e => e.stopPropagation()}>
         <div className="m-sheet-grip" />
@@ -33,6 +38,7 @@ export function Sheet({ open, title, sub, onClose, children }: {
         </div>
         <div className="m-sheet-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

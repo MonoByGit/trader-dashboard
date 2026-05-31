@@ -98,12 +98,21 @@
 /* ---- Scrollable content -------------------------------------------------- */
 .m-scroll {
   flex: 1 1 auto;
+  min-height: 0; /* cruciaal: laat de flex-child krimpen i.p.v. de container uit te groeien */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px 16px calc(env(safe-area-inset-bottom) + 88px);
+  padding: 14px 16px 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Voorkom dat flexbox de scroll-kinderen platdrukt zodra de content langer is dan
+   het scherm — anders klappen kleine items (zoals de filter-chips) dicht en moet
+   de lijst juist scrollen. */
+.m-scroll > *,
+.m-sheet-body > * {
+  flex-shrink: 0;
 }
 
 /* ---- Cards --------------------------------------------------------------- */
@@ -296,17 +305,11 @@
 /* ---- Bottom tab bar ------------------------------------------------------ */
 .m-tabbar {
   flex: 0 0 auto;
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  background: rgba(28, 28, 28, 0.92);
-  backdrop-filter: saturate(140%) blur(14px);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  background: var(--bg-chrome);
   border-top: 1px solid var(--border-subtle);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom); /* strak tegen de bodem, vrij van de home-indicator */
   z-index: 30;
 }
 .m-tab {
@@ -335,7 +338,7 @@
 }
 .m-sheet {
   width: 100%;
-  max-height: 88vh;
+  max-height: 92dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
@@ -366,6 +369,8 @@
 .m-sheet-title { font-size: 17px; font-weight: 600; }
 .m-sheet-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; font-family: var(--font-mono); }
 .m-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 16px 18px;
@@ -434,10 +439,10 @@
 
 /* ---- More: sub-view overlay ---------------------------------------------- */
 .m-subview {
-  position: absolute;
+  position: fixed; /* portaled naar body -> dekt hero + nav, niet gevangen in de scroll */
   inset: 0;
   background: var(--bg-app);
-  z-index: 40;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   animation: m-slide-in 200ms cubic-bezier(0.2, 0, 0, 1);
