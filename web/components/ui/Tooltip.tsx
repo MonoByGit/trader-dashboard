@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react';
 import { getTerm } from '@/lib/glossary';
 
 // A small info popover. Works on desktop (hover) and mobile (tap).
@@ -16,13 +16,34 @@ interface PopoverProps {
   children: ReactNode; // the trigger
 }
 
+const MARGIN = 8; // keep this many px from any viewport edge
+
 function Popover({ title, plain, tech, children }: PopoverProps) {
   const [open, setOpen] = useState(false);
-  const [above, setAbove] = useState(true);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLSpanElement>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => { setOpen(false); setCoords(null); }, []);
+
+  // Position the popover with fixed coordinates, clamped inside the viewport.
+  // Fixed positioning escapes the panel's overflow clipping, so it never gets cut off.
+  useLayoutEffect(() => {
+    if (!open || !wrapRef.current || !popRef.current) return;
+    const trigger = wrapRef.current.getBoundingClientRect();
+    const pop = popRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = trigger.left + trigger.width / 2 - pop.width / 2;
+    left = Math.max(MARGIN, Math.min(left, vw - pop.width - MARGIN));
+
+    const above = trigger.top > pop.height + 12;
+    const top = above ? trigger.top - pop.height - 7 : Math.min(trigger.bottom + 7, vh - pop.height - MARGIN);
+
+    setCoords({ top, left });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -30,21 +51,21 @@ function Popover({ title, plain, tech, children }: PopoverProps) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    // Flip below if there is little room above.
-    if (wrapRef.current) {
-      const rect = wrapRef.current.getBoundingClientRect();
-      setAbove(rect.top > 180);
-    }
+    const onScroll = () => close();
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
     return () => {
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
     };
   }, [open, close]);
 
   const onEnter = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(() => setOpen(true), 120); };
-  const onLeave = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(() => setOpen(false), 80); };
+  const onLeave = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(() => close(), 80); };
 
   return (
     <span
@@ -57,14 +78,24 @@ function Popover({ title, plain, tech, children }: PopoverProps) {
         role="button"
         tabIndex={0}
         aria-label={`Uitleg: ${title}`}
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } }}
+        onClick={(e) => { e.stopPropagation(); open ? close() : setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open ? close() : setOpen(true); } }}
         className="tip-trigger"
       >
         {children}
       </span>
       {open && (
-        <span className={`tip-pop ${above ? 'above' : 'below'}`} role="tooltip" onClick={(e) => e.stopPropagation()}>
+        <span
+          ref={popRef}
+          className="tip-pop"
+          role="tooltip"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            top: coords ? coords.top : -9999,
+            left: coords ? coords.left : -9999,
+            visibility: coords ? 'visible' : 'hidden',
+          }}
+        >
           <span className="tip-title">{title}</span>
           <span className="tip-plain">{plain}</span>
           {tech && <span className="tip-tech">{tech}</span>}
