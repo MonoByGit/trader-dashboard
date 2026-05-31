@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { BrandLogo } from '@/components/ui/Icon';
 import { useAccount, usePositions } from '@/hooks/useAlpaca';
@@ -16,14 +16,18 @@ export default function GlancePage() {
   const guards = useGuards();
   const decisions = useDecisions(5);
 
-  const refreshAll = () => { account.refresh(); positions.refresh(); guards.refresh(); decisions.refresh(); };
+  const { refresh: refreshAccount } = account;
+  const { refresh: refreshPositions } = positions;
+  const { refresh: refreshGuards } = guards;
+  const { refresh: refreshDecisions } = decisions;
+  const refreshAll = useCallback(() => {
+    refreshAccount(); refreshPositions(); refreshGuards(); refreshDecisions();
+  }, [refreshAccount, refreshPositions, refreshGuards, refreshDecisions]);
 
   useEffect(() => {
-    const onFocus = () => refreshAll();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    window.addEventListener('focus', refreshAll);
+    return () => window.removeEventListener('focus', refreshAll);
+  }, [refreshAll]);
 
   return (
     <main>

@@ -4,8 +4,6 @@ import type { ReportData } from '@/hooks/useTrader';
 export function ReportCard({ r }: { r: ReportData }) {
   const start = r.kpis?.equityStart;
   const end = r.kpis?.equityEnd;
-  const pnl = start != null && end != null ? end - start : null;
-  const pos = (pnl ?? 0) >= 0;
   return (
     <div className="m-card">
       <div className="m-row">
@@ -15,7 +13,7 @@ export function ReportCard({ r }: { r: ReportData }) {
       {start != null && end != null && (
         <div className="m-row" style={{ marginBottom: 12 }}>
           <span className="mono">{fmt.usd(start)} → {fmt.usd(end)}</span>
-          {pnl != null && <span className={`mono ${pos ? 'text-pos' : 'text-neg'}`}>{fmt.signedUsd(pnl)}</span>}
+          <span className={`mono ${end - start >= 0 ? 'text-pos' : 'text-neg'}`}>{fmt.signedUsd(end - start)}</span>
         </div>
       )}
       {r.narrative
