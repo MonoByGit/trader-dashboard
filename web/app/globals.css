@@ -1274,6 +1274,14 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 }
 
 /* ===== Mobiele PWA (/m) ===== */
+/* Desktop-shell vergrendelt html/body (overflow hidden, vaste hoogte). De
+   mobiele view heeft natuurlijke document-scroll nodig, dus ontgrendel die
+   alleen binnen de /m-tree (waar .m-root aanwezig is). */
+html:has(.m-root), body:has(.m-root) {
+  overflow: auto;
+  height: auto;
+  min-height: 100dvh;
+}
 .m-root {
   min-height: 100dvh;
   background: var(--bg-app);
@@ -1299,18 +1307,16 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 .m-card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 12px; }
 .m-hero-equity { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
 .m-hero-pnl { font-size: 16px; margin-top: 4px; }
-.m-pos { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border-subtle); }
-.m-pos:first-of-type { border-top: 0; }
+.m-pos { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+.m-pos + .m-pos { border-top: 1px solid var(--border-subtle); }
 .m-pos-sym { font-weight: 600; font-size: 15px; }
 .m-pos-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
-.m-dec { padding: 10px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
-.m-dec:first-of-type { border-top: 0; }
+.m-dec { padding: 10px 0; font-size: 13px; }
+.m-dec + .m-dec { border-top: 1px solid var(--border-subtle); }
 .m-dec-top { display: flex; gap: 8px; align-items: baseline; }
 .m-dec-rat { color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
 .m-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .m-pos-val { text-align: right; }
-.text-pos { color: var(--pos); }
-.text-neg { color: var(--neg); }
 .m-mkt-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .m-mkt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
 .m-mkt-dot.open { background: var(--pos); }
