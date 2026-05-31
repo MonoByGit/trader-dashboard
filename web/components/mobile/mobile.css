@@ -19,10 +19,11 @@
 /* ---- Hero header (sticky boven) ------------------------------------------ */
 .m-hero {
   flex: 0 0 auto;
+  position: relative;
   padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
   background: var(--bg-app);
   border-bottom: 1px solid var(--border-subtle);
-  z-index: 20;
+  z-index: 50; /* boven de equity-drawer, zodat die er netjes onder vandaan zakt */
 }
 .m-hero-top {
   display: flex;
@@ -77,19 +78,56 @@
 .m-hpill.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 .m-hpill-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
 
-/* Equity-bedrag op een eigen tweede regel (alleen als getoond) */
-.m-hero-equity-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin-top: 12px;
-  font-family: var(--font-mono);
+/* Equity-drawer: zakt vanaf onder de header naar beneden. De backdrop begint op
+   de header-onderkant (inline top), dimt de content eronder en sluit bij tik. */
+.m-topdrawer-backdrop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay);
+  z-index: 45;
+  overflow: hidden;
+  animation: m-fade 160ms ease;
 }
-.m-hero-equity-row .val { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
-.m-hero-equity-row .pos { color: var(--pos); font-size: 13px; }
-.m-hero-equity-row .neg { color: var(--neg); font-size: 13px; }
-.m-hero-equity-row .lbl { font-family: var(--font-ui); font-size: 11px; color: var(--text-tertiary); }
+.m-topdrawer {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-strong);
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+  box-shadow: var(--shadow-float);
+  padding: 16px 18px 20px;
+  animation: m-drop-down 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+.m-topdrawer-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 4px; }
+.m-topdrawer-val { font-family: var(--font-mono); font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.05; }
+.m-topdrawer-pnl { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; font-family: var(--font-mono); font-size: 14px; }
+.m-topdrawer-pnl .pos { color: var(--pos); }
+.m-topdrawer-pnl .neg { color: var(--neg); }
+.m-topdrawer-pnl .lbl { font-family: var(--font-ui); font-size: 11px; color: var(--text-tertiary); }
+
+@keyframes m-drop-down { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+/* Toast — bovenin, onder de notch */
+.m-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 90vw;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-size: 13px;
+  box-shadow: var(--shadow-float);
+  z-index: 80;
+  animation: m-toast-in 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes m-toast-in { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* ---- Scrollable content -------------------------------------------------- */
 .m-scroll {

@@ -1,7 +1,8 @@
 'use client';
 
 import './mobile.css';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, BrandLogo } from '@/components/ui/Icon';
 import { fmt } from '@/lib/format';
 import { MOCK, type Portfolio, type Position } from '@/lib/mock';
@@ -36,11 +37,15 @@ export function MobileApp() {
   const [selDec, setSelDec] = useState<MDecision | null>(null);
   const [confirmClose, setConfirmClose] = useState<Position | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
-  const [equityShown, setEquityShown] = useState(() => { try { return localStorage.getItem('trader-m-eq') === '1'; } catch { return false; } });
+  const [equityOpen, setEquityOpen] = useState(false);
+  const [drawerTop, setDrawerTop] = useState(0);
+  const heroRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => { try { localStorage.setItem('trader-m-tab', tab); } catch {} }, [tab]);
-  const toggleEquity = () => setEquityShown(v => { const n = !v; try { localStorage.setItem('trader-m-eq', n ? '1' : '0'); } catch {} return n; });
+  // Open/sluit de equity-drawer; meet de header-onderkant zodat de drawer daar
+  // precies onder begint te zakken (safe-area-proof, geen vaste hoogte aanname).
+  const toggleEquity = () => setEquityOpen(o => { if (!o && heroRef.current) setDrawerTop(Math.round(heroRef.current.getBoundingClientRect().bottom)); return !o; });
 
   // Kill switch state + decisions uit backend (val terug op mock).
   useEffect(() => {
@@ -102,8 +107,8 @@ export function MobileApp() {
 
   return (
     <div className="m-app">
-      {/* Header — compact, één rij */}
-      <div className="m-hero">
+      {/* Header — vaste hoogte, alleen icoon-pillen */}
+      <div className="m-hero" ref={heroRef}>
         <div className="m-hero-top">
           <div className="m-brand">
             <BrandLogo size={22} />
@@ -113,25 +118,17 @@ export function MobileApp() {
             </div>
           </div>
           <div className="m-hero-actions">
-            <button className={`m-hpill${equityShown ? ' active' : ''}`} onClick={toggleEquity} aria-label={equityShown ? 'Equity verbergen' : 'Equity tonen'}>
-              <Icon name="eye" size={13} /> Equity
+            <button className={`m-hpill icon${equityOpen ? ' active' : ''}`} onClick={toggleEquity} aria-label="Equity tonen of verbergen">
+              <Icon name="eye" size={15} />
             </button>
-            <button className="m-hpill" onClick={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — mock weergegeven.'); }} aria-label="Databron">
-              <span className="m-hpill-dot" style={{ background: live.data ? 'var(--pos)' : 'var(--neg)' }} />
-              {live.data ? 'Live' : 'Mock'}
+            <button className="m-hpill icon" onClick={() => { live.refresh?.(); showToast(live.data ? 'Live data ververst.' : 'Geen live data — dummy data weergegeven.'); }} aria-label={live.data ? 'Live data' : 'Dummy data'} style={{ color: live.data ? 'var(--pos)' : 'var(--neg)' }}>
+              <Icon name="wifi" size={15} />
             </button>
             <button className={`m-hpill icon${guards.tradingEnabled ? '' : ' tripped'}`} onClick={() => setConfirmKill(true)} aria-label="Kill switch">
               <Icon name={guards.tradingEnabled ? 'unlock' : 'lock'} size={14} />
             </button>
           </div>
         </div>
-        {equityShown && (
-          <div className="m-hero-equity-row">
-            <span className="val">{fmt.usd(liveEquity)}</span>
-            <span className={dayPos ? 'pos' : 'neg'}>{fmt.signedUsd(liveDayPnl)} · {fmt.pct(liveDayPnlPct)}</span>
-            <span className="lbl">vandaag</span>
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -255,11 +252,28 @@ export function MobileApp() {
         <button className="m-btn ghost" onClick={() => setConfirmKill(false)}>Annuleren</button>
       </Sheet>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', left: '50%', bottom: 'calc(env(safe-area-inset-bottom) + 78px)', transform: 'translateX(-50%)', background: 'var(--bg-card)', border: '1px solid var(--border-strong)', borderRadius: 10, padding: '11px 16px', fontSize: 13, boxShadow: 'var(--shadow-float)', zIndex: 60, display: 'flex', alignItems: 'center', gap: 9, maxWidth: '90vw' }}>
+      {/* Equity-drawer — zakt vanaf onder de header naar beneden */}
+      {equityOpen && createPortal(
+        <div className="m-topdrawer-backdrop" style={{ top: drawerTop }} onClick={() => setEquityOpen(false)}>
+          <div className="m-topdrawer" onClick={e => e.stopPropagation()}>
+            <div className="m-topdrawer-label">Equity</div>
+            <div className="m-topdrawer-val">{fmt.usd(liveEquity)}</div>
+            <div className="m-topdrawer-pnl">
+              <span className={dayPos ? 'pos' : 'neg'}>{fmt.signedUsd(liveDayPnl)}</span>
+              <span className={dayPos ? 'pos' : 'neg'}>{fmt.pct(liveDayPnlPct)}</span>
+              <span className="lbl">vandaag</span>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Toast — bovenin */}
+      {toast && createPortal(
+        <div className="m-toast">
           <Icon name="bolt" size={13} className="text-accent" /> <span>{toast}</span>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
