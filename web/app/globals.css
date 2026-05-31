@@ -1235,10 +1235,8 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 .tip-wrap:hover .tip-term { border-bottom-color: var(--accent); color: var(--text-primary); }
 
 .tip-pop {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 80;
+  position: fixed;
+  z-index: 200;
   width: max-content;
   max-width: 280px;
   display: flex;
@@ -1254,12 +1252,9 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
   cursor: default;
   animation: tip-in var(--t-fast);
 }
-.tip-pop.above { bottom: calc(100% + 7px); }
-.tip-pop.below { top: calc(100% + 7px); }
-
 @keyframes tip-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(2px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .tip-title { font-size: 11px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.01em; }
