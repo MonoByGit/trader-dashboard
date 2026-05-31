@@ -1,5 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+// Fonts worden nu MEEGEBUNDELD met de app (self-hosted via next/font), zodat
+// elk apparaat exact hetzelfde lettertype toont. Voorheen stonden 'Inter' en
+// 'JetBrains Mono' alleen als CSS-naam vermeld zonder ze te laden: desktops
+// met Inter geinstalleerd toonden Inter, telefoons (zonder Inter) vielen terug
+// op San Francisco -> ander font, ander gevoel. Dit lost dat op.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const jbMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jbmono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Trader Agent · Paper Trading Dashboard",
@@ -32,7 +41,7 @@ const fitViewport = `(function(){try{var m=document.querySelector('meta[name=vie
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" data-density="comfortable">
+    <html lang="en" data-theme="dark" data-density="comfortable" className={`${inter.variable} ${jbMono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: fitViewport }} />
       </head>
