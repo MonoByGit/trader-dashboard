@@ -87,13 +87,13 @@ Format as JSON: { "QQQ": "safe/risky: <reason>", ... }`;
     let parsedNews: Record<string, string> = {};
     try { parsedNews = JSON.parse(newsContext); } catch { parsedNews = {}; }
 
-    // Step 3: Claude Sonnet — make the actual trading decisions
+    // Step 3: agent (smart tier) — make the actual trading decisions
     const marketData = marketSnapshots
       .filter(s => !('skip' in s && s.skip))
       .map(s => JSON.stringify(s))
       .join('\n');
 
-    const system = `You are Momentum-1, an autonomous trading agent for US ETF paper trading.
+    const system = `You are Momentum, an autonomous trading agent for US ETF paper trading.
 Strategy: Momentum breakout on large-cap US ETFs. Paper trading, $${equity.toFixed(0)} equity.
 Max 3 open positions. Currently open: ${openSymbols.length > 0 ? openSymbols.join(', ') : 'none'}.
 Market is ${clock.is_open ? 'OPEN' : 'CLOSED'}.

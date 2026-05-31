@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Momentum-1',
-    short_name: 'Momentum-1',
-    description: 'Momentum-1 trading dashboard',
+    name: 'Momentum',
+    short_name: 'Momentum',
+    description: 'Momentum trading dashboard',
     start_url: '/',
     scope: '/',
     display: 'standalone',

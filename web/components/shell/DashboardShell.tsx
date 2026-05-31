@@ -332,7 +332,7 @@ export function DashboardShell() {
             <div style={{display:'flex',alignItems:'center',gap:8,padding:8,background:'var(--bg-app)',borderRadius:6}}>
               <div style={{width:28,height:28,borderRadius:6,background:'var(--bg-input)',border:'1px solid var(--border-strong)',display:'grid',placeItems:'center',color:'var(--text-secondary)'}}><BrandLogo size={16}/></div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:11,fontWeight:500}}>Momentum-1</div>
+                <div style={{fontSize:11,fontWeight:500}}>Momentum</div>
                 <div style={{fontSize:10,color:'var(--text-tertiary)'}}>claude-sonnet · paper</div>
               </div>
               <Pill kind="pos" dot pulse/>
