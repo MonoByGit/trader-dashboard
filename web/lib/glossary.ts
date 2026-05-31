@@ -143,8 +143,18 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   // --- Sizing ---
   'position-sizing': {
     title: 'Positiegrootte',
-    plain: 'Hoeveel geld er in een trade gaat. Standaard 25 procent van de vrije cash, zodat een misser nooit te veel pijn doet.',
-    tech: 'Standaard 25 procent van available cash, max 30 procent van de totale equity per symbool.',
+    plain: 'Hoeveel geld er in een trade gaat. De grootte hangt af van hoe beweeglijk een fonds is (zie vol-targeting), met de 25 procent-cap en de cash-bodem als bovengrenzen.',
+    tech: 'Vol-targeting gewicht, begrensd door 25 procent basis-cap, fractionele Kelly en 10 procent cash-bodem.',
+  },
+  'vol-targeting': {
+    title: 'Volatility targeting',
+    plain: 'In plaats van overal hetzelfde bedrag insteken, kijkt de bot hoe beweeglijk een fonds is. Een rustig fonds mag een grotere positie, een wild fonds een kleinere, zodat elke trade ongeveer evenveel risico draagt. Dit verlaagt de uitschieters naar beneden.',
+    tech: 'Gewicht = doel-volatiliteit (12% jaar) gedeeld door de 20-daagse gerealiseerde vol van het symbool. Begrensd door de basis-cap.',
+  },
+  kelly: {
+    title: 'Kelly (fractioneel)',
+    plain: 'Een formule die op basis van je trefkans en je gemiddelde winst-versus-verlies uitrekent wat een verstandige maximale inzet is. Wij gebruiken een kwart daarvan, want de volledige Kelly is te agressief. Werkt pas zodra er genoeg gesloten trades zijn.',
+    tech: '1/4 Kelly: 0,25 maal (winRate min (1 min winRate) gedeeld door payoff-ratio). Geldt als bovengrens op de positiegrootte.',
   },
   'cash-floor': {
     title: 'Cash-bodem',
