@@ -92,7 +92,7 @@ export function useReport() {
       const res = await fetch('/api/agent/report');
       if (!res.ok) throw new Error(`${res.status}`);
       const d = await res.json();
-      setData(d && !d.error ? d : null);
+      setData(d ?? null);
       setError(null);
     } catch (e) {
       setError(String(e));
