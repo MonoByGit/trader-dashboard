@@ -45,6 +45,7 @@ export function Icon({ name, size = 14, className = '' }: IconProps) {
     minus: <><path d="M3 8h10"/></>,
     bell: <><path d="M4 11V7a4 4 0 118 0v4l1 1.5H3L4 11z"/><path d="M6 13a2 2 0 004 0"/></>,
     more: <><circle cx="3.5" cy="8" r=".8" fill="currentColor"/><circle cx="8" cy="8" r=".8" fill="currentColor"/><circle cx="12.5" cy="8" r=".8" fill="currentColor"/></>,
+    menu: <><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></>,
     sun: <><circle cx="8" cy="8" r="2.5"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.7 3.7l1 1M11.3 11.3l1 1M12.3 3.7l-1 1M4.7 11.3l-1 1"/></>,
     moon: <><path d="M12 9a5 5 0 11-5-5 4 4 0 005 5z"/></>,
     dollar: <><path d="M8 2v12M11 5H6.5a1.5 1.5 0 000 3H9a1.5 1.5 0 010 3H5"/></>,

@@ -71,6 +71,7 @@ export function DashboardShell() {
   const [toast, setToast] = useState<string | null>(null);
   const [leftOpen, setLeftOpen] = useState(() => { try { return localStorage.getItem('trader-left') !== 'false'; } catch { return true; } });
   const [rightOpen, setRightOpen] = useState(() => { try { return localStorage.getItem('trader-right') !== 'false'; } catch { return true; } });
+  const [sheetOpen, setSheetOpen] = useState(false); // mobile inspector bottom sheet
   const live = useAccount(30000);
   const livePositions = usePositions(15000);
   const unread = useUnread(90000);
@@ -87,8 +88,9 @@ export function DashboardShell() {
   }, [page]);
   useEffect(() => { try { localStorage.setItem('trader-left', String(leftOpen)); } catch {} }, [leftOpen]);
   useEffect(() => { try { localStorage.setItem('trader-right', String(rightOpen)); } catch {} }, [rightOpen]);
-  // On phones both side panels start collapsed and act as overlay drawers.
-  // Run after mount (post-hydration) so the server/client markup matches.
+  // On phones the left Pages panel becomes a hamburger drawer and must start
+  // closed; the right inspector is replaced by a bottom sheet. Run after mount
+  // (post-hydration) so server/client markup matches and there's no SSR flash.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.matchMedia('(max-width: 768px)').matches) {
@@ -96,6 +98,14 @@ export function DashboardShell() {
       setRightOpen(false);
     }
   }, []);
+  // Lock body scroll while the drawer or sheet is open on mobile.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onMobile = window.matchMedia('(max-width: 768px)').matches;
+    const blocking = onMobile && (sheetOpen || leftOpen);
+    document.body.style.overflow = blocking ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [sheetOpen, leftOpen]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === '[') { e.preventDefault(); setLeftOpen(v => !v); }
@@ -250,11 +260,74 @@ export function DashboardShell() {
     }
   })();
 
+  // Inspector content is shared by the desktop right sidebar and the mobile
+  // bottom sheet, so it stays in sync without duplication.
+  const inspector = (
+    <>
+      <div className="prop-group">
+        <div className="prop-group-title">
+          Portfolio{' '}
+          <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(liveDayPnlPct)}</Pill>
+          {live.data && <span style={{fontSize:9,color:'var(--text-tertiary)',marginLeft:4}}>LIVE</span>}
+        </div>
+        <div className="prop-row"><span className="k">Equity <InfoTip id="equity"/></span><span className="v">{fmt.usd(liveEquity)}</span></div>
+        <div className="prop-row"><span className="k">Cash <InfoTip id="cash"/></span><span className="v">{fmt.usd(liveCash)}</span></div>
+        <div className="prop-row"><span className="k">Day P&amp;L <InfoTip id="day-pnl"/></span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(liveDayPnl)}</span></div>
+        <div className="prop-row"><span className="k">Deployed <InfoTip id="deployed"/></span><span className="v">{((1 - liveCash/liveEquity)*100).toFixed(1)}%</span></div>
+        <div className="prop-row"><span className="k">Open <InfoTip id="max-positions"/></span><span className="v">{livePositionCount} / 3</span></div>
+      </div>
+
+      <div className="prop-group">
+        <div className="prop-group-title">Market Gates <InfoTip id="gate"/></div>
+        <GateRow label="VIX" tip="vix" v="18.4" ok lim="< 30"/>
+        <GateRow label="Earnings day" tip="earnings-day" v="No" ok/>
+        <GateRow label="Open buffer" tip="open-buffer" v="09:30-09:35" ok msg="Past"/>
+        <GateRow label="Pre-close" tip="pre-close" v="15:40-16:00" ok msg="Clear"/>
+        <GateRow label="Half-day" tip="half-day" v="No" ok/>
+      </div>
+
+      <div className="prop-group">
+        <div className="prop-group-title">Risk Guards <InfoTip id="circuit-breaker"/></div>
+        <div className="prop-row"><span className="k">Kill switch <InfoTip id="kill-switch"/></span><span className="v full">{guards.tradingEnabled?<Pill kind="pos" dot pulse>ENABLED</Pill>:<Pill kind="neg" dot>DISABLED</Pill>}</span></div>
+        <div className="prop-row"><span className="k">Breaker <InfoTip id="circuit-breaker"/></span><span className="v full">{guards.circuitBreakerTripped?<Pill kind="neg" dot>TRIPPED</Pill>:<Pill kind="muted">Standby</Pill>}</span></div>
+        <div className="prop-row"><span className="k">Day DD <InfoTip id="daily-drawdown"/></span><span className="v">{guards.dailyDrawdownPct.toFixed(2)}%</span></div>
+        <div className="prop-row"><span className="k">Consec L <InfoTip id="consec-losses"/></span><span className="v">{guards.consecLosses} / {guards.consecLossesLimit}</span></div>
+      </div>
+
+      <div className="prop-group">
+        <div className="prop-group-title">Agent <Pill kind="accent" dot pulse>THINKING</Pill></div>
+        <div style={{fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>
+          {tweaks.mode === 'empty'
+            ? 'Premarket is klaar. Ik wacht op 09:35 om de 10 symbolen af te gaan.'
+            : portfolio.positions.length === 0
+              ? 'Alle posities gesloten. Geen nieuwe entries vandaag, EOD draait zo.'
+              : 'Ik monitor QQQ en XLK. Trailing stops ademen met de hoogtepunten. Volgende volledige check: midday.'}
+        </div>
+        <div style={{marginTop:10,display:'flex',gap:6}}>
+          <button className="btn outline" style={{flex:1}}><Icon name="terminal" size={11}/> Open thought log</button>
+        </div>
+      </div>
+
+      <div className="prop-group">
+        <div className="prop-group-title">Shortcuts</div>
+        <ShortcutRow keys={['⌘','[']} label="Toggle left panel"/>
+        <ShortcutRow keys={['⌘',']']} label="Toggle right panel"/>
+        <ShortcutRow keys={['G','O']} label="Go to Overview"/>
+        <ShortcutRow keys={['G','P']} label="Go to Positions"/>
+        <ShortcutRow keys={['G','L']} label="Go to Log"/>
+        <ShortcutRow keys={['⌘','.']} label="Kill switch"/>
+      </div>
+    </>
+  );
+
   return (
     <div className="app">
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-left">
+          <button className="icon-btn mobile-only" aria-label="Menu" title="Menu" onClick={() => setLeftOpen(v => !v)}>
+            <Icon name="menu" size={16}/>
+          </button>
           <div className="logo"><BrandLogo size={20}/></div>
           <button className={`icon-btn panel-toggle${leftOpen ? ' active' : ''}`} title="Toggle left panel (⌘[)" aria-label="Toggle left panel" onClick={() => setLeftOpen(v => !v)}>
             <Icon name="sidebarLeft" size={14}/>
@@ -356,68 +429,32 @@ export function DashboardShell() {
           </div>
         </div>
 
-        {/* Right panel / Inspector */}
+        {/* Right panel / Inspector (desktop sidebar; hidden on mobile) */}
         <div className="right-panel">
-          <div className="prop-group">
-            <div className="prop-group-title">
-              Portfolio{' '}
-              <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(liveDayPnlPct)}</Pill>
-              {live.data && <span style={{fontSize:9,color:'var(--text-tertiary)',marginLeft:4}}>LIVE</span>}
-            </div>
-            <div className="prop-row"><span className="k">Equity <InfoTip id="equity"/></span><span className="v">{fmt.usd(liveEquity)}</span></div>
-            <div className="prop-row"><span className="k">Cash <InfoTip id="cash"/></span><span className="v">{fmt.usd(liveCash)}</span></div>
-            <div className="prop-row"><span className="k">Day P&amp;L <InfoTip id="day-pnl"/></span><span className="v" style={{color:dayPos?'var(--pos)':'var(--neg)'}}>{fmt.signedUsd(liveDayPnl)}</span></div>
-            <div className="prop-row"><span className="k">Deployed <InfoTip id="deployed"/></span><span className="v">{((1 - liveCash/liveEquity)*100).toFixed(1)}%</span></div>
-            <div className="prop-row"><span className="k">Open <InfoTip id="max-positions"/></span><span className="v">{livePositionCount} / 3</span></div>
-          </div>
-
-          <div className="prop-group">
-            <div className="prop-group-title">Market Gates <InfoTip id="gate"/></div>
-            <GateRow label="VIX" tip="vix" v="18.4" ok lim="< 30"/>
-            <GateRow label="Earnings day" tip="earnings-day" v="No" ok/>
-            <GateRow label="Open buffer" tip="open-buffer" v="09:30-09:35" ok msg="Past"/>
-            <GateRow label="Pre-close" tip="pre-close" v="15:40-16:00" ok msg="Clear"/>
-            <GateRow label="Half-day" tip="half-day" v="No" ok/>
-          </div>
-
-          <div className="prop-group">
-            <div className="prop-group-title">Risk Guards <InfoTip id="circuit-breaker"/></div>
-            <div className="prop-row"><span className="k">Kill switch <InfoTip id="kill-switch"/></span><span className="v full">{guards.tradingEnabled?<Pill kind="pos" dot pulse>ENABLED</Pill>:<Pill kind="neg" dot>DISABLED</Pill>}</span></div>
-            <div className="prop-row"><span className="k">Breaker <InfoTip id="circuit-breaker"/></span><span className="v full">{guards.circuitBreakerTripped?<Pill kind="neg" dot>TRIPPED</Pill>:<Pill kind="muted">Standby</Pill>}</span></div>
-            <div className="prop-row"><span className="k">Day DD <InfoTip id="daily-drawdown"/></span><span className="v">{guards.dailyDrawdownPct.toFixed(2)}%</span></div>
-            <div className="prop-row"><span className="k">Consec L <InfoTip id="consec-losses"/></span><span className="v">{guards.consecLosses} / {guards.consecLossesLimit}</span></div>
-          </div>
-
-          <div className="prop-group">
-            <div className="prop-group-title">Agent <Pill kind="accent" dot pulse>THINKING</Pill></div>
-            <div style={{fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>
-              {tweaks.mode === 'empty'
-                ? 'Premarket is klaar. Ik wacht op 09:35 om de 10 symbolen af te gaan.'
-                : portfolio.positions.length === 0
-                  ? 'Alle posities gesloten. Geen nieuwe entries vandaag, EOD draait zo.'
-                  : 'Ik monitor QQQ en XLK. Trailing stops ademen met de hoogtepunten. Volgende volledige check: midday.'}
-            </div>
-            <div style={{marginTop:10,display:'flex',gap:6}}>
-              <button className="btn outline" style={{flex:1}}><Icon name="terminal" size={11}/> Open thought log</button>
-            </div>
-          </div>
-
-          <div className="prop-group">
-            <div className="prop-group-title">Shortcuts</div>
-            <ShortcutRow keys={['⌘','[']} label="Toggle left panel"/>
-            <ShortcutRow keys={['⌘',']']} label="Toggle right panel"/>
-            <ShortcutRow keys={['G','O']} label="Go to Overview"/>
-            <ShortcutRow keys={['G','P']} label="Go to Positions"/>
-            <ShortcutRow keys={['G','L']} label="Go to Log"/>
-            <ShortcutRow keys={['⌘','.']} label="Kill switch"/>
-          </div>
+          {inspector}
         </div>
       </div>
 
-      {/* Drawer backdrop (mobile only — CSS hides it on desktop) */}
-      {(leftOpen || rightOpen) && (
-        <div className="drawer-backdrop" onClick={() => { setLeftOpen(false); setRightOpen(false); }} />
+      {/* Drawer backdrop — closes the left Pages drawer on mobile */}
+      {leftOpen && (
+        <div className="drawer-backdrop" onClick={() => setLeftOpen(false)} />
       )}
+
+      {/* Mobile inspector: bottom-sheet trigger + sheet (CSS hides on desktop) */}
+      <button className="sheet-trigger" onClick={() => setSheetOpen(true)} aria-label="Open portfolio en risk">
+        <Icon name="dashboard" size={14}/>
+        <span>Portfolio &amp; risk</span>
+        <Pill kind={dayPos?'pos':'neg'}>{fmt.pct(liveDayPnlPct)}</Pill>
+      </button>
+      {sheetOpen && <div className="drawer-backdrop" style={{zIndex:65}} onClick={() => setSheetOpen(false)} />}
+      <div className={`sheet${sheetOpen ? ' open' : ''}`} role="dialog" aria-label="Portfolio en risk">
+        <div className="sheet-handle"/>
+        <div className="sheet-head">
+          <span className="sheet-title">Portfolio &amp; risk</span>
+          <button className="icon-btn" onClick={() => setSheetOpen(false)} aria-label="Sluiten"><Icon name="x" size={13}/></button>
+        </div>
+        {inspector}
+      </div>
 
       {/* Status bar */}
       <div className="statusbar">
