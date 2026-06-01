@@ -140,7 +140,8 @@
   min-height: 0; /* cruciaal: laat de flex-child krimpen i.p.v. de container uit te groeien */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px 16px 22px;
+  /* Onderaan ruimte voor de zwevende navigatie-pill (hoogte + safe-area + lucht). */
+  padding: 14px 16px calc(env(safe-area-inset-bottom) + 92px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -342,13 +343,22 @@
 .m-crit-row .state { font-weight: 600; }
 
 /* ---- Bottom tab bar ------------------------------------------------------ */
+/* iOS 26-stijl floating navigatie: zwevende, afgeronde pill met blur, los van
+   de schermranden. Ligt boven de content; de scroll-container krijgt onderaan
+   extra ruimte (zie .m-scroll padding-bottom) zodat niets erachter verdwijnt. */
 .m-tabbar {
-  flex: 0 0 auto;
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: calc(env(safe-area-inset-bottom) + 10px);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: var(--bg-chrome);
-  border-top: 1px solid var(--border-subtle);
-  padding-bottom: env(safe-area-inset-bottom); /* strak tegen de bodem, vrij van de home-indicator */
+  background: color-mix(in srgb, var(--bg-chrome) 72%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 60%, transparent);
+  border-radius: 26px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.38), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   z-index: 30;
 }
 .m-tab {
@@ -357,13 +367,16 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 9px 0 8px;
+  padding: 10px 0 9px;
   color: var(--text-tertiary);
   font-size: 10.5px;
   font-weight: 500;
   white-space: nowrap;
   background: none;
+  border-radius: 22px;
+  transition: color var(--t-fast, 0.15s);
 }
+.m-tab:active { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
 .m-tab.active { color: var(--accent); }
 .m-tab-ico { position: relative; display: inline-flex; }
 .m-tab-badge {
