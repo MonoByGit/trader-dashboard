@@ -3,29 +3,36 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
+import { MOCK, type Position } from '@/lib/mock';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
-import { Sheet } from './Sheet';
+import { MobilePositions } from './MobilePositions';
+import { MobileReports } from './MobileReports';
+import { useSwipeBack } from './gestures';
 
 type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; dailyDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownPct: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number };
 
-type SubView = 'risk' | 'routines' | 'strategy' | 'conversations' | 'lessons' | 'history';
+type SubView = 'positions' | 'reports' | 'risk' | 'routines' | 'strategy' | 'lessons' | 'history';
 
 const TILES: { id: SubView; icon: Parameters<typeof Icon>[0]['name']; title: string; desc: string }[] = [
+  { id: 'positions', icon: 'positions', title: 'Posities', desc: 'Open posities + stops' },
+  { id: 'reports', icon: 'logs', title: 'Rapporten', desc: 'Dag- en weekrapporten' },
   { id: 'risk', icon: 'shield', title: 'Risico & Guards', desc: 'Kill switch, drawdown, limieten' },
   { id: 'routines', icon: 'routines', title: 'Routines', desc: '5 geplande taken' },
   { id: 'strategy', icon: 'strategy', title: 'Strategie', desc: 'Momentum breakout-regels' },
-  { id: 'conversations', icon: 'chat', title: 'Gesprekken', desc: 'Threads met de agent' },
-  { id: 'lessons', icon: 'sparkle', title: 'Lessen', desc: 'Wat de agent leerde' },
+  { id: 'lessons', icon: 'sparkle', title: 'Lessen', desc: 'Actieve regels die de agent leerde' },
   { id: 'history', icon: 'history', title: 'Historie', desc: 'Gesloten posities' },
 ];
 
-export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy }: { guards: Guards; onToggleKill: () => void; dummy: boolean; onToggleDummy: () => void }) {
+export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy, positions, onOpenPosition }: {
+  guards: Guards; onToggleKill: () => void; dummy: boolean; onToggleDummy: () => void;
+  positions: Position[]; onOpenPosition: (p: Position) => void;
+}) {
   const [view, setView] = useState<SubView | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const title = TILES.find(t => t.id === view)?.title ?? '';
+  const back = useSwipeBack(() => setView(null));
 
   return (
     <>
@@ -51,16 +58,17 @@ export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy }: { gua
       </div>
 
       {view && mounted && createPortal(
-        <div className="m-subview">
+        <div className="m-subview" onTouchStart={back.onTouchStart} onTouchEnd={back.onTouchEnd}>
           <div className="m-subhead">
             <button className="m-back" onClick={() => setView(null)}><span style={{ display: 'flex', transform: 'rotate(180deg)' }}><Icon name="chevR" size={14} /></span> Meer</button>
             <span className="m-subtitle">{title}</span>
           </div>
           <div className="m-scroll" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
+            {view === 'positions' && <MobilePositions positions={positions} onOpenPosition={onOpenPosition} />}
+            {view === 'reports' && <MobileReports reports={MOCK.reports} />}
             {view === 'risk' && <RiskView guards={guards} onToggleKill={onToggleKill} />}
             {view === 'routines' && <RoutinesView />}
             {view === 'strategy' && <StrategyView />}
-            {view === 'conversations' && <ConversationsView />}
             {view === 'lessons' && <LessonsView />}
             {view === 'history' && <HistoryView />}
           </div>
@@ -165,40 +173,21 @@ function StrategyView() {
   );
 }
 
-function ConversationsView() {
-  const [sel, setSel] = useState<typeof MOCK.threads[0] | null>(null);
-  return (
-    <>
-      {MOCK.threads.map(t => (
-        <button key={t.id} className="m-row" onClick={() => setSel(t)}>
-          <div className="m-row-main">
-            <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>{t.title}</div>
-            <div className="m-row-sub" style={{ marginTop: 4 }}>{t.tags.join(' ')} · {fmt.relTime(t.lastAt, MOCK.now)}</div>
-          </div>
-          {t.unread > 0 && <span className="m-badge hold">{t.unread}</span>}
-          <Icon name="chevR" size={14} />
-        </button>
-      ))}
-      <Sheet open={!!sel} title={sel?.title ?? ''} sub={sel ? sel.tags.join(' ') : ''} onClose={() => setSel(null)}>
-        {sel?.messages.map((m, i) => (
-          <div key={i} style={{ alignSelf: m.from === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', background: m.from === 'user' ? 'var(--accent-dim)' : 'var(--bg-input)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: '10px 13px' }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', marginBottom: 5 }}>{m.from === 'user' ? 'Jij' : 'Agent'} · {fmt.relTime(m.at, MOCK.now)}</div>
-            <div className="m-prose" style={{ fontSize: 13, color: 'var(--text-primary)' }}>{m.body}</div>
-          </div>
-        ))}
-      </Sheet>
-    </>
-  );
-}
+type LiveLesson = { id: string; title: string; description: string; category: string; status: string; hits: number; pnlImpact: number };
 
 function LessonsView() {
+  const [lessons, setLessons] = useState<LiveLesson[]>(MOCK.lessons as unknown as LiveLesson[]);
+  useEffect(() => {
+    fetch('/api/lessons').then(r => r.json()).then(d => { if (Array.isArray(d.lessons)) setLessons(d.lessons); }).catch(() => {});
+  }, []);
+  if (lessons.length === 0) return <div className="m-empty">Nog geen lessen. Voorstellen verschijnen op het Samen-bord.</div>;
   return (
     <>
-      {MOCK.lessons.map(l => (
+      {lessons.map(l => (
         <div key={l.id} className="m-card">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35 }}>{l.title}</div>
-            <Pill kind={l.status === 'active' ? 'pos' : 'muted'} dot>{l.status === 'active' ? 'actief' : 'gepauzeerd'}</Pill>
+            <Pill kind={l.status === 'active' ? 'pos' : 'muted'} dot>{l.status === 'active' ? 'actief' : l.status === 'paused' ? 'gepauzeerd' : l.status}</Pill>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.55, margin: '8px 0 10px' }}>{l.description}</div>
           <div className="m-kv" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>

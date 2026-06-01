@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/Icon';
+import { useSwipeDown } from './gestures';
 
-// Bottom-sheet drill-down (Trading 212 / Binance-stijl). Tik buiten of op de
-// kruis-knop sluit. Body scrollt; head + grip blijven staan. Via een portal naar
-// document.body zodat de sheet het hele scherm dekt (boven de hero, onder de
-// island) en niet door de scroll-container wordt afgesneden.
+// Bottom-sheet drill-down (Trading 212 / Binance-stijl). Sluit via: tik buiten,
+// kruis-knop, Escape, of sleep de sheet omlaag (iOS-gebaar). Body scrollt; head
+// + grip blijven staan. Portal naar document.body zodat de sheet het hele scherm
+// dekt en niet door de scroll-container wordt afgesneden.
 export function Sheet({ open, title, sub, onClose, children }: {
   open: boolean;
   title: string;
@@ -16,6 +17,7 @@ export function Sheet({ open, title, sub, onClose, children }: {
   children: React.ReactNode;
 }) {
   const [mounted, setMounted] = useState(false);
+  const swipe = useSwipeDown(onClose);
   useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!open) return;
@@ -27,7 +29,14 @@ export function Sheet({ open, title, sub, onClose, children }: {
   if (!open || !mounted) return null;
   return createPortal(
     <div className="m-sheet-backdrop" onClick={onClose}>
-      <div className="m-sheet" onClick={e => e.stopPropagation()}>
+      <div
+        className="m-sheet"
+        ref={swipe.ref}
+        onClick={e => e.stopPropagation()}
+        onTouchStart={swipe.onTouchStart}
+        onTouchMove={swipe.onTouchMove}
+        onTouchEnd={swipe.onTouchEnd}
+      >
         <div className="m-sheet-grip" />
         <div className="m-sheet-head">
           <div style={{ minWidth: 0 }}>

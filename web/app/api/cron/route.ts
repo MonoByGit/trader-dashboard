@@ -5,6 +5,7 @@ import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib/telegram';
 import { captureEvent } from '@/lib/openbrain';
 import { computePositionSize } from '@/lib/sizing';
+import { openOrAppendThread } from '@/lib/threads';
 import strategy from '@/strategy.json';
 
 const WATCHLIST = strategy.symbols;
@@ -16,9 +17,9 @@ function requireAuth(req: Request): boolean {
   return auth === `Bearer ${secret}`;
 }
 
-async function saveDecision(d: Record<string, unknown>) {
+async function saveDecision(d: Record<string, unknown>): Promise<string> {
   const id = `d-${Date.now()}-${String(d.symbol)}`;
-  if (!hasDb()) return;
+  if (!hasDb()) return id;
   await initDb();
   await dbRun(
     `INSERT INTO decisions (id, ts, routine, symbol, decision, criteria, rationale, agent_note, confidence, order_id)
@@ -26,6 +27,7 @@ async function saveDecision(d: Record<string, unknown>) {
     [id, new Date().toISOString(), d.routine, d.symbol, d.decision,
      JSON.stringify(d.criteria ?? null), d.rationale, d.agentNote, d.confidence, d.orderId ?? null]
   );
+  return id;
 }
 
 // Detect filled stop-loss legs today and ping Telegram once per order.
@@ -94,7 +96,7 @@ async function runPremarket() {
 
   const decisions = await claudeJson<Record<string, unknown>[]>(
     MODELS.sonnet,
-    `Je bent Momentum-1. Strategie: ${strategy.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
+    `Je bent Momentum. Strategie: ${strategy.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
 Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit, no_earnings_risk, news_sentiment.
 Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
     `Data:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
@@ -145,7 +147,7 @@ async function runMarketOpen() {
 
   const candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
     MODELS.sonnet,
-    `Je bent Momentum-1. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.`,
+    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.`,
     `Bars data:\n${JSON.stringify(Object.fromEntries(WATCHLIST.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
     1024
   );
@@ -192,14 +194,32 @@ async function runMarketOpen() {
         take_profit: { limit_price: takeProfitPrice },
       });
       orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id, stop: stopPrice, takeProfit: takeProfitPrice });
-      await saveDecision({
+      const decId = await saveDecision({
         routine: 'market-open', symbol: c.symbol, decision: 'BUY', rationale: c.reason,
         agentNote: `${sizing.note} Bracket: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${c.reason}`,
         confidence: 0.8, orderId: order.id,
       });
       await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice, takeProfitPrice));
+      // Verankering: open een draad bij elke nieuwe positie (beurt -> Dusty).
+      await openOrAppendThread({
+        title: `Nieuwe positie: ${c.symbol}`,
+        type: 'gesprek',
+        anchorType: 'decision', anchorId: decId,
+        summary: `BUY ${c.qty} ${c.symbol} @ $${lastPrice} · stop $${stopPrice} · target $${takeProfitPrice}`,
+        tags: [`#${c.symbol.toLowerCase()}`, '#positie'],
+        body: `Ik heb ${c.qty} ${c.symbol} gekocht rond $${lastPrice}. ${c.reason}\n\nMijn harde stop ligt op $${stopPrice} (-2%) en de take-profit op $${takeProfitPrice} (+5%). Wil je dat ik iets aan deze positie verander, of zal ik hem laten lopen?`,
+      }).catch(() => {});
     } catch (e) {
-      await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: String(e), agentNote: 'Order mislukt.', confidence: 0 });
+      const decId = await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: String(e), agentNote: 'Order mislukt.', confidence: 0 });
+      // Verankering: een gefaalde order is een opvallende beslissing.
+      await openOrAppendThread({
+        title: `Order mislukt: ${c.symbol}`,
+        type: 'gesprek', priority: 'hoog',
+        anchorType: 'decision', anchorId: decId,
+        summary: `NO_GO ${c.symbol} · order faalde`,
+        tags: [`#${c.symbol.toLowerCase()}`, '#nogo'],
+        body: `Ik wilde ${c.symbol} kopen, maar de order faalde: ${String(e)}. Ik heb niets ingelegd. Wil je dat ik het later opnieuw probeer?`,
+      }).catch(() => {});
     }
   }
   return { routine: 'market-open', orders };
@@ -211,7 +231,7 @@ async function runMidday() {
   if (positions.length === 0) return { routine: 'midday', note: 'Geen posities.' };
   const notes = positions.map(p => `${p.symbol}: entry $${p.avg_entry_price}, now $${p.current_price}, P&L ${p.unrealized_pl}`);
   const note = await claudeText(MODELS.sonnet,
-    `Je bent Momentum-1. Midday check. Geef een korte update (max 2 zinnen per positie) over de status van de stops en of actie nodig is. Schrijf in het Nederlands.`,
+    `Je bent Momentum. Midday check. Geef een korte update (max 2 zinnen per positie) over de status van de stops en of actie nodig is. Schrijf in het Nederlands.`,
     notes.join('\n'), 512);
   for (const p of positions) {
     await saveDecision({ routine: 'midday', symbol: p.symbol, decision: 'HOLD', rationale: note, agentNote: `Stop: $${(parseFloat(p.current_price) * (1 - strategy.rules.trailing_stop_pct)).toFixed(2)}`, confidence: 0.9 });
@@ -234,15 +254,16 @@ async function runEod() {
   const equity = parseFloat(account.equity);
   const lastEquity = parseFloat(account.last_equity);
   const report = await claudeText(MODELS.sonnet,
-    'Je bent Momentum-1. Schrijf een EOD rapport in het Nederlands. Max 3 alinea\'s. Wat is er gebeurd, wat zijn de lessen, wat kijk ik naar morgen.',
+    'Je bent Momentum. Schrijf een EOD rapport in het Nederlands. Max 3 alinea\'s. Wat is er gebeurd, wat zijn de lessen, wat kijk ik naar morgen.',
     `Dag P&L: $${(equity - lastEquity).toFixed(2)} (${((equity - lastEquity) / lastEquity * 100).toFixed(2)}%). Equity: $${lastEquity.toFixed(0)} → $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}.`,
     1024);
 
+  const reportId = `report-${Date.now()}`;
   if (hasDb()) {
     await initDb();
     await dbRun(
       `INSERT INTO agent_reports (id, date, generated_at, kpis, narrative) VALUES ($1,NOW()::DATE,NOW(),$2,$3)`,
-      [`report-${Date.now()}`, JSON.stringify({ equityStart: lastEquity, equityEnd: equity, closed }), report]
+      [reportId, JSON.stringify({ equityStart: lastEquity, equityEnd: equity, closed }), report]
     );
   }
 
@@ -256,6 +277,17 @@ async function runEod() {
       `Dag-P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% ($${(equity - lastEquity).toFixed(2)}). Equity $${lastEquity.toFixed(0)} naar $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}.`
     );
   }
+
+  // Verankering: open een draad bij het dagrapport (beurt -> Dusty).
+  const bigDay = Math.abs(dayPct) >= 1.5;
+  await openOrAppendThread({
+    title: `Dagrapport ${new Date().toLocaleDateString('nl-NL')}`,
+    type: 'gesprek', priority: bigDay ? 'hoog' : 'normaal',
+    anchorType: 'report', anchorId: reportId,
+    summary: `P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% · ${closed.length} gesloten`,
+    tags: ['#dagrapport'],
+    body: `${report}\n\nResultaat vandaag: ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}%. ${bigDay ? 'Dit was een opvallende dag. ' : ''}Wil je dat ik ergens dieper op inga?`,
+  }).catch(() => {});
 
   return { routine: 'eod', closed, equity, report: report.slice(0, 200) };
 }

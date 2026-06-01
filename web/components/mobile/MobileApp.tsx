@@ -10,17 +10,15 @@ import { useAccount, usePositions } from '@/hooks/useAlpaca';
 import { Sheet } from './Sheet';
 import { Sparkline } from './Sparkline';
 import { MobileOverview } from './MobileOverview';
-import { MobilePositions } from './MobilePositions';
 import { MobileActivity, type MDecision, badgeClass } from './MobileActivity';
-import { MobileReports } from './MobileReports';
 import { MobileMore } from './MobileMore';
+import { MobileBoard } from './MobileBoard';
 
-type TabId = 'overview' | 'positions' | 'activity' | 'reports' | 'more';
+type TabId = 'overview' | 'activity' | 'board' | 'more';
 const TABS: { id: TabId; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
   { id: 'overview', label: 'Overzicht', icon: 'dashboard' },
-  { id: 'positions', label: 'Posities', icon: 'positions' },
   { id: 'activity', label: 'Activiteit', icon: 'log' },
-  { id: 'reports', label: 'Rapporten', icon: 'logs' },
+  { id: 'board', label: 'Samen', icon: 'chat' },
   { id: 'more', label: 'Meer', icon: 'more' },
 ];
 
@@ -41,6 +39,8 @@ export function MobileApp() {
   const [drawerTop, setDrawerTop] = useState(0);
   const heroRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Aantal draden waar Dusty aan zet is (badge op de Samen-tab).
+  const [boardTodo, setBoardTodo] = useState(0);
   // Demo (dummy) data aan/uit. Aan = de rijke voorbeelddata; uit = de echte
   // (mogelijk lege) Alpaca-rekening. Default demo aan zolang de bot nog niet
   // live handelt, zodat het dashboard gevuld oogt.
@@ -57,6 +57,14 @@ export function MobileApp() {
     fetch('/api/guards').then(r => r.json()).then(d => setGuards(g => ({ ...g, tradingEnabled: d.tradingEnabled }))).catch(() => null);
     fetch('/api/decisions').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setDecisions(d); }).catch(() => null);
   }, []);
+
+  // Badge op de Samen-tab: hoeveel draden staan bij Dusty (turn=jij).
+  useEffect(() => {
+    const poll = () => fetch('/api/threads').then(r => r.json()).then(d => setBoardTodo(d?.counts?.todo ?? 0)).catch(() => null);
+    poll();
+    const iv = setInterval(poll, 30000);
+    return () => clearInterval(iv);
+  }, [tab]);
 
   // Lichte prijsdrift zodat cijfers leven (alleen in demo-modus).
   useEffect(() => {
@@ -141,7 +149,7 @@ export function MobileApp() {
           <div className="m-brand">
             <BrandLogo size={22} />
             <div style={{ minWidth: 0 }}>
-              <div className="m-brand-name">Momentum-1</div>
+              <div className="m-brand-name">Momentum</div>
               <div className="m-brand-sub">Paper · Alpaca</div>
             </div>
           </div>
@@ -163,20 +171,22 @@ export function MobileApp() {
             cash={liveCash} buyingPower={buyingPower} deployedPct={deployedPct} openCount={openCount}
             dayPnl={liveDayPnl} dayPnlPct={liveDayPnlPct} intraday={dummy ? MOCK.equityIntraday.map(p => p.v) : []}
             positions={effPortfolio.positions} agentNote={agentNote} marketOpen={live.data?.marketOpen ?? null}
-            onOpenPosition={setSelPos} onGoPositions={() => setTab('positions')}
+            onOpenPosition={setSelPos} onGoPositions={() => setTab('more')}
           />
         )}
-        {tab === 'positions' && <MobilePositions positions={effPortfolio.positions} onOpenPosition={setSelPos} />}
         {tab === 'activity' && <MobileActivity decisions={activeDecisions} onOpenDecision={setSelDec} />}
-        {tab === 'reports' && <MobileReports reports={MOCK.reports} />}
-        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} dummy={dummy} onToggleDummy={toggleDummy} />}
+        {tab === 'board' && <MobileBoard onCounts={setBoardTodo} />}
+        {tab === 'more' && <MobileMore guards={guards} onToggleKill={() => setConfirmKill(true)} dummy={dummy} onToggleDummy={toggleDummy} positions={effPortfolio.positions} onOpenPosition={setSelPos} />}
       </div>
 
       {/* Bottom tab bar */}
       <nav className="m-tabbar">
         {TABS.map(t => (
           <button key={t.id} className={`m-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
-            <Icon name={t.icon} size={20} />
+            <span className="m-tab-ico">
+              <Icon name={t.icon} size={20} />
+              {t.id === 'board' && boardTodo > 0 && <span className="m-tab-badge">{boardTodo}</span>}
+            </span>
             {t.label}
           </button>
         ))}

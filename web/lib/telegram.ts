@@ -1,4 +1,4 @@
-// Telegram outbound notifications for Momentum-1.
+// Telegram outbound notifications for Momentum.
 // Uses the Cosmo Bot (outbound-only channel) via TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
 // Every call is fail-safe: a notification failure must never break a trading routine.
 
@@ -44,7 +44,7 @@ export async function sendMessage(text: string): Promise<boolean> {
 
 export function buyMessage(symbol: string, qty: number, price: number, stop: number, takeProfit: number): string {
   return [
-    `<b>Momentum-1 kocht ${qty}x ${symbol}</b> op $${price.toFixed(2)}.`,
+    `<b>Momentum kocht ${qty}x ${symbol}</b> op $${price.toFixed(2)}.`,
     `Hard stop $${stop.toFixed(2)} (-2%), take profit $${takeProfit.toFixed(2)} (+5%).`,
     `Beide staan als bracket-order bij Alpaca, dus ze vuren automatisch.`,
   ].join('\n');

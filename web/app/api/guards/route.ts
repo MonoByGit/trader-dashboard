@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { sendMessage, killSwitchMessage } from '@/lib/telegram';
+import { openOrAppendThread } from '@/lib/threads';
 
 let memTradingEnabled = true;
 
@@ -37,6 +38,18 @@ export async function POST(req: Request) {
 
   if (previous !== enabled) {
     await sendMessage(killSwitchMessage(enabled, typeof who === 'string' && who ? who : 'Dusty'));
+    // Verankering: een kill-switch-wissel is een guard-gebeurtenis; log het op het bord.
+    const day = new Date().toISOString().slice(0, 10);
+    await openOrAppendThread({
+      title: enabled ? 'Trading weer ingeschakeld' : 'Trading gestopt (kill switch)',
+      type: 'gesprek', priority: enabled ? 'normaal' : 'hoog',
+      anchorType: 'guard', anchorId: `killswitch-${day}`,
+      summary: enabled ? 'Kill switch uit · trading actief' : 'Kill switch aan · geen nieuwe orders',
+      tags: ['#killswitch', '#guard'],
+      body: enabled
+        ? 'De kill switch staat uit. Ik mag weer nieuwe orders inleggen volgens de strategie. Zijn er aandachtspunten voordat ik verderga?'
+        : 'De kill switch is omgezet: ik leg geen nieuwe orders meer in. Bestaande posities en stops blijven actief. Laat je me weten wanneer ik weer mag handelen?',
+    }).catch(() => {});
   }
   return NextResponse.json({ ok: true });
 }

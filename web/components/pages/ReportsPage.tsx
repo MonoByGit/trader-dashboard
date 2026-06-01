@@ -232,7 +232,7 @@ function ReportDetail({ R }: { R: Report }) {
 
       <div className="report-footer">
         <Icon name="sparkle" size={10}/>
-        <span>Automatisch gegenereerd door Momentum-1 op {fmt.time(R.generatedAt)} ET.</span>
+        <span>Automatisch gegenereerd door Momentum op {fmt.time(R.generatedAt)} ET.</span>
       </div>
     </div>
   );

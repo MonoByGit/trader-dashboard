@@ -1,4 +1,4 @@
-// Open Brain write-bridge for Momentum-1.
+// Open Brain write-bridge for Momentum.
 // Captures lessons, weekly highlights and significant P&L events into Dusty's
 // permanent memory so they surface in other contexts (recent_thoughts, weekly reviews).
 //
@@ -59,7 +59,7 @@ export function captureLessonEvent(lessonId: string, title: string, event: 'prop
 
 export function captureWeeklyHighlight(content: string) {
   return captureThought({
-    content: `Momentum-1 weekly review highlights:\n\n${content}\n\n[TAG: TRADER-WEEKLY]`,
+    content: `Momentum weekly review highlights:\n\n${content}\n\n[TAG: TRADER-WEEKLY]`,
     importance: 2,
     tags: ['TRADER-WEEKLY'],
   });
@@ -67,7 +67,7 @@ export function captureWeeklyHighlight(content: string) {
 
 export function captureEvent(content: string) {
   return captureThought({
-    content: `Momentum-1 event:\n\n${content}\n\n[TAG: TRADER-EVENT]`,
+    content: `Momentum event:\n\n${content}\n\n[TAG: TRADER-EVENT]`,
     importance: 2,
     tags: ['TRADER-EVENT'],
   });

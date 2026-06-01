@@ -322,7 +322,7 @@ function MessageBubble({ m }: { m: Message }) {
       </div>
       <div className="msg-body-wrap">
         <div className="msg-head">
-          <span className="msg-name">{mine?'You':'Momentum-1'}</span>
+          <span className="msg-name">{mine?'You':'Momentum'}</span>
           <span className="msg-time">{fmt.timeLocal(m.at)}</span>
         </div>
         <div className="msg-bubble">

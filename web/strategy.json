@@ -32,7 +32,7 @@
     "eod": "16:10"
   },
   "agent": {
-    "name": "Momentum-1",
+    "name": "Momentum",
     "language": "nl",
     "auto_trade_paper": true,
     "initiate_conversations": true

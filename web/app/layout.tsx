@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description: "Momentum Breakout — Paper Trading Dashboard v0.1",
   appleWebApp: {
     capable: true,
-    title: "Momentum-1",
+    title: "Momentum",
     statusBarStyle: "black-translucent",
   },
   icons: {

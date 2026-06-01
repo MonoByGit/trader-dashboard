@@ -41,7 +41,7 @@ export async function POST() {
       return d && new Date(d).toDateString() === new Date().toDateString();
     });
 
-    const system = `You are Momentum-1, an autonomous trading agent. Write a concise, professional end-of-day trading report in Dutch.
+    const system = `You are Momentum, an autonomous trading agent. Write a concise, professional end-of-day trading report in Dutch.
 Be direct and analytical. No fluff. 2-3 paragraphs max.
 Focus on: what happened, why, key lessons, what to watch tomorrow.`;
 
