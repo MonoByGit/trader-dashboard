@@ -27,9 +27,31 @@ De Next-app staat in `web/`, niet in de repo-root. De root-`railway.json` pint d
 > repo-root (geen start command) waardoor deploys sinds 18 april stil faalden.
 > Deze `railway.json` herstelt dat en houdt het version-controlled.
 
-De 4 cron-services (premarket/market-open/midday/eod) zijn aparte Railway-services,
-losgekoppeld van `main`. `cron-weekly` ontbreekt nog (dashboard-handeling: schema
-`30 20 * * 5`, routine `weekly`).
+## Scheduler (één Railway-cron)
+
+Vervang de vijf vaste UTC-crontabbladen door **één** service die elke 5 minuten
+op werkdagen de tick aanroept. Alpaca-clock + kalender bepalen welke routine due is
+(premarket, market-open, midday, eod, weekly), inclusief vakantiedagen, half days en DST.
+
+```
+curl -X POST "$NEXT_PUBLIC_APP_URL/api/scheduler/tick" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Railway cron schema: `*/5 * * * 1-5` (ma–vr, elke 5 minuten UTC; de tick beslist zelf in ET).
+
+Handmatig blijft werken: `POST /api/cron` met body `{"routine":"premarket"}` en dezelfde Bearer.
+
+### Snapshots backfill (eenmalig na deploy)
+
+```bash
+curl -X POST "$NEXT_PUBLIC_APP_URL/api/snapshots" \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Optioneel: `"start":"2026-01-01","end":"2026-05-31"`. EOD schrijft daarna dagelijks idempotent een rij.
 
 **EOD cron (UTC, Railway):** `50 20 * * 1-5` → 15:50 ET in EST (winter). In EDT (zomer)
 is dat 16:50 ET; pas het schema aan naar `50 19 * * 1-5` als je in zomertijd vlak vóór

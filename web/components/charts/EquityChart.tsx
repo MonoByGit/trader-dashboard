@@ -6,10 +6,12 @@ interface DataPoint { t: number; v: number; label?: string; }
 
 interface EquityChartProps {
   points: DataPoint[];
+  comparePoints?: DataPoint[];
   height?: number;
+  valueFormat?: 'usd' | 'index';
 }
 
-export function EquityChart({ points, height = 260 }: EquityChartProps) {
+export function EquityChart({ points, comparePoints, height = 260, valueFormat = 'usd' }: EquityChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(800);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -29,9 +31,9 @@ export function EquityChart({ points, height = 260 }: EquityChartProps) {
   const innerW = w - pad.l - pad.r;
   const innerH = height - pad.t - pad.b;
 
-  const values = points.map(p => p.v);
-  const vMin = Math.min(...values);
-  const vMax = Math.max(...values);
+  const allValues = [...points.map(p => p.v), ...(comparePoints?.map(p => p.v) ?? [])];
+  const vMin = Math.min(...allValues);
+  const vMax = Math.max(...allValues);
   const vRange = vMax - vMin || 1;
   const yPad = vRange * 0.15;
   const yMin = vMin - yPad;
@@ -49,7 +51,12 @@ export function EquityChart({ points, height = 260 }: EquityChartProps) {
 
   const yTicks = Array.from({ length: 5 }, (_, i) => yMin + ((yMax - yMin) * i / 4));
 
-  const fmt = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`;
+  const fmt = (v: number) =>
+    valueFormat === 'index'
+      ? v.toFixed(1)
+      : v >= 1000
+        ? `$${(v / 1000).toFixed(1)}k`
+        : `$${v.toFixed(0)}`;
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -81,6 +88,15 @@ export function EquityChart({ points, height = 260 }: EquityChartProps) {
           </g>
         ))}
         <path d={area} fill="url(#equity-fill)" />
+        {comparePoints && comparePoints.length >= 2 && (
+          <path
+            d={comparePoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i).toFixed(2)},${yAt(p.v).toFixed(2)}`).join(' ')}
+            stroke="var(--text-tertiary)"
+            strokeWidth="1.25"
+            fill="none"
+            strokeDasharray="4 3"
+          />
+        )}
         <path d={line} stroke={lineColor} strokeWidth="1.5" fill="none" />
         {hoverIdx !== null && (
           <>
@@ -95,7 +111,11 @@ export function EquityChart({ points, height = 260 }: EquityChartProps) {
           style={{ left: Math.min(Math.max(xAt(hoverIdx), 70), w - 80), top: yAt(hoverPoint.v) }}
         >
           {hoverPoint.label && <div className="tip-label">{hoverPoint.label}</div>}
-          <div className="tip-val">${hoverPoint.v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="tip-val">
+            {valueFormat === 'index'
+              ? `${hoverPoint.v.toFixed(2)} idx`
+              : `$${hoverPoint.v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </div>
         </div>
       )}
     </div>

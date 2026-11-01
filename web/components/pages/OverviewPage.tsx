@@ -61,6 +61,13 @@ export function OverviewPage({
   const [range, setRange] = useState('1D');
   const [now, setNow] = useState(() => new Date());
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [snapshots, setSnapshots] = useState<Array<{
+    trading_date: string;
+    momentum_cumulative_return_pct: number | null;
+    spy_cumulative_return_pct: number | null;
+    equity: number;
+  }>>([]);
+  const [aiCostToday, setAiCostToday] = useState<number | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -90,6 +97,17 @@ export function OverviewPage({
       .catch(() => setDecisions([]));
   }, []);
 
+  useEffect(() => {
+    fetch('/api/snapshots?limit=400')
+      .then(r => r.json())
+      .then((data: unknown) => setSnapshots(Array.isArray(data) ? data as typeof snapshots : []))
+      .catch(() => setSnapshots([]));
+    fetch('/api/ai-costs')
+      .then(r => r.json())
+      .then((d: { todayUsd?: number }) => setAiCostToday(typeof d.todayUsd === 'number' ? d.todayUsd : 0))
+      .catch(() => setAiCostToday(null));
+  }, []);
+
   const accountSlice = accountLoading ? null : {
     equity: portfolio.totalEquity,
     cash: portfolio.cashBalance,
@@ -99,7 +117,21 @@ export function OverviewPage({
   const intradayNums = intradayFromAccount(accountSlice);
   const equityIntraday = intradayNums.map((v, i) => ({ t: i, v, label: i === 0 ? 'Open' : 'Now' }));
 
-  const equityPoints = range === '1D' ? equityIntraday : [];
+  const sliceSnapshots = (days: number) => {
+    const rows = snapshots.slice(-days);
+    const toIndex = (pct: number | null) => 100 + (pct ?? 0);
+    return {
+      momentum: rows.map((r, i) => ({ t: i, v: toIndex(r.momentum_cumulative_return_pct), label: r.trading_date })),
+      spy: rows.map((r, i) => ({ t: i, v: toIndex(r.spy_cumulative_return_pct), label: r.trading_date })),
+    };
+  };
+  const benchmark =
+    range === '1W' ? sliceSnapshots(7)
+      : range === '1M' ? sliceSnapshots(30)
+        : range === 'YTD' ? sliceSnapshots(Math.max(30, snapshots.length))
+          : null;
+  const equityPoints = range === '1D' ? equityIntraday : benchmark?.momentum ?? [];
+  const spyPoints = range === '1D' ? undefined : benchmark?.spy;
 
   const dailyPos = portfolio.dailyPnl >= 0;
   const isFlat = portfolio.positions.length === 0;
@@ -207,6 +239,11 @@ export function OverviewPage({
           <div className="kpi-value" style={{fontSize: 20}}>{nextRoutine.name}</div>
           <div className="kpi-delta neutral">{nextRoutine.time}</div>
         </div>
+        <div className="kpi">
+          <div className="kpi-label"><Icon name="zap" size={12}/> AI-kosten vandaag</div>
+          <div className="kpi-value">{aiCostToday === null ? '…' : fmt.usd(aiCostToday, 2)}</div>
+          <div className="kpi-delta neutral">LLM · paper routines</div>
+        </div>
       </div>
 
       <div className="grid-2" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
@@ -220,12 +257,17 @@ export function OverviewPage({
           <div className="card-body">
             {accountLoading ? (
               <div style={{height:260,display:'grid',placeItems:'center',color:'var(--text-tertiary)',fontSize:11}}>Laden…</div>
-            ) : range !== '1D' ? (
+            ) : range !== '1D' && equityPoints.length < 2 ? (
               <div style={{height:260,display:'grid',placeItems:'center',color:'var(--text-tertiary)',fontSize:11}}>
-                <div style={{textAlign:'center'}}><Icon name="dashboard" size={32}/><div style={{marginTop:8}}>Nog geen data voor dit bereik.</div></div>
+                <div style={{textAlign:'center'}}><Icon name="dashboard" size={32}/><div style={{marginTop:8}}>Nog geen snapshots — EOD of backfill draaien.</div></div>
               </div>
             ) : equityPoints.length >= 2 ? (
-              <EquityChart points={equityPoints} height={260}/>
+              <EquityChart
+                points={equityPoints}
+                comparePoints={spyPoints && spyPoints.length >= 2 ? spyPoints : undefined}
+                valueFormat={range === '1D' ? 'usd' : 'index'}
+                height={260}
+              />
             ) : (
               <div style={{height:260,display:'grid',placeItems:'center',color:'var(--text-tertiary)',fontSize:11}}>
                 <div style={{textAlign:'center'}}><Icon name="dashboard" size={32}/><div style={{marginTop:8}}>Nog geen data voor vandaag.</div></div>
