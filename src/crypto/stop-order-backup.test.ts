@@ -1,25 +1,55 @@
 import {
   brokerStopOrdersBlockSoftwareBackup,
-  stopOrderNeedsSoftwareBackup,
+  openSellStopBlocksSoftwareBackup,
+  stopLimitGappedThroughLimit,
 } from './stop-order-backup.js';
 
-describe('stopOrderNeedsSoftwareBackup', () => {
-  it('detects gap below stop-limit limit price', () => {
+describe('stopLimitGappedThroughLimit', () => {
+  it('is true when last price is below the stop-limit limit', () => {
     expect(
-      stopOrderNeedsSoftwareBackup(
+      stopLimitGappedThroughLimit(
         { side: 'sell', type: 'stop_limit', status: 'new', limit_price: '89550' },
         89_000,
       ),
     ).toBe(true);
   });
+});
 
-  it('detects triggered stop-limit', () => {
+describe('openSellStopBlocksSoftwareBackup (B-6 inverted logic)', () => {
+  it('blocks backup for partially_filled stop-limit above the market', () => {
     expect(
-      stopOrderNeedsSoftwareBackup(
-        { side: 'sell', type: 'stop_limit', status: 'triggered', limit_price: '89550' },
+      openSellStopBlocksSoftwareBackup(
+        { side: 'sell', type: 'stop_limit', status: 'partially_filled', limit_price: '89550' },
         89_600,
       ),
     ).toBe(true);
+  });
+
+  it('blocks backup for pending_new stop-limit', () => {
+    expect(
+      openSellStopBlocksSoftwareBackup(
+        { side: 'sell', type: 'stop_limit', status: 'pending_new', limit_price: '89550' },
+        89_600,
+      ),
+    ).toBe(true);
+  });
+
+  it('blocks backup when Alpaca reports stopped (trade guaranteed)', () => {
+    expect(
+      openSellStopBlocksSoftwareBackup(
+        { side: 'sell', type: 'stop_limit', status: 'stopped', limit_price: '89550' },
+        89_000,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not block when price gapped below the limit', () => {
+    expect(
+      openSellStopBlocksSoftwareBackup(
+        { side: 'sell', type: 'stop_limit', status: 'new', limit_price: '89550' },
+        89_000,
+      ),
+    ).toBe(false);
   });
 });
 

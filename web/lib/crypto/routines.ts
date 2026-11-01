@@ -15,7 +15,7 @@ import {
 import { syncRecentOrders } from '@/lib/orders-store';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
-import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy } from './stops';
+import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy, saveCryptoStop } from './stops';
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
@@ -42,10 +42,14 @@ export async function runCryptoSoftwareStopsForPositions(
   watchlistSymbols: string[],
 ): Promise<void> {
   for (const p of cryptoPositions) {
-    const barKey = watchlistSymbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
-    const b = bars[barKey] ?? [];
-    const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
-    await enforceSoftwareCryptoStops(p.symbol, last);
+    try {
+      const barKey = watchlistSymbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
+      const b = bars[barKey] ?? [];
+      const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
+      await enforceSoftwareCryptoStops(p.symbol, last);
+    } catch (e) {
+      await logGuardEvent('crypto_software_stop_tick_fail', String(e), { symbol: p.symbol });
+    }
   }
 }
 
@@ -199,8 +203,18 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         type: 'market',
         time_in_force: 'gtc',
       });
-      const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
-      orders.push({ symbol: c.symbol, qty: protection.qty, orderId: order.id });
+      let reportQty = qty;
+      try {
+        const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
+        reportQty = protection.qty;
+      } catch (e) {
+        await saveCryptoStop(c.symbol, stopPrice, qty);
+        await logGuardEvent('crypto_buy_unprotected', String(e), {
+          symbol: c.symbol,
+          orderId: order.id,
+        });
+      }
+      orders.push({ symbol: c.symbol, qty: reportQty, orderId: order.id });
       await saveDecision({
         routine: 'crypto-scan',
         symbol: c.symbol,

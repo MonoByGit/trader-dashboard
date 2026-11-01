@@ -6,13 +6,11 @@ import {
   cryptoStopStorageKey,
   legacyCryptoStopStorageKeys,
 } from '../../../src/crypto/stop-storage-key';
-import { resolveCryptoPositionSellQty } from '../../../src/crypto/buy-fill-qty';
-import {
-  brokerStopOrdersBlockSoftwareBackup,
-  stopOrderNeedsSoftwareBackup,
-} from '../../../src/crypto/stop-order-backup';
+import { positionQtyAvailable, resolveCryptoPositionSellQty } from '../../../src/crypto/buy-fill-qty';
+import { awaitStopOrderCanceled } from '../../../src/crypto/cancel-stop-order';
+import { brokerStopOrdersBlockSoftwareBackup } from '../../../src/crypto/stop-order-backup';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
-import { alpaca } from '@/lib/alpaca';
+import { alpaca, AlpacaPosition } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
 
 type StopPayload = { stopPrice: number; qty: number };
@@ -82,16 +80,22 @@ export async function placeCryptoStopLimit(
   return order.id;
 }
 
-/** Poll buy fill / position and attach software + broker stops using actual qty (B-5). */
+export type ProtectAfterBuyOptions = {
+  poll?: { attempts?: number; delayMs?: number };
+};
+
+/** Poll buy fill / position and attach software + broker stops using qty_available (B-5). */
 export async function protectCryptoPositionAfterBuy(
   symbol: string,
   buyOrderId: string,
   stopPrice: number,
+  options?: ProtectAfterBuyOptions,
 ): Promise<{ qty: number; stopLimitOrderId: string | null }> {
   const qty = await resolveCryptoPositionSellQty(symbol, buyOrderId, {
     getOrder: (id) => alpaca.getOrder(id),
     positions: () => alpaca.positions(),
     symbolsEqual: alpacaSymbolsEqual,
+    pollOptions: options?.poll,
   });
   await saveCryptoStop(symbol, stopPrice, qty);
   try {
@@ -103,7 +107,13 @@ export async function protectCryptoPositionAfterBuy(
   }
 }
 
-/** Tick backup if price breaches stored stop. */
+function positionQtyAvailableForSymbol(positions: AlpacaPosition[], symbol: string): number {
+  const pos = positions.find((p) => alpacaSymbolsEqual(p.symbol, symbol));
+  if (!pos) return 0;
+  return positionQtyAvailable(pos);
+}
+
+/** Tick backup if price breaches stored stop (runs even when kill switch / guards block new entries). */
 export async function enforceSoftwareCryptoStops(
   symbol: string,
   lastPrice: number,
@@ -124,15 +134,30 @@ export async function enforceSoftwareCryptoStops(
   }
 
   for (const o of symbolStops) {
-    if (stopOrderNeedsSoftwareBackup(o, lastPrice)) {
-      await alpaca.cancelOrder(o.id);
+    const outcome = await awaitStopOrderCanceled(o.id, {
+      getOrder: (id) => alpaca.getOrder(id),
+      cancelOrder: (id) => alpaca.cancelOrder(id),
+    });
+    if (outcome === 'filled') {
+      return { triggered: false };
+    }
+    if (outcome === 'failed') {
+      await logGuardEvent('crypto_software_stop_cancel_fail', `Could not cancel ${o.id}`, {
+        symbol,
+        orderId: o.id,
+      });
+      return { triggered: false };
     }
   }
+
+  const positions = await alpaca.positions();
+  const sellQty = positionQtyAvailableForSymbol(positions, symbol);
+  if (!(sellQty > 0)) return { triggered: false };
 
   await logGuardEvent('crypto_software_stop', `Price ${lastPrice} <= stop ${stop.stopPrice}`, { symbol });
   const order = await alpaca.placeOrder({
     symbol,
-    qty: stop.qty,
+    qty: sellQty,
     side: 'sell',
     type: 'market',
     time_in_force: 'gtc',

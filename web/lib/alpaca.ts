@@ -111,6 +111,7 @@ export interface AlpacaAccount {
 export interface AlpacaPosition {
   symbol: string;
   qty: string;
+  qty_available?: string;
   avg_entry_price: string;
   current_price: string;
   market_value: string;
