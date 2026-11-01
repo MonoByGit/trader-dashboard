@@ -1,4 +1,5 @@
 import cryptoStrategy from '@/crypto-strategy.json';
+import { AiJsonParseError, claudeJson, MODELS } from '@/lib/ai';
 import { blocksNewEntries, evaluateCryptoLimits } from '@guards/index';
 import { filterByAssetClass } from '@/lib/asset-class';
 import { alpaca } from '@/lib/alpaca';
@@ -23,19 +24,39 @@ const RULES = cryptoStrategy.rules as {
   position_size_pct: number;
 };
 
-function rsi(closes: number[]): number {
-  if (closes.length < 15) return 50;
-  const gains: number[] = [];
-  const losses: number[] = [];
-  for (let i = 1; i < Math.min(15, closes.length); i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d >= 0) gains.push(d);
-    else losses.push(-d);
-  }
-  const ag = gains.reduce((a, v) => a + v, 0) / 14;
-  const al = losses.reduce((a, v) => a + v, 0) / 14;
-  if (al === 0) return 100;
-  return 100 - 100 / (1 + ag / al);
+function buildSnapshots(
+  symbols: string[],
+  bars: Record<string, { c: number; v: number }[]>,
+) {
+  return symbols
+    .map((symbol) => {
+      const b = bars[symbol] ?? [];
+      if (b.length < 5) return null;
+      const closes = b.slice(-20).map((x) => x.c);
+      const sma20 = closes.reduce((a, v) => a + v, 0) / closes.length;
+      const last = closes[closes.length - 1];
+      const vols = b.slice(-20).map((x) => x.v);
+      const avgVol = vols.slice(0, -1).reduce((a, v) => a + v, 0) / (vols.length - 1);
+      const gains: number[] = [];
+      const losses: number[] = [];
+      for (let i = 1; i < Math.min(15, closes.length); i++) {
+        const d = closes[i] - closes[i - 1];
+        if (d >= 0) gains.push(d);
+        else losses.push(-d);
+      }
+      const ag = gains.reduce((a, v) => a + v, 0) / 14;
+      const al = losses.reduce((a, v) => a + v, 0) / 14;
+      const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+      return {
+        symbol,
+        lastClose: last,
+        sma20: +sma20.toFixed(2),
+        aboveSma20: last > sma20,
+        rsi: +rsi.toFixed(1),
+        volumeRatio: +(vols[vols.length - 1] / avgVol).toFixed(2),
+      };
+    })
+    .filter(Boolean);
 }
 
 async function runCryptoScan(): Promise<Record<string, unknown>> {
@@ -101,28 +122,33 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     return { routine: 'crypto-scan', note: 'Max crypto positions', asset_class: 'crypto' };
   }
 
-  const candidates: string[] = [];
-  for (const symbol of symbols) {
-    if (openSymbols.includes(symbol)) continue;
-    const b = bars[symbol] ?? [];
-    if (b.length < 20) continue;
-    const closes = b.slice(-20).map((x) => x.c);
-    const sma20 = closes.reduce((a, v) => a + v, 0) / closes.length;
-    const last = closes[closes.length - 1];
-    const r = rsi(closes);
-    if (last > sma20 && r >= 45 && r <= 70) candidates.push(symbol);
+  const snapshots = buildSnapshots(symbols, bars);
+  let candidates: { symbol: string; action: 'buy' | 'skip'; reason: string }[];
+  try {
+    candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; reason: string }[]>(
+      MODELS.sonnet,
+      `Je bent Momentum Crypto (paper sleeve). Strategie: ${cryptoStrategy.name}. Equity totaal: $${equity.toFixed(0)}. Crypto open: ${openSymbols.join(',') || 'geen'}. Max ${RULES.max_positions} crypto posities. Alleen symbolen uit de watchlist. Geen BUY voor al open.`,
+      `Marktdata:\n${JSON.stringify(snapshots)}\nGeef JSON array: [{"symbol":"BTC/USD","action":"buy"|"skip","reason":"kort"}]`,
+    );
+  } catch (e) {
+    const msg = e instanceof AiJsonParseError ? e.message : String(e);
+    console.error('[crypto-scan] AI JSON mislukt — geen orders geplaatst:', msg);
+    return { skipped: true, reason: 'AI JSON response invalid or truncated', asset_class: 'crypto' };
   }
 
   const orders: { symbol: string; qty: number; orderId: string }[] = [];
-  for (const symbol of candidates) {
+  for (const c of candidates) {
+    if (c.action !== 'buy' || !symbols.includes(c.symbol) || openSymbols.includes(c.symbol)) continue;
     if (openSymbols.length + orders.length >= RULES.max_positions) break;
-    const b = bars[symbol] ?? [];
+
+    const b = bars[c.symbol] ?? [];
+    if (!b.length) continue;
     const lastPrice = b[b.length - 1].c;
     const notional = equity * RULES.position_size_pct;
     const qty = Math.max(0.0001, +(notional / lastPrice).toFixed(4));
 
     const symbolExposure = cryptoPositions
-      .filter((p) => p.symbol === symbol)
+      .filter((p) => p.symbol === c.symbol)
       .reduce((s, p) => s + parseFloat(p.market_value), 0);
 
     const cryptoLimit = evaluateCryptoLimits(
@@ -140,7 +166,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     if (!cryptoLimit.allowed) {
       await saveDecision({
         routine: 'crypto-scan',
-        symbol,
+        symbol: c.symbol,
         decision: 'NO_GO',
         rationale: cryptoLimit.failReasons.join('; '),
         agentNote: 'Crypto sleeve guard',
@@ -164,7 +190,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     if (!globalLimits.allowed) {
       await saveDecision({
         routine: 'crypto-scan',
-        symbol,
+        symbol: c.symbol,
         decision: 'NO_GO',
         rationale: globalLimits.failReasons.join('; '),
         agentNote: 'Global portfolio guard',
@@ -177,32 +203,32 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
     try {
       const order = await alpaca.placeOrder({
-        symbol,
+        symbol: c.symbol,
         qty,
         side: 'buy',
         type: 'market',
         time_in_force: 'gtc',
       });
-      await saveCryptoStop(symbol, stopPrice, qty);
-      await placeCryptoStopLimit(symbol, qty, stopPrice).catch((e) => {
+      await saveCryptoStop(c.symbol, stopPrice, qty);
+      await placeCryptoStopLimit(c.symbol, qty, stopPrice).catch((e) => {
         console.error('[crypto stop-limit]', e);
       });
-      orders.push({ symbol, qty, orderId: order.id });
+      orders.push({ symbol: c.symbol, qty, orderId: order.id });
       await saveDecision({
         routine: 'crypto-scan',
-        symbol,
+        symbol: c.symbol,
         decision: 'BUY',
-        rationale: `Rule: above SMA20, RSI band. Stop ${stopPrice}.`,
+        rationale: c.reason || `Stop ${stopPrice}.`,
         agentNote: 'Crypto sleeve; stop-limit GTC + tick backup. See docs/crypto-stops.md',
         confidence: 0.75,
         orderId: order.id,
         asset_class: 'crypto',
       });
     } catch (e) {
-      await logGuardEvent('crypto_order_fail', String(e), { symbol });
+      await logGuardEvent('crypto_order_fail', String(e), { symbol: c.symbol });
       await saveDecision({
         routine: 'crypto-scan',
-        symbol,
+        symbol: c.symbol,
         decision: 'NO_GO',
         rationale: String(e),
         agentNote: 'Order failed',
