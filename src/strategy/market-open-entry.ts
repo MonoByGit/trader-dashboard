@@ -31,3 +31,24 @@ export function midQuotePrice(quote: { ap: number; bp: number } | undefined): nu
   if (!(ap > 0) || !(bp > 0)) return null;
   return +((ap + bp) / 2).toFixed(4);
 }
+
+export type QuoteEntryResult =
+  | { price: number; source: 'mid' | 'ask_wide_spread' }
+  | { error: 'no_quote' };
+
+/** Live entry reference; wide spread (> maxSpreadPct) falls back to ask. */
+export function entryPriceFromQuote(
+  quote: { ap: number; bp: number } | undefined,
+  maxSpreadPct = 0.005,
+): QuoteEntryResult {
+  if (!quote) return { error: 'no_quote' };
+  const ap = quote.ap;
+  const bp = quote.bp;
+  if (!(ap > 0) || !(bp > 0)) return { error: 'no_quote' };
+  const mid = (ap + bp) / 2;
+  const spreadPct = (ap - bp) / mid;
+  if (spreadPct > maxSpreadPct) {
+    return { price: ap, source: 'ask_wide_spread' };
+  }
+  return { price: +mid.toFixed(4), source: 'mid' };
+}

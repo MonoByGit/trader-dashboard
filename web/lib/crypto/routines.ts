@@ -20,6 +20,8 @@ import { syncRecentOrders } from '@/lib/orders-store';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
 import { passesCryptoEntryCriteria } from '../../../src/crypto/entry-criteria';
+import { dailyBarsExcludingTodayPartial } from '../../../src/alpaca/daily-bars-partial';
+import { tradingDateEt } from '@scheduler/decide';
 import {
   enforceSoftwareCryptoStops,
   enforceSoftwareCryptoTakeProfit,
@@ -47,10 +49,14 @@ const RULES = cryptoStrategy.rules as {
 
 function buildSnapshots(
   symbols: string[],
-  bars: Record<string, { c: number; v: number }[]>,
+  bars: Record<string, { c: number; v: number; t?: string }[]>,
+  todayEt: string,
 ) {
   return symbols
-    .map((symbol) => snapshotFromDailyBars(symbol, bars[symbol] ?? []))
+    .map((symbol) => {
+      const completed = dailyBarsExcludingTodayPartial(bars[symbol] ?? [], todayEt);
+      return snapshotFromDailyBars(symbol, completed);
+    })
     .filter(Boolean);
 }
 
@@ -137,7 +143,8 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     return { routine: 'crypto-scan', note: 'Max crypto positions', asset_class: 'crypto' };
   }
 
-  const snapshots = buildSnapshots(symbols, bars);
+  const todayEt = tradingDateEt(Date.now());
+  const snapshots = buildSnapshots(symbols, bars, todayEt);
   let candidates: { symbol: string; action: 'buy' | 'skip'; reason: string }[];
   try {
     candidates = await claudeJsonArray<{ symbol: string; action: 'buy' | 'skip'; reason: string }>(

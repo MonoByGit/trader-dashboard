@@ -18,4 +18,8 @@ describe('passesCryptoEntryCriteria', () => {
   it('accepts when all criteria pass', () => {
     expect(passesCryptoEntryCriteria({ rsi: 55, volumeRatio: 1.1 }, rules)).toEqual({ ok: true });
   });
+
+  it('rejects non-finite RSI or volume ratio', () => {
+    expect(passesCryptoEntryCriteria({ rsi: NaN, volumeRatio: 1.1 }, rules).ok).toBe(false);
+  });
 });

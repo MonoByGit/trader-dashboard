@@ -14,6 +14,9 @@ export function passesCryptoEntryCriteria(
   snap: CryptoEntrySnapshot,
   rules: CryptoEntryRules,
 ): { ok: true } | { ok: false; reason: string } {
+  if (!Number.isFinite(snap.rsi) || !Number.isFinite(snap.volumeRatio)) {
+    return { ok: false, reason: 'Invalid indicator snapshot' };
+  }
   if (snap.rsi < rules.rsi_min) {
     return { ok: false, reason: `RSI ${snap.rsi} below min ${rules.rsi_min}` };
   }

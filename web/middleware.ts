@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authEnabled, SESSION_COOKIE, verifySessionCookieValue } from '@/lib/auth';
+import { shouldBlockMisconfiguredProduction } from '../src/security/middleware-auth';
 
 function isPublicAsset(pathname: string): boolean {
   if (pathname.startsWith('/_next')) return true;
@@ -21,6 +22,13 @@ export async function middleware(req: NextRequest) {
   if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
 
   if (pathname.startsWith('/api/auth/')) return NextResponse.next();
+
+  if (shouldBlockMisconfiguredProduction(pathname)) {
+    return NextResponse.json(
+      { error: 'Service misconfigured: set APP_PASSWORD or APP_PASSWORD_SHA256' },
+      { status: 503 },
+    );
+  }
 
   if (!authEnabled()) return NextResponse.next();
 

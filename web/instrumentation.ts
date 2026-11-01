@@ -1,10 +1,5 @@
+/** Alpaca paper/live mode is logged from web/lib/alpaca.ts on first import (runs in dev and prod). */
+
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    if (process.env.NEXT_PHASE !== 'phase-production-build') {
-      const { assertProductionAuthEnv } = await import('../src/security/production-auth');
-      assertProductionAuthEnv();
-    }
-    const { logAlpacaModeAtStartup } = await import('./lib/alpaca-startup');
-    logAlpacaModeAtStartup();
-  }
+  // Next 14.2.x does not invoke this hook unless experimental.instrumentationHook is enabled.
 }
