@@ -12,6 +12,16 @@ export function stopLevel(
   return trail > hard ? { level: trail, kind: 'trailing' } : { level: hard, kind: 'hard' };
 }
 
+/** Raakt de dagbar dit stopniveau? Gap onder de stop vult op de open (slechter dan de stop). */
+export function checkStopLevel(
+  level: number,
+  kind: string,
+  bar: Pick<Bar, 'o' | 'l'>,
+): { hit: false } | { hit: true; fillPrice: number; kind: string } {
+  if (bar.l > level) return { hit: false };
+  return { hit: true, fillPrice: Math.min(bar.o, level), kind };
+}
+
 /** Raakt de dagbar het stopniveau? Gap onder de stop vult op de open (slechter dan de stop). */
 export function checkStop(
   pos: Pick<Position, 'entryPrice' | 'highWater'>,
