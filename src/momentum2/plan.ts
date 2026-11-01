@@ -46,6 +46,7 @@ export async function planRebalance(input: {
         weight: t.weight,
         lastClose: t.lastClose,
         sma: t.sma,
+        strategy: cfg.id,
       });
       vetoes.push({ symbol: t.symbol, verdict });
       if (verdict.veto) continue;

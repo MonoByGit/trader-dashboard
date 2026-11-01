@@ -108,9 +108,27 @@ export interface VetoVerdict {
   modelVersion: string;
   /** true als de check niet kon draaien; de strategie staat dan, maar het is gelogd. */
   failedOpen?: boolean;
+  /** Strategieversie waarvoor dit besluit viel (bijv. m2-rotatie-a). */
+  strategyVersion?: string;
+  /** Gebruikte bronnen en hun status, voor de besluitenlog. */
+  sources?: string[];
+  /** Schaduwmodellen op exact dezelfde input. Veranderen het besluit nooit. */
+  shadow?: VetoVerdict[];
+}
+
+export interface NewsHeadline { headline: string; source: string; publishedAt: string; url?: string }
+export interface EarningsEvent { symbol: string; date: string }
+
+/** Wat het model te zien kreeg, met de status van elke bron. 'unavailable' = bron niet beschikbaar (bijv. geen key). */
+export interface NewsContext {
+  headlines: NewsHeadline[];
+  earnings: EarningsEvent[];
+  sources: { alpacaNews: 'ok' | 'unavailable' | 'error'; finnhubCalendar: 'ok' | 'unavailable' | 'error' };
 }
 
 export interface VetoCandidate {
+  strategy?: string;
+  news?: NewsContext;
   symbol: string;
   momentum: number;
   weight: number;
