@@ -17,7 +17,10 @@ export async function ensureActiveCryptoStrategyVersion(): Promise<StrategyVersi
     return {
       id: 'crypto-file',
       version: cryptoStrategy.version,
-      content: cryptoStrategy as StrategyVersionRow['content'],
+      content: {
+        ...cryptoStrategy,
+        rules: { ...cryptoStrategy.rules, vix_threshold: 999 },
+      } as StrategyVersionRow['content'],
       status: 'active',
       notes: null,
       created_at: new Date().toISOString(),

@@ -152,7 +152,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
 
     const etfOnlyPositions = filterByAssetClass(positions, 'etf');
     const etfExposure = etfOnlyPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
-    const globalLimits = checkOrderAgainstLimits({
+    const globalLimits = await checkOrderAgainstLimits({
       equity,
       cash,
       openPositionCount: etfOnlyPositions.length + cryptoPositions.length + orders.length,
