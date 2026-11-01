@@ -1,4 +1,5 @@
 import type { AlpacaBar } from './alpaca';
+import { setCryptoBarsSymbols } from '../../src/alpaca/crypto-bars-query';
 import { toTradingDateString } from '../../src/dates/trading-date';
 import { tradingDateEt } from '@scheduler/decide';
 
@@ -118,7 +119,7 @@ export async function fetchCryptoBars(
       : defaultBarDateRange(opts.lookbackCalendarDays);
 
   const url = new URL(`${DATA}/v1beta3/crypto/us/bars`);
-  url.searchParams.set('symbols', opts.symbols.map((s) => encodeURIComponent(s)).join(','));
+  setCryptoBarsSymbols(url, opts.symbols);
   url.searchParams.set('timeframe', timeframe);
   url.searchParams.set('start', range.start);
   url.searchParams.set('end', range.end);

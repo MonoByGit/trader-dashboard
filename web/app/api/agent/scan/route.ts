@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
-import { claudeJson, geminiText, MODELS } from '@/lib/ai';
+import { agentNewsLookup, claudeJson, MODELS } from '@/lib/ai';
 import { snapshotFromDailyBars } from '../../../../../src/indicators/live-snapshot';
 import { loadVolStressSnapshot } from '@/lib/vol-stress';
 
@@ -58,20 +58,24 @@ export async function POST() {
       };
     });
 
-    // Step 2: Gemini Flash — quick news/sentiment check
-    const newsPrompt = `You are a market analyst. Today is ${new Date().toISOString().split('T')[0]}.
+    const newsPrompt = `Today is ${new Date().toISOString().split('T')[0]}.
 For each of these ETFs: ${WATCHLIST.join(', ')}, assess in 1 sentence each whether there are any known earnings risks, major macro events, or negative sector news TODAY that would make trading risky.
-Format as JSON: { "QQQ": "safe/risky: <reason>", ... }`;
+Reply with JSON only: { "QQQ": "safe/risky: <reason>", ... }`;
 
-    let newsContext = '{}';
-    try {
-      newsContext = await geminiText(MODELS.flash, newsPrompt);
-      const match = newsContext.match(/\{[\s\S]*\}/);
-      newsContext = match ? match[0] : '{}';
-    } catch { newsContext = '{}'; }
+    const newsResult = await agentNewsLookup(newsPrompt, {
+      routine: 'scan-news',
+      assetClass: 'etf',
+    });
+    if (newsResult.error) {
+      console.error('[scan] news lookup failed:', newsResult.error);
+    }
 
     let parsedNews: Record<string, string> = {};
-    try { parsedNews = JSON.parse(newsContext); } catch { parsedNews = {}; }
+    try {
+      parsedNews = JSON.parse(newsResult.json) as Record<string, string>;
+    } catch {
+      parsedNews = {};
+    }
 
     // Step 3: agent (smart tier) — make the actual trading decisions
     const marketData = marketSnapshots

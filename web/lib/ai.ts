@@ -31,15 +31,24 @@ const aiRoutineContext = new AsyncLocalStorage<{
 
 export function withAiRoutine<T>(routine: string, fn: () => Promise<T>): Promise<T> {
   const parent = aiRoutineContext.getStore();
-  return aiRoutineContext.run({ ...parent, routine }, fn);
+  return aiRoutineContext.run(
+    { routine, assetClass: parent?.assetClass },
+    fn,
+  );
 }
 
 export function withAiCallContext<T>(
-  ctx: { routine?: string; assetClass?: 'etf' | 'crypto' },
+  ctx: { routine?: string; assetClass?: 'etf' | 'crypto'; decisionId?: string },
   fn: () => Promise<T>,
 ): Promise<T> {
-  const parent = aiRoutineContext.getStore();
-  return aiRoutineContext.run({ ...parent, ...ctx }, fn);
+  return aiRoutineContext.run(
+    {
+      routine: ctx.routine,
+      assetClass: ctx.assetClass,
+      decisionId: ctx.decisionId,
+    },
+    fn,
+  );
 }
 
 async function logAiUsage(
@@ -315,7 +324,21 @@ export async function agentNewsLookup(
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       console.error('[agentNewsLookup] error', { routine, provider: activeProvider(), error });
-      return { json: '{}', status: 'failed', finishReason: null, error };
+      try {
+        const { recordAiCall } = await import('./ai-calls');
+        await recordAiCall({
+          routine,
+          provider: activeProvider(),
+          model: modelForTier('fast'),
+          inputTokens: 0,
+          outputTokens: 0,
+          finishReason: 'error',
+          assetClass,
+        });
+      } catch (logErr) {
+        console.error('[agentNewsLookup] failed to log ai_calls row', logErr);
+      }
+      return { json: '{}', status: 'failed', finishReason: 'error', error };
     }
   });
 }
@@ -420,7 +443,7 @@ export function claudeText(model: string, system: string, user: string, maxToken
   return agentText(system, user, maxTokens, tierFromLegacyModel(model));
 }
 
-/** @deprecated name kept for call sites — uses active AGENT_PROVIDER, not Gemini-only. */
+/** @deprecated use agentNewsLookup with an explicit routine name. */
 export function geminiText(_model: string, prompt: string, maxTokens = 2048): Promise<string> {
-  return agentNewsLookup(prompt, { maxTokens }).then((r) => r.json);
+  return agentNewsLookup(prompt, { routine: 'legacy-news', maxTokens }).then((r) => r.json);
 }

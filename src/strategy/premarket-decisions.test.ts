@@ -1,9 +1,13 @@
 import {
   applyPremarketDecisionRules,
+  allPremarketCriteriaPass,
+  buildFullPremarketCriteria,
   momentumRsiPasses,
   momentumRsiRuleText,
   newsContextPrompt,
   newsIsUsable,
+  normalizeCriterionValue,
+  PREMARKET_ENTRY_CRITERIA,
 } from './premarket-decisions.js';
 
 describe('premarket news + criteria rules', () => {
@@ -48,6 +52,40 @@ describe('premarket news + criteria rules', () => {
       { newsUsable: true, softStartEnabled: false, rsi: 72.9, rsiMin: 50, rsiMax: 75 },
     );
     expect(out.criteria.momentum_rsi).toBe('pass');
+  });
+
+  it('normalizes uppercase PASS and booleans', () => {
+    expect(normalizeCriterionValue('PASS')).toBe('pass');
+    expect(normalizeCriterionValue(true)).toBe('pass');
+    expect(normalizeCriterionValue(false)).toBe('fail');
+    expect(normalizeCriterionValue('n/a')).toBe('unknown');
+  });
+
+  it('fills missing criteria keys as unknown', () => {
+    const full = buildFullPremarketCriteria(
+      { trend_above_sma20: 'pass' },
+      { newsUsable: true, rsiMin: 50, rsiMax: 75 },
+    );
+    expect(PREMARKET_ENTRY_CRITERIA.every((k) => full[k] != null)).toBe(true);
+    expect(full.volume_above_avg).toBe('unknown');
+  });
+
+  it('blocks soft-start BUY when LLM sends PASS uppercase but keys missing', () => {
+    const out = applyPremarketDecisionRules(
+      {
+        symbol: 'QQQ',
+        decision: 'BUY',
+        criteria: {
+          trend_above_sma20: 'PASS',
+          momentum_rsi: true,
+          volume_above_avg: 'pass',
+          vix_below_limit: 'pass',
+        },
+      },
+      { newsUsable: true, softStartEnabled: true, rsi: 72.9, rsiMin: 50, rsiMax: 75 },
+    );
+    expect(allPremarketCriteriaPass(out.criteria)).toBe(false);
+    expect(out.decision).toBe('NO_GO');
   });
 
   it('allows BUY under soft-start when news ok and all pass', () => {
