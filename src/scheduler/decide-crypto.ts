@@ -1,6 +1,7 @@
 export type CryptoRoutineName = 'crypto-scan';
 
 import { RUNNING_STALE_MS } from './run-status.js';
+import { utcCryptoScanSlot } from './crypto-slot.js';
 
 export interface CryptoRunRecord {
   routine: string;
@@ -21,8 +22,6 @@ export const DEFAULT_CRYPTO_SCHEDULER_CONFIG: CryptoSchedulerConfig = {
   retryWindowMinutes: 45,
 };
 
-const MS_PER_HOUR = 3_600_000;
-
 export function utcDateYmd(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 10);
 }
@@ -30,7 +29,21 @@ export function utcDateYmd(nowMs: number): string {
 function lastRun(runs: CryptoRunRecord[]): CryptoRunRecord | undefined {
   return runs
     .filter((r) => r.routine === 'crypto-scan')
-    .sort((a, b) => (b.finished_at ?? '').localeCompare(a.finished_at ?? ''))[0];
+    .sort((a, b) =>
+      (b.finished_at ?? b.started_at ?? '').localeCompare(a.finished_at ?? a.started_at ?? ''),
+    )[0];
+}
+
+function dueOnSlotAfterLastFinish(
+  last: CryptoRunRecord,
+  cfg: CryptoSchedulerConfig,
+  nowMs: number,
+): boolean {
+  const anchor = last.finished_at ?? last.started_at;
+  if (!anchor) return true;
+  const currentSlot = utcCryptoScanSlot(nowMs, cfg.tickIntervalHours);
+  const lastSlot = utcCryptoScanSlot(new Date(anchor).getTime(), cfg.tickIntervalHours);
+  return currentSlot !== lastSlot;
 }
 
 function shouldRunCrypto(
@@ -47,12 +60,12 @@ function shouldRunCrypto(
   }
   if (last.status === 'failed' && last.finished_at) {
     const finishedMs = new Date(last.finished_at).getTime();
-    return nowMs - finishedMs <= cfg.retryWindowMinutes * 60_000;
+    if (nowMs - finishedMs <= cfg.retryWindowMinutes * 60_000) return true;
+    return dueOnSlotAfterLastFinish(last, cfg, nowMs);
   }
   if (last.status === 'failed' && !last.finished_at) return false;
   if (last.status === 'ok' && last.finished_at) {
-    const elapsed = nowMs - new Date(last.finished_at).getTime();
-    return elapsed >= cfg.tickIntervalHours * MS_PER_HOUR;
+    return dueOnSlotAfterLastFinish(last, cfg, nowMs);
   }
   if (last.status === 'skipped') return true;
   return false;

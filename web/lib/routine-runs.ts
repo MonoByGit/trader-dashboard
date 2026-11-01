@@ -32,9 +32,9 @@ export async function tryBeginRoutineRun(
   routine: string,
   tradingDate?: string,
   nowMs = Date.now(),
-): Promise<{ runId: string } | { blocked: true; reason: string }> {
+): Promise<{ runId: string; slotKey: string } | { blocked: true; reason: string }> {
   if (!hasDb()) {
-    return { runId: `run-${routine}-${nowMs}` };
+    return { runId: `run-${routine}-${nowMs}`, slotKey: routineLockSlotKey(routine, tradingDateEt(nowMs), nowMs) };
   }
   await ensureSchema();
   const day = tradingDate ?? tradingDateEt(nowMs);
@@ -45,17 +45,22 @@ export async function tryBeginRoutineRun(
 
   return dbTransaction(async (query) => {
     const existing = await query(
-      `SELECT run_id, acquired_at FROM routine_run_locks WHERE routine = $1 AND slot_key = $2 FOR UPDATE`,
-      [routine, slotKey],
+      `SELECT run_id, acquired_at FROM routine_run_locks
+       WHERE routine = $1 AND slot_key = $2
+         AND acquired_at > NOW() - ($3::text || ' seconds')::interval
+       FOR UPDATE`,
+      [routine, slotKey, String(staleSec)],
     );
     if (existing.rows.length) {
-      const row = existing.rows[0] as { acquired_at: string };
-      const ageMs = nowMs - new Date(row.acquired_at).getTime();
-      if (ageMs < RUNNING_STALE_MS) {
-        return { blocked: true as const, reason: 'Routine run lock held for this slot' };
-      }
-      await query(`DELETE FROM routine_run_locks WHERE routine = $1 AND slot_key = $2`, [routine, slotKey]);
+      return { blocked: true as const, reason: 'Routine run lock held for this slot' };
     }
+
+    await query(
+      `DELETE FROM routine_run_locks
+       WHERE routine = $1 AND slot_key = $2
+         AND acquired_at <= NOW() - ($3::text || ' seconds')::interval`,
+      [routine, slotKey, String(staleSec)],
+    );
 
     const lock = await query(
       `INSERT INTO routine_run_locks (routine, slot_key, run_id, acquired_at)
@@ -73,19 +78,24 @@ export async function tryBeginRoutineRun(
        VALUES ($1, $2, $3::date, NOW(), 'running', $4)`,
       [id, routine, day, assetClass],
     );
-    await query(
-      `DELETE FROM routine_run_locks WHERE acquired_at < NOW() - ($1::text || ' seconds')::interval`,
-      [String(staleSec)],
-    );
-    return { runId: id };
+    return { runId: id, slotKey };
   });
 }
 
-export async function releaseRoutineRunLock(routine: string, tradingDate: string, nowMs = Date.now()): Promise<void> {
+export async function verifyRoutineRunLock(runId: string): Promise<boolean> {
+  if (!hasDb()) return true;
+  await ensureSchema();
+  const rows = await dbQuery<{ ok: string }>(
+    `SELECT 1::text AS ok FROM routine_run_locks WHERE run_id = $1 LIMIT 1`,
+    [runId],
+  );
+  return rows.length > 0;
+}
+
+export async function releaseRoutineRunLock(runId: string): Promise<void> {
   if (!hasDb()) return;
   await ensureSchema();
-  const slotKey = routineLockSlotKey(routine, tradingDate, nowMs);
-  await dbRun(`DELETE FROM routine_run_locks WHERE routine = $1 AND slot_key = $2`, [routine, slotKey]);
+  await dbRun(`DELETE FROM routine_run_locks WHERE run_id = $1`, [runId]);
 }
 
 export async function finishRoutineRun(
@@ -102,13 +112,7 @@ export async function finishRoutineRun(
      WHERE id = $1`,
     [id, status, opts?.skipReason ?? null, opts?.errorMessage ?? null, duration],
   );
-  const rows = await dbQuery<{ routine: string; trading_date: string }>(
-    `SELECT routine, trading_date::text AS trading_date FROM routine_runs WHERE id = $1`,
-    [id],
-  );
-  if (rows[0]) {
-    await releaseRoutineRunLock(rows[0].routine, rows[0].trading_date);
-  }
+  await releaseRoutineRunLock(id);
 }
 
 export async function listRunsForTradingDate(tradingDate: string): Promise<RoutineRunRow[]> {

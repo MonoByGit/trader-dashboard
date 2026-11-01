@@ -1,4 +1,7 @@
-import { premarketApprovedBuySymbols } from './market-open-premarket.js';
+import {
+  marketOpenNoPremarketSkip,
+  premarketApprovedBuySymbols,
+} from './market-open-premarket.js';
 
 const allPassCriteria = {
   trend_above_sma20: 'pass',
@@ -32,5 +35,15 @@ describe('premarketApprovedBuySymbols', () => {
       rsiMax: 75,
     });
     expect(approved).toEqual([]);
+  });
+});
+
+describe('marketOpenNoPremarketSkip', () => {
+  it('skips market-open when there are no premarket rows', () => {
+    expect(marketOpenNoPremarketSkip([])).toEqual({
+      skipped: true,
+      reason: 'No premarket decisions for today',
+    });
+    expect(marketOpenNoPremarketSkip([{ symbol: 'QQQ' }])).toBeNull();
   });
 });

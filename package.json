@@ -26,9 +26,21 @@
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1",
       "^@/(.*)$": "<rootDir>/web/$1",
-      "^@guards/(.*)$": "<rootDir>/src/guards/$1"
+      "^@guards/(.*)$": "<rootDir>/src/guards/$1",
+      "^@scheduler/decide$": "<rootDir>/src/scheduler/decide.ts",
+      "^@scheduler/decide-crypto$": "<rootDir>/src/scheduler/decide-crypto.ts",
+      "^@scheduler/routine-lock$": "<rootDir>/src/scheduler/routine-lock.ts",
+      "^@scheduler/run-status$": "<rootDir>/src/scheduler/run-status.ts",
+      "^@scheduler/(.*)$": "<rootDir>/src/scheduler/$1",
+      "^@snapshots/returns$": "<rootDir>/src/snapshots/returns.ts",
+      "^@snapshots/(.*)$": "<rootDir>/src/snapshots/$1",
+      "^@ai-cost/pricing$": "<rootDir>/src/ai-cost/pricing.ts",
+      "^@ai-cost/(.*)$": "<rootDir>/src/ai-cost/$1",
+      "^@ai/json-response$": "<rootDir>/src/ai/json-response.ts",
+      "^@backtest/(.*)$": "<rootDir>/src/backtest/$1"
     },
     "roots": ["<rootDir>/src", "<rootDir>/web"],
+    "testMatch": ["<rootDir>/{src,web}/**/*.test.ts"],
     "transform": {
       "^.+\\.tsx?$": [
         "ts-jest",

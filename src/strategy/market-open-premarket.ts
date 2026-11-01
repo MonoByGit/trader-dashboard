@@ -50,3 +50,14 @@ export function premarketCriteriaForSymbol(
   if (!row) return null;
   return buildFullPremarketCriteria(row.criteria, opts);
 }
+
+export const MARKET_OPEN_NO_PREMARKET_SKIP_REASON = 'No premarket decisions for today';
+
+export function marketOpenNoPremarketSkip(
+  rows: unknown[],
+): { skipped: true; reason: string } | null {
+  if (rows.length === 0) {
+    return { skipped: true, reason: MARKET_OPEN_NO_PREMARKET_SKIP_REASON };
+  }
+  return null;
+}

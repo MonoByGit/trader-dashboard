@@ -1,5 +1,11 @@
 import { alpaca } from '@/lib/alpaca';
-import { agentNewsLookup, AiJsonParseError, claudeJsonArray, claudeText, MODELS } from '@/lib/ai';
+import { agentNewsLookup, AiJsonParseError, claudeJsonArray, claudeText, logFailedAiCall, MODELS } from '@/lib/ai';
+import {
+  gateBuyIfLockLost,
+  hasBuyDecisionTodayEt,
+  symbolHeldInPositions,
+} from '@/lib/buy-idempotency';
+import { getRoutineRunContext } from '@/lib/routine-run-context';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { saveDecision } from '@/lib/decisions';
 import { registerRoutineHandler } from '@/lib/routine-dispatch';
@@ -29,7 +35,10 @@ import { postMortemFromEodClose, postMortemFromFilledSell } from '@/lib/postmort
 import { hasOpenBuyOrderForSymbol, isStopFill, isTakeProfitFill } from '@/lib/alpaca-orders';
 import { flattenEtfPositionAtEod } from '@/lib/eod-flatten';
 import { loadPremarketDecisionsForTradingDate } from '@/lib/premarket-store';
-import { premarketApprovedBuySymbols } from '../../src/strategy/market-open-premarket';
+import {
+  marketOpenNoPremarketSkip,
+  premarketApprovedBuySymbols,
+} from '../../src/strategy/market-open-premarket';
 import { nextDailyTradeCount } from '../../src/guards/daily-trades';
 import { tradingDateEt } from '@scheduler/decide';
 import { runWeeklyReview } from '@/lib/weekly-review';
@@ -134,6 +143,7 @@ Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
     console.error('[premarket] AI call failed — marking run failed for retry:', msg);
+    await logFailedAiCall(e, 'premarket');
     throw new Error(`[premarket] ${msg}`);
   }
 
@@ -170,7 +180,7 @@ Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
   };
 }
 
-async function runMarketOpen() {
+export async function runMarketOpen() {
   const strat = await liveStrategy();
   const watchlist = strat.symbols;
   const [account, positions, clock] = await Promise.all([
@@ -232,6 +242,16 @@ async function runMarketOpen() {
     }),
   );
 
+  const noPremarket = marketOpenNoPremarketSkip(premarketRows);
+  if (noPremarket) {
+    return {
+      routine: 'market-open',
+      orders: [],
+      ...noPremarket,
+      premarketApproved: [],
+    };
+  }
+
   // Last known prices for server-side position sizing guard
   const lastPrices: Record<string, number> = {};
   for (const s of watchlist) {
@@ -252,6 +272,7 @@ async function runMarketOpen() {
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
     console.error('[market-open] AI call failed — marking run failed for retry:', msg);
+    await logFailedAiCall(e, 'market-open');
     throw new Error(`[market-open] ${msg}`);
   }
 
@@ -350,6 +371,24 @@ async function runMarketOpen() {
       });
       continue;
     }
+
+    const runCtx = getRoutineRunContext();
+    const lockGate = await gateBuyIfLockLost(runCtx?.runId, c.symbol);
+    if (!lockGate.allowed) {
+      await saveDecision({
+        routine: 'market-open',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: lockGate.reason,
+        agentNote: 'Run lock lost before order.',
+        confidence: 0,
+      });
+      break;
+    }
+
+    const freshEtf = filterByAssetClass(await alpaca.positions(), 'etf');
+    if (symbolHeldInPositions(freshEtf, c.symbol)) continue;
+    if (await hasBuyDecisionTodayEt(c.symbol, 'market-open')) continue;
 
     const gate = await checkLessonsForBuy(c.symbol, c.reason, activeLessons);
     if (gate.veto) {

@@ -12,6 +12,7 @@ describe('soft-start', () => {
     const effective = applySoftStartToGuardConfig(base, true);
     expect(effective.maxPositions).toBe(SOFT_START_DEFAULTS.maxNewPositionsPerDay);
     expect(effective.maxDailyTrades).toBe(SOFT_START_DEFAULTS.maxNewPositionsPerDay);
+    expect(effective.maxDailyCryptoTrades).toBe(SOFT_START_DEFAULTS.maxDailyCryptoTrades);
     expect(effective.maxPositionSizePct).toBe(SOFT_START_DEFAULTS.maxPositionSizePct);
     expect(effective.maxTotalExposurePct).toBe(SOFT_START_DEFAULTS.maxTotalExposurePct);
   });

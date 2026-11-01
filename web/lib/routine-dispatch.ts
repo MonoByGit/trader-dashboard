@@ -1,8 +1,10 @@
 import { canRunRoutine } from '@guards/index';
 import { loadGuardState } from '@/lib/guards/service';
 import { finishRoutineRun, tryBeginRoutineRun } from '@/lib/routine-runs';
-import { withAiRoutine } from '@/lib/ai';
+import { logFailedAiCall, withAiRoutine } from '@/lib/ai';
 import { tradingDateEt } from '@scheduler/decide';
+import { withRoutineRunContext } from '@/lib/routine-run-context';
+import { ROUTINE_RUN_DEADLINE_MS } from '@/lib/ai-timeout';
 
 type RoutineHandler = () => Promise<Record<string, unknown>>;
 
@@ -10,6 +12,12 @@ const handlers = new Map<string, RoutineHandler>();
 
 export function registerRoutineHandler(routine: string, fn: RoutineHandler): void {
   handlers.set(routine, fn);
+}
+
+function flattenFailuresFrom(result: Record<string, unknown>): string[] {
+  const ff = result.flattenFailures;
+  if (!Array.isArray(ff)) return [];
+  return ff.map(String);
 }
 
 export async function dispatchRoutine(routine: string): Promise<Record<string, unknown>> {
@@ -41,12 +49,22 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
   }
   const runId = begun.runId;
   const startedMs = Date.now();
+  const deadlineMs = startedMs + ROUTINE_RUN_DEADLINE_MS;
 
   try {
-    const result = await withAiRoutine(routine, handler);
+    const result = await withRoutineRunContext(
+      { runId, routine, tradingDate, slotKey: begun.slotKey, deadlineMs },
+      () => withAiRoutine(routine, handler),
+    );
+    const flattenFailures = flattenFailuresFrom(result);
     if (result.skipped) {
       await finishRoutineRun(runId, 'skipped', {
         skipReason: String(result.reason ?? 'skipped'),
+        startedMs,
+      });
+    } else if (flattenFailures.length > 0) {
+      await finishRoutineRun(runId, 'failed', {
+        errorMessage: flattenFailures.join('; '),
         startedMs,
       });
     } else {
@@ -54,6 +72,7 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     }
     return result;
   } catch (e) {
+    await logFailedAiCall(e, routine).catch(() => {});
     await finishRoutineRun(runId, 'failed', {
       errorMessage: String(e),
       startedMs,

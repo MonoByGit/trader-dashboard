@@ -194,6 +194,7 @@ export async function syncEquitySnapshots(equity: number): Promise<GuardRuntimeS
   return state;
 }
 
+/** ETF market-open BUYs today (ET); crypto uses countDailyCryptoTrades. */
 export async function countDailyTrades(): Promise<number> {
   if (!hasDb()) return 0;
   await initDb();
@@ -201,7 +202,21 @@ export async function countDailyTrades(): Promise<number> {
   const rows = await dbQuery<{ c: string }>(
     `SELECT COUNT(*)::text AS c FROM decisions
      WHERE decision='BUY'
-       AND routine IN ('market-open', 'crypto-scan')
+       AND routine = 'market-open'
+       AND (ts AT TIME ZONE 'America/New_York')::date = $1::date`,
+    [day]
+  );
+  return rows.length ? parseInt(rows[0].c, 10) : 0;
+}
+
+export async function countDailyCryptoTrades(): Promise<number> {
+  if (!hasDb()) return 0;
+  await initDb();
+  const day = todayEt();
+  const rows = await dbQuery<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM decisions
+     WHERE decision='BUY'
+       AND routine = 'crypto-scan'
        AND (ts AT TIME ZONE 'America/New_York')::date = $1::date`,
     [day]
   );

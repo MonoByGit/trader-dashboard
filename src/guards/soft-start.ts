@@ -2,6 +2,7 @@ import type { GuardConfig } from './config';
 
 export const SOFT_START_DEFAULTS = {
   maxNewPositionsPerDay: 2,
+  maxDailyCryptoTrades: 1,
   maxPositionSizePct: 5,
   maxTotalExposurePct: 15,
 } as const;
@@ -16,6 +17,10 @@ export function applySoftStartToGuardConfig(
     ...config,
     maxPositions: Math.min(config.maxPositions, SOFT_START_DEFAULTS.maxNewPositionsPerDay),
     maxDailyTrades: Math.min(config.maxDailyTrades, SOFT_START_DEFAULTS.maxNewPositionsPerDay),
+    maxDailyCryptoTrades: Math.min(
+      config.maxDailyCryptoTrades,
+      SOFT_START_DEFAULTS.maxDailyCryptoTrades,
+    ),
     maxPositionSizePct: Math.min(config.maxPositionSizePct, SOFT_START_DEFAULTS.maxPositionSizePct),
     maxTotalExposurePct: Math.min(config.maxTotalExposurePct, SOFT_START_DEFAULTS.maxTotalExposurePct),
   };
