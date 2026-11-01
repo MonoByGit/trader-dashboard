@@ -4,7 +4,7 @@
  * Usage: npx tsx scripts/run-momentum3.ts --start=2022-01-01 --end=2026-10-30 [--train=365 --test=90]
  * Vereist ALPACA_API_KEY en ALPACA_SECRET_KEY (alleen marktdata, geen orders).
  */
-import { m3Versions } from '../src/momentum3/config.js';
+import { m3Grid, m3Versions } from '../src/momentum3/config.js';
 import { walkForward } from '../src/momentum3/walkforward.js';
 import type { Bar } from '../src/momentum2/types.js';
 
@@ -42,7 +42,7 @@ async function main() {
   const trainDays = Number(arg('train') ?? 365), testDays = Number(arg('test') ?? 90);
   const warm = new Date(new Date(start).getTime() - 330 * 86400000).toISOString().slice(0, 10);
   const [crypto, etf] = m3Versions();
-  const grid = (c: typeof crypto) => [25, 30, 35].flatMap((r) => [c!.hardStopPct - 0.01, c!.hardStopPct, c!.hardStopPct + 0.01].map((h) => ({ rsiTrigger: c!.kind === 'etf' ? r + 10 : r, hardStopPct: h })));
+  
 
   const cb = await fetchBars('crypto', [...crypto!.universe], warm, end);
   const eb = await fetchBars('stocks', Array.from(new Set(['SPY', ...etf!.universe])), warm, end);
@@ -51,8 +51,8 @@ async function main() {
     { cfg: etf!, data: { barsBySymbol: eb, benchmark: eb.SPY! }, bench: 'SPY' },
   ];
   for (const r of runs) {
-    const w = await walkForward({ cfg: r.cfg, data: r.data, grid: grid(r.cfg), trainDays, testDays });
-    console.log(`\n${r.cfg.id}: out-of-sample ${w.oosReturnPct.toFixed(1)}% | ${r.bench} ${w.oosBenchmarkPct.toFixed(1)}% | verschil ${w.oosExcessPct.toFixed(1)} pp | ${w.windows.length} vensters`);
+    const w = await walkForward({ cfg: r.cfg, data: r.data, grid: m3Grid(r.cfg), trainDays, testDays });
+    console.log(`\n${r.cfg.id}: out-of-sample ${w.oosReturnPct.toFixed(1)}% | ${r.bench} ${w.oosBenchmarkPct.toFixed(1)}% | verschil ${w.oosExcessPct.toFixed(1)} pp | ${w.windows.length} vensters${w.haltedOn ? ` | verliesgrens geraakt ${w.haltedOn}, daarna uit` : ''}`);
     for (const x of w.windows) {
       console.log(`  ${x.testStart}..${x.testEnd}  ${JSON.stringify(x.chosen)}  test ${x.testReturnPct.toFixed(1)}% vs ${x.testBenchmarkPct.toFixed(1)}%  maxDD ${x.testMaxDrawdownPct.toFixed(1)}%  trades ${x.testTrades}`);
     }

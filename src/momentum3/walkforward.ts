@@ -17,6 +17,8 @@ export interface WalkForwardWindow {
 
 export interface WalkForwardResult {
   windows: WalkForwardWindow[];
+  /** Datum waarop de verliesgrens in een testvenster werd geraakt; daarna blijft de versie uit (zoals live). */
+  haltedOn: string | null;
   /** Samengestelde rendementen over alle testvensters (out-of-sample). */
   oosReturnPct: number;
   oosBenchmarkPct: number;
@@ -43,8 +45,13 @@ export async function walkForward(input: {
   grid: Array<Partial<M3Config>>;
   trainDays: number;
   testDays: number;
+  /** Na een gehalte venster geen verdere vensters meer (live-gedrag). Standaard aan. */
+  haltPersists?: boolean;
 }): Promise<WalkForwardResult> {
   const { cfg, data, grid, trainDays, testDays } = input;
+  const persist = input.haltPersists ?? true;
+  const fill = cfg.kind === 'crypto';
+  let haltedOn: string | null = null;
   const dates = data.benchmark.map(dateOf);
   const warm = cfg.smaDays;
   const windows: WalkForwardWindow[] = [];
@@ -55,13 +62,13 @@ export async function walkForward(input: {
     const trainSlice = slice(data, dates[a - warm]!, dates[a + trainDays - 1]!);
     let best: { p: Partial<M3Config>; s: number } | null = null;
     for (const p of grid) {
-      const r = await simulateVersion({ ...cfg, ...p }, trainSlice, { hooks: m3Hooks });
+      const r = await simulateVersion({ ...cfg, ...p }, trainSlice, { hooks: m3Hooks, fillGaps: fill });
       const s = score(r.metrics.totalReturnPct, r.metrics.maxDrawdownPct);
       if (!best || s > best.s) best = { p, s };
     }
     const tStart = a + trainDays;
     const testSlice = slice(data, dates[tStart - warm]!, dates[tStart + testDays - 1]!);
-    const t = await simulateVersion({ ...cfg, ...best!.p }, testSlice, { hooks: m3Hooks });
+    const t = await simulateVersion({ ...cfg, ...best!.p }, testSlice, { hooks: m3Hooks, fillGaps: fill });
     oos *= 1 + t.metrics.totalReturnPct / 100;
     bench *= 1 + t.metrics.spyReturnPct / 100;
     windows.push({
@@ -75,8 +82,12 @@ export async function walkForward(input: {
       testMaxDrawdownPct: t.metrics.maxDrawdownPct,
       testTrades: t.metrics.tradeCount,
     });
+    if (persist && t.book.halted) {
+      haltedOn = dates[tStart + testDays - 1]!;
+      break; // verliesgrens geraakt: de versie blijft uit tot iemand hem handmatig terugzet
+    }
   }
   const oosReturnPct = (oos - 1) * 100;
   const oosBenchmarkPct = (bench - 1) * 100;
-  return { windows, oosReturnPct, oosBenchmarkPct, oosExcessPct: oosReturnPct - oosBenchmarkPct };
+  return { windows, haltedOn, oosReturnPct, oosBenchmarkPct, oosExcessPct: oosReturnPct - oosBenchmarkPct };
 }
