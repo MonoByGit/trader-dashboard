@@ -6,6 +6,8 @@ import { decideDueRoutines, tradingDateEt, type CalendarDay } from '@scheduler/d
 import { alpaca } from './alpaca';
 import { dispatchRoutine } from './routine-dispatch';
 import { logGuardEvent } from '@/lib/guards/service';
+import { dbRun, hasDb } from '@/lib/db';
+import { runMomentumTick } from './momentum-tick';
 import { ensureSchema } from '@/lib/migrate';
 import {
   listRecentRunsByRoutine,
@@ -100,5 +102,36 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
     }
   }
 
+  // Momentum 2/3/5/6 in schaduw (in-process; de run-routes blijven dicht voor buiten).
+  try {
+    const momentum = await runMomentumTick(nowMs, calendarToday);
+    for (const [routine, r] of Object.entries(momentum)) {
+      results[routine] = r;
+      (due as string[]).push(routine);
+      const err = (r as { error?: string }).error;
+      if (err) tickErrors.push(`${routine}: ${err}`);
+    }
+  } catch (e) {
+    const msg = schedulerTickErrorMessage(e);
+    console.error('[scheduler-tick] momentum failed', { message: msg });
+    tickErrors.push(`momentum: ${msg}`);
+  }
+
+  await writeTickHeartbeat(nowMs, due, tickErrors);
+
   return tickErrors.length ? { tradingDate, due, results, tickErrors } : { tradingDate, due, results };
+}
+
+/** Hartslag voor het startscherm: laatste tick. Mag de tick nooit breken. */
+async function writeTickHeartbeat(nowMs: number, due: string[], errors: string[]): Promise<void> {
+  if (!hasDb()) return;
+  try {
+    await dbRun(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('scheduler_last_tick', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+      [JSON.stringify({ at: new Date(nowMs).toISOString(), due, errors: errors.length })],
+    );
+  } catch (e) {
+    console.error('[scheduler-tick] heartbeat failed', schedulerTickErrorMessage(e));
+  }
 }
