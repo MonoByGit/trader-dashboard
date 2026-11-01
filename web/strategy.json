@@ -12,6 +12,7 @@
     "take_profit_pct": 0.05,
     "cash_floor_pct": 0.10,
     "vix_threshold": 30,
+    "vol_stress_ratio_max": 1.15,
     "breakout_chase_limit_pct": 0.03,
     "rsi_min": 50,
     "rsi_max": 75,

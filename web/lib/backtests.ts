@@ -72,7 +72,9 @@ export async function listBacktestRuns(limit = 50): Promise<BacktestRunRow[]> {
   if (!hasDb()) return [];
   await ensureSchema();
   return dbQuery<BacktestRunRow>(
-    `SELECT * FROM backtest_runs ORDER BY created_at DESC LIMIT $1`,
+    `SELECT id, strategy_version, params, period_start::text AS period_start, period_end::text AS period_end,
+      status, metrics, error_message, started_at, finished_at, created_at
+     FROM backtest_runs ORDER BY created_at DESC LIMIT $1`,
     [limit],
   );
 }
@@ -80,7 +82,12 @@ export async function listBacktestRuns(limit = 50): Promise<BacktestRunRow[]> {
 export async function getBacktestRun(id: string): Promise<BacktestRunRow | null> {
   if (!hasDb()) return null;
   await ensureSchema();
-  const rows = await dbQuery<BacktestRunRow>(`SELECT * FROM backtest_runs WHERE id = $1`, [id]);
+  const rows = await dbQuery<BacktestRunRow>(
+    `SELECT id, strategy_version, params, period_start::text AS period_start, period_end::text AS period_end,
+      status, metrics, error_message, started_at, finished_at, created_at
+     FROM backtest_runs WHERE id = $1`,
+    [id],
+  );
   return rows[0] ?? null;
 }
 

@@ -1,3 +1,9 @@
+import {
+  DEFAULT_DAILY_BAR_LOOKBACK_DAYS,
+  fetchCryptoBars,
+  fetchStockDailyBars,
+} from './alpaca-bars';
+
 const BASE = process.env.ALPACA_BASE_URL ?? 'https://paper-api.alpaca.markets';
 const DATA = 'https://data.alpaca.markets';
 
@@ -37,27 +43,34 @@ export const alpaca = {
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
   placeOrder: (o: AlpacaOrderRequest) => post<AlpacaOrder>(`${BASE}/v2/orders`, o),
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
-  bars: (symbols: string[], timeframe = '1Day', limit = 30) =>
-    get<{ bars: Record<string, AlpacaBar[]> }>(
-      `${DATA}/v2/stocks/bars?symbols=${symbols.join(',')}&timeframe=${timeframe}&limit=${limit}&feed=iex`
-    ),
+  bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {
+    const bars = await fetchStockDailyBars({
+      symbols,
+      timeframe,
+      limit,
+      lookbackCalendarDays: DEFAULT_DAILY_BAR_LOOKBACK_DAYS,
+      adjustment: 'split',
+    });
+    return { bars };
+  },
   latestQuotes: (symbols: string[]) =>
     get<{ quotes: Record<string, AlpacaQuote> }>(
-      `${DATA}/v2/stocks/quotes/latest?symbols=${symbols.join(',')}&feed=iex`
+      `${DATA}/v2/stocks/quotes/latest?symbols=${symbols.join(',')}&feed=${process.env.ALPACA_DATA_FEED ?? 'iex'}`,
     ),
   calendar: (start: string, end: string) =>
     get<AlpacaCalendarDay[]>(`${BASE}/v2/calendar?start=${start}&end=${end}`),
-  cryptoBars: (symbols: string[], timeframe = '1Day', limit = 100) => {
-    const encoded = symbols.map((s) => encodeURIComponent(s)).join(',');
-    return get<{ bars: Record<string, AlpacaBar[]> }>(
-      `${DATA}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=${timeframe}&limit=${limit}`,
-    );
+  cryptoBars: async (symbols: string[], timeframe = '1Day', limit = 100) => {
+    const bars = await fetchCryptoBars({
+      symbols,
+      timeframe,
+      limit,
+      lookbackCalendarDays: DEFAULT_DAILY_BAR_LOOKBACK_DAYS,
+    });
+    return { bars };
   },
-  cryptoBarsRange: (symbols: string[], start: string, end: string, timeframe = '1Day') => {
-    const encoded = symbols.map((s) => encodeURIComponent(s)).join(',');
-    return get<{ bars: Record<string, AlpacaBar[]> }>(
-      `${DATA}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=${timeframe}&start=${start}&end=${end}&limit=10000`,
-    );
+  cryptoBarsRange: async (symbols: string[], start: string, end: string, timeframe = '1Day') => {
+    const bars = await fetchCryptoBars({ symbols, start, end, timeframe });
+    return { bars };
   },
   portfolioHistory: (period = '1A', timeframe = '1D') =>
     get<AlpacaPortfolioHistory>(

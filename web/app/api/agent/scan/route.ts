@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
 import { claudeJson, geminiText, MODELS } from '@/lib/ai';
+import { snapshotFromDailyBars } from '../../../../../src/indicators/live-snapshot';
+import { loadVolStressSnapshot } from '@/lib/vol-stress';
 
 const WATCHLIST = ['QQQ', 'SPY', 'XLK', 'XLI', 'XLY', 'IWM', 'XLF', 'XLE', 'XLV', 'XLU'];
 
@@ -35,42 +37,26 @@ export async function POST() {
     const equity = parseFloat(account.equity);
     const openSymbols = positions.map(p => p.symbol);
 
-    // Step 1: Gemini Flash — fast market data analysis per symbol
-    const marketSnapshots = await Promise.all(
-      WATCHLIST.map(async (symbol) => {
-        const symbolBars = bars[symbol] ?? [];
-        if (symbolBars.length < 5) return { symbol, skip: true };
-
-        const recent = symbolBars.slice(-20);
-        const closes = recent.map(b => b.c);
-        const sma20 = closes.reduce((a, b) => a + b, 0) / closes.length;
-        const lastClose = closes[closes.length - 1];
-        const volumes = recent.map(b => b.v);
-        const avgVol = volumes.slice(0, -1).reduce((a, b) => a + b, 0) / (volumes.length - 1);
-        const lastVol = volumes[volumes.length - 1];
-
-        // RSI(14) approximation
-        const gains: number[] = [];
-        const losses: number[] = [];
-        for (let i = 1; i < Math.min(15, closes.length); i++) {
-          const diff = closes[i] - closes[i - 1];
-          if (diff >= 0) gains.push(diff); else losses.push(-diff);
-        }
-        const avgGain = gains.reduce((a, b) => a + b, 0) / 14;
-        const avgLoss = losses.reduce((a, b) => a + b, 0) / 14;
-        const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
-
-        return {
-          symbol,
-          lastClose,
-          sma20: +sma20.toFixed(2),
-          aboveSma20: lastClose > sma20,
-          rsi: +rsi.toFixed(1),
-          volumeRatio: +(lastVol / avgVol).toFixed(2),
-          pct5d: +((lastClose - closes[closes.length - 6]) / closes[closes.length - 6] * 100).toFixed(2),
-        };
-      })
-    );
+    const volStress = await loadVolStressSnapshot();
+    const marketSnapshots = WATCHLIST.map((symbol) => {
+      const symbolBars = bars[symbol] ?? [];
+      const snap = snapshotFromDailyBars(symbol, symbolBars);
+      if (!snap) return { symbol, skip: true as const };
+      const closes = symbolBars.slice(-20).map((b) => b.c);
+      const lastClose = closes[closes.length - 1]!;
+      return {
+        symbol,
+        lastClose,
+        sma20: snap.sma20,
+        aboveSma20: snap.aboveSma20,
+        rsi: snap.rsi,
+        volumeRatio: snap.volumeRatio,
+        pct5d: +(
+          ((lastClose - closes[closes.length - 6]!) / closes[closes.length - 6]!) *
+          100
+        ).toFixed(2),
+      };
+    });
 
     // Step 2: Gemini Flash — quick news/sentiment check
     const newsPrompt = `You are a market analyst. Today is ${new Date().toISOString().split('T')[0]}.
@@ -102,7 +88,7 @@ ENTRY CRITERIA (all 6 must pass for BUY):
 1. trend_above_sma20: price > 20-day SMA
 2. momentum_rsi: RSI between 50-75 (momentum zone, not overbought)
 3. volume_above_avg: volume ratio > 1.1 (above average)
-4. vix_below_limit: VIX proxy — if SPY RSI < 30 or recent drop > 3%, FAIL
+4. vix_below_limit: VIXY stress ratio (VIXY close / 20d avg) ≤ ${volStress.maxRatio}; current ${volStress.ratio?.toFixed(2) ?? 'unknown'} — FAIL if above limit
 5. no_earnings_risk: no earnings or major events for underlying holdings today
 6. news_sentiment: no major negative sector news
 
@@ -110,7 +96,7 @@ POSITION SIZING: 25% of equity per position max.
 Do NOT recommend BUY for symbols already in open positions.
 If ${openSymbols.length} >= 3 positions open, output HOLD for all — no new entries.`;
 
-    const userPrompt = `Market data:\n${marketData}\n\nNews context:\n${JSON.stringify(parsedNews, null, 2)}\n\nEvaluate all ${WATCHLIST.length} symbols. Return JSON array:
+    const userPrompt = `Vol stress:\n${JSON.stringify(volStress)}\n\nMarket data:\n${marketData}\n\nNews context:\n${JSON.stringify(parsedNews, null, 2)}\n\nEvaluate all ${WATCHLIST.length} symbols. Return JSON array:
 [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{"trend_above_sma20":"pass"|"fail","momentum_rsi":"pass"|"fail","volume_above_avg":"pass"|"fail","vix_below_limit":"pass"|"fail","no_earnings_risk":"pass"|"fail","news_sentiment":"pass"|"fail"},"rationale":"<2 sentences>","agentNote":"<1 short sentence for display>","confidence":0.0-1.0}]`;
 
     const decisions = await claudeJson<ScanDecision[]>(MODELS.sonnet, system, userPrompt);

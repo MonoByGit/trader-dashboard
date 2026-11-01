@@ -3,6 +3,8 @@ import { dbQuery, initDb, hasDb } from '@/lib/db';
 import { alpaca } from '@/lib/alpaca';
 import { claudeJson, geminiText, MODELS } from '@/lib/ai';
 import strategy from '@/strategy.json';
+import { snapshotFromDailyBars } from '../../../../../src/indicators/live-snapshot';
+import { loadVolStressSnapshot } from '@/lib/vol-stress';
 
 export interface KickoffOption {
   symbol: string;
@@ -50,25 +52,29 @@ export async function GET() {
     const account = await alpaca.account().catch(() => null);
     const equity = account ? parseFloat(account.equity) : 100000;
 
-    const snapshots = strategy.symbols.map(symbol => {
-      const b = bars[symbol] ?? [];
-      if (b.length < 5) return null;
-      const closes = b.slice(-20).map((x: { c: number }) => x.c);
-      const sma20 = closes.reduce((a: number, v: number) => a + v, 0) / closes.length;
-      const last = closes[closes.length - 1];
-      const vols = b.slice(-20).map((x: { v: number }) => x.v);
-      const avgVol = vols.slice(0, -1).reduce((a: number, v: number) => a + v, 0) / (vols.length - 1);
-      const gains: number[] = [], losses: number[] = [];
-      for (let i = closes.length - 14; i < closes.length; i++) {
-        const d = closes[i] - closes[i - 1];
-        if (d >= 0) gains.push(d); else losses.push(-d);
-      }
-      const ag = gains.reduce((a, v) => a + v, 0) / 14;
-      const al = losses.reduce((a, v) => a + v, 0) / 14;
-      const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-      const pct5d = ((last - closes[closes.length - 6]) / closes[closes.length - 6] * 100);
-      return { symbol, last: +last.toFixed(2), sma20: +sma20.toFixed(2), aboveSma20: last > sma20, rsi: +rsi.toFixed(1), volRatio: +(vols[vols.length - 1] / avgVol).toFixed(2), pct5d: +pct5d.toFixed(2) };
-    }).filter(Boolean);
+    const volStress = await loadVolStressSnapshot();
+    const snapshots = strategy.symbols
+      .map((symbol) => {
+        const b = bars[symbol] ?? [];
+        const snap = snapshotFromDailyBars(symbol, b);
+        if (!snap) return null;
+        const closes = b.slice(-20).map((x: { c: number }) => x.c);
+        const last = closes[closes.length - 1]!;
+        const pct5d =
+          closes.length >= 6
+            ? ((last - closes[closes.length - 6]!) / closes[closes.length - 6]!) * 100
+            : 0;
+        return {
+          symbol,
+          last: snap.lastClose,
+          sma20: snap.sma20,
+          aboveSma20: snap.aboveSma20,
+          rsi: snap.rsi,
+          volRatio: snap.volumeRatio,
+          pct5d: +pct5d.toFixed(2),
+        };
+      })
+      .filter(Boolean);
 
     let newsCtx = '{}';
     try {
@@ -79,7 +85,7 @@ export async function GET() {
     const options = await claudeJson<KickoffOption[]>(
       MODELS.sonnet,
       `Je bent Momentum. Equity: $${equity.toFixed(0)}. Selecteer precies 3 ETFs voor de sessie van vandaag. Kies de beste setups op basis van momentum, trend en volume.`,
-      `Data: ${JSON.stringify(snapshots)}\nNieuws: ${newsCtx}\n\nGeef JSON array met precies 3 items: [{"symbol":"QQQ","thesis":"1-zin thesis","rationale":"2-zin onderbouwing","confidence":0.0-1.0,"criteria":{"trend_above_sma20":"pass/fail","momentum_rsi":"pass/fail","volume_above_avg":"pass/fail","vix_below_limit":"pass/fail","no_earnings_risk":"pass/fail","news_sentiment":"pass/fail"},"entryZone":"prijszone bijv $470-$472","stopLevel":"stop bijv $460 (−2%)"}]`,
+      `Vol stress: ${JSON.stringify(volStress)}\nData: ${JSON.stringify(snapshots)}\nNieuws: ${newsCtx}\n\nGeef JSON array met precies 3 items: [{"symbol":"QQQ","thesis":"1-zin thesis","rationale":"2-zin onderbouwing","confidence":0.0-1.0,"criteria":{"trend_above_sma20":"pass/fail","momentum_rsi":"pass/fail","volume_above_avg":"pass/fail","vix_below_limit":"pass/fail","no_earnings_risk":"pass/fail","news_sentiment":"pass/fail"},"entryZone":"prijszone bijv $470-$472","stopLevel":"stop bijv $460 (−2%)"}]`,
     );
 
     return NextResponse.json({ options, source: 'live' });

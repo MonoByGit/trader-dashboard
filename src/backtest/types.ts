@@ -33,7 +33,10 @@ export interface StrategyRulesLike {
   rsi_min: number;
   rsi_max: number;
   volume_ratio_min: number;
+  /** @deprecated UI legacy; vol gate uses vol_stress_ratio_max */
   vix_threshold: number;
+  /** VIXY close / 20d SMA; fail when above this (default 1.15). */
+  vol_stress_ratio_max?: number;
 }
 
 export interface BacktestEngineInput {

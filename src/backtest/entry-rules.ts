@@ -1,3 +1,7 @@
+import {
+  DEFAULT_VOL_STRESS_RATIO_MAX,
+  volStressPasses,
+} from '../volatility/vixy-stress';
 import type { StrategyRulesLike } from './types';
 import type { SymbolSnapshot } from './indicators';
 
@@ -8,7 +12,8 @@ export interface EntryCriteriaResult {
 }
 
 export interface EntryRulesContext {
-  vixClose?: number | null;
+  /** VIXY close divided by its 20-day average (not VIX spot). */
+  vixStressRatio?: number | null;
 }
 
 /** Deterministic strategy.json entry checks (no LLM / news). */
@@ -27,8 +32,10 @@ export function evaluateEntryRules(
     news_sentiment: 'skip',
   };
 
-  if (ctx.vixClose != null && Number.isFinite(ctx.vixClose)) {
-    criteria.vix_below_limit = ctx.vixClose < rules.vix_threshold ? 'pass' : 'fail';
+  const maxRatio = rules.vol_stress_ratio_max ?? DEFAULT_VOL_STRESS_RATIO_MAX;
+  if (ctx.vixStressRatio != null && Number.isFinite(ctx.vixStressRatio)) {
+    const ok = volStressPasses(ctx.vixStressRatio, maxRatio);
+    criteria.vix_below_limit = ok ? 'pass' : 'fail';
   }
 
   const scored = Object.values(criteria).filter((v) => v !== 'skip');

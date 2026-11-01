@@ -3,6 +3,7 @@ import { tradingDateEt } from '@scheduler/decide';
 import { filterByAssetClass } from '@/lib/asset-class';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { alpaca, type AlpacaBar, type AlpacaPosition } from './alpaca';
+import { fetchCryptoBars, fetchStockDailyBars } from './alpaca-bars';
 import { dbQuery, dbRun, hasDb } from './db';
 import { ensureSchema } from './migrate';
 
@@ -19,6 +20,31 @@ export interface SleeveSnapshotRow {
   benchmarkCumulativeReturnPct: number | null;
   baselineEquityUsd: number | null;
   baselineBenchmarkClose: number | null;
+}
+
+function addCalendarDaysYmd(ymd: string, deltaDays: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+async function fetchSpyBarsForRange(start: string, end: string): Promise<AlpacaBar[]> {
+  const bars = await fetchStockDailyBars({
+    symbols: ['SPY'],
+    start: addCalendarDaysYmd(start, -15),
+    end,
+    adjustment: 'split',
+  });
+  return bars.SPY ?? [];
+}
+
+async function fetchBtcBarsForRange(start: string, end: string): Promise<AlpacaBar[]> {
+  const bars = await fetchCryptoBars({
+    symbols: ['BTC/USD'],
+    start: addCalendarDaysYmd(start, -15),
+    end,
+  });
+  return bars['BTC/USD'] ?? [];
 }
 
 export interface DailySnapshot {
@@ -64,7 +90,7 @@ async function getBaseline(): Promise<{ equity: number; spyClose: number | null;
   return { equity: 0, spyClose: null, btcClose: null };
 }
 
-async function closeForDate(tradingDate: string, bars: AlpacaBar[]): Promise<number | null> {
+function closeForDate(tradingDate: string, bars: AlpacaBar[]): number | null {
   const bar = bars.find((b) => b.t.slice(0, 10) === tradingDate);
   if (bar) return bar.c;
   const prior = [...bars].reverse().find((b) => b.t.slice(0, 10) <= tradingDate);
@@ -117,14 +143,27 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
   const equity = parseFloat(account.equity);
   const cash = parseFloat(account.cash);
 
-  const spyBars = (await alpaca.bars(['SPY'], '1Day', 400)).bars?.SPY ?? [];
-  const btcBars = (await alpaca.cryptoBars(['BTC/USD'], '1Day', 400)).bars?.['BTC/USD'] ?? [];
-  const spyClose = await closeForDate(tradingDate, spyBars);
-  const btcClose = await closeForDate(tradingDate, btcBars);
+  const spyBars = await fetchSpyBarsForRange(
+    addCalendarDaysYmd(tradingDate, -400),
+    tradingDate,
+  );
+  const btcBars = await fetchBtcBarsForRange(
+    addCalendarDaysYmd(tradingDate, -400),
+    tradingDate,
+  );
+  const spyClose = closeForDate(tradingDate, spyBars);
+  const btcClose = closeForDate(tradingDate, btcBars);
 
   let baseline = await getBaseline();
   if (baseline.equity <= 0) {
     baseline = { equity, spyClose, btcClose };
+  } else {
+    if (baseline.spyClose == null && spyClose != null) {
+      baseline = { ...baseline, spyClose };
+    }
+    if (baseline.btcClose == null && btcClose != null) {
+      baseline = { ...baseline, btcClose };
+    }
   }
 
   const prev = await dbQuery<{ equity: string; spy_close: string | null; btc_close: string | null; sleeves: DailySnapshot['sleeves'] }>(
@@ -298,7 +337,6 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
     .map((ts, i) => ({ timestamp: ts * 1000, equity: equities[i] }))
     .filter((p) => Number.isFinite(p.equity));
 
-  const spyBars = (await alpaca.bars(['SPY'], '1Day', 400)).bars?.SPY ?? [];
   const start = opts?.start;
   const end = opts?.end;
 
@@ -314,11 +352,15 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
       return true;
     });
 
-  for (const row of inputs) {
-    row.spyClose = await closeForDate(row.tradingDate, spyBars);
-  }
-
   if (inputs.length === 0) return { written: 0 };
+
+  const rangeStart = inputs[0]!.tradingDate;
+  const rangeEnd = inputs[inputs.length - 1]!.tradingDate;
+  const spyBars = await fetchSpyBarsForRange(rangeStart, rangeEnd);
+
+  for (const row of inputs) {
+    row.spyClose = closeForDate(row.tradingDate, spyBars);
+  }
 
   const baselineEquity = parseFloat(process.env.SNAPSHOT_BASELINE_EQUITY ?? '') || inputs[0].equity;
   const baselineSpy = inputs[0].spyClose;
@@ -358,4 +400,60 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
   }
 
   return { written: computed.length };
+}
+
+/** Fill SPY close + benchmark returns on existing snapshot rows (chart backfill). */
+export async function backfillSpyClosesForExistingRows(opts?: {
+  start?: string;
+  end?: string;
+}): Promise<{ updated: number }> {
+  if (!hasDb()) return { updated: 0 };
+  await ensureSchema();
+
+  const full = await listSnapshots(2000);
+  if (full.length === 0) return { updated: 0 };
+
+  const rangeStart = opts?.start ?? full[0]!.trading_date;
+  const rangeEnd = opts?.end ?? full[full.length - 1]!.trading_date;
+  const spyBars = await fetchSpyBarsForRange(rangeStart, rangeEnd);
+
+  const baselineEquity =
+    full[0]!.baseline_equity ?? full[0]!.equity;
+  let baselineSpy = full[0]!.baseline_spy_close;
+
+  const inputs = full.map((row) => ({
+    tradingDate: row.trading_date,
+    equity: row.equity,
+    spyClose: closeForDate(row.trading_date, spyBars) ?? row.spy_close,
+  }));
+
+  if (baselineSpy == null) {
+    baselineSpy = inputs.find((r) => r.spyClose != null)?.spyClose ?? null;
+  }
+
+  const computed = computeSnapshotSeries(inputs, baselineEquity, baselineSpy);
+
+  let updated = 0;
+  for (const row of computed) {
+    if (row.tradingDate < rangeStart || row.tradingDate > rangeEnd) continue;
+    await dbRun(
+      `UPDATE daily_snapshots SET
+        spy_close = $2,
+        spy_daily_return_pct = $3,
+        spy_cumulative_return_pct = $4,
+        baseline_spy_close = COALESCE(baseline_spy_close, $5),
+        updated_at = NOW()
+       WHERE trading_date = $1::date`,
+      [
+        row.tradingDate,
+        row.spyClose,
+        row.spyDailyReturnPct,
+        row.spyCumulativeReturnPct,
+        row.baselineSpyClose,
+      ],
+    );
+    updated += 1;
+  }
+
+  return { updated };
 }
