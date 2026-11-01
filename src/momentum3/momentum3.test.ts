@@ -7,7 +7,7 @@ import { fillGaps } from '../momentum2/simulate';
 import { m3Hooks, planM3 } from './plan';
 import { m3StopLevel } from './risk';
 import { entryCandidates } from './signals';
-import { walkForward } from './walkforward';
+import { totalReturnPctFromEquityPath, totalReturnPctFromLevelPath, walkForward } from './walkforward';
 
 const [crypto, etf] = m3Versions(100_000);
 
@@ -200,9 +200,20 @@ describe('walk-forward', () => {
     });
     expect(r.windows.length).toBeGreaterThanOrEqual(2);
     for (const w of r.windows) expect(w.testStart > w.trainStart).toBe(true);
-    const manual = r.windows.reduce((a, w) => a * (1 + w.testReturnPct / 100), 1);
-    expect((manual - 1) * 100).toBeCloseTo(r.oosReturnPct, 6);
     expect(r.oosExcessPct).toBeCloseTo(r.oosReturnPct - r.oosBenchmarkPct, 6);
+  });
+
+  it('OOS totaalrendement volgt de gestitchte equity, niet het vensterproduct', () => {
+    const path = [{ equity: 100 }, { equity: 110 }, { equity: 105 }, { equity: 115 }];
+    expect(totalReturnPctFromEquityPath(path)).toBeCloseTo(15, 6);
+    const r1 = 10;
+    const r2 = (115 / 105 - 1) * 100;
+    const product = (1 + r1 / 100) * (1 + r2 / 100);
+    expect(totalReturnPctFromEquityPath(path)).not.toBeCloseTo((product - 1) * 100, 1);
+  });
+
+  it('OOS benchmarkrendement volgt de gestitchte benchmarkreeks', () => {
+    expect(totalReturnPctFromLevelPath([1, 1.05, 1.04])).toBeCloseTo(4, 6);
   });
 });
 
@@ -255,6 +266,7 @@ describe('walk-forward verliesgrens', () => {
     const persist = await walkForward(args);
     const reset = await walkForward({ ...args, haltPersists: false });
     expect(persist.haltedOn).not.toBeNull();
+    expect(persist.haltedOn).not.toBe(persist.windows[0]!.testEnd);
     expect(persist.windows).toHaveLength(1);
     expect(reset.windows.length).toBeGreaterThan(1);
     expect(reset.haltedOn).toBeNull();

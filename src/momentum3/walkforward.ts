@@ -71,6 +71,21 @@ function maxDrawdownFromSeries(values: number[]): number {
   return maxDd * 100;
 }
 
+/** Totaalrendement over aaneengesloten OOS-equitypunten (niet het product van vensterrendementen). */
+export function totalReturnPctFromEquityPath(path: Array<{ equity: number }>): number {
+  if (path.length === 0) return 0;
+  const first = path[0]!.equity;
+  const last = path[path.length - 1]!.equity;
+  return first > 0 ? (last / first - 1) * 100 : 0;
+}
+
+export function totalReturnPctFromLevelPath(path: number[]): number {
+  if (path.length === 0) return 0;
+  const first = path[0]!;
+  const last = path[path.length - 1]!;
+  return first > 0 ? (last / first - 1) * 100 : 0;
+}
+
 function estimateCostsPct(trades: TradeLogRow[], budgetUsd: number, feeBps: number, slippageBps = 2): number {
   const bps = (feeBps + slippageBps) / 10000;
   let costs = 0;
@@ -93,8 +108,6 @@ export async function walkForward(input: {
   const dates = data.benchmark.map(dateOf);
   const warm = cfg.smaDays;
   const windows: WalkForwardWindow[] = [];
-  let oos = 1;
-  let bench = 1;
   let carryBook: VersionBook | undefined;
   let haltedOn: string | null = null;
   let globalPeak = cfg.budgetUsd;
@@ -135,8 +148,6 @@ export async function walkForward(input: {
         benchmarkPath.push(px / benchOosStart);
       }
     }
-    oos *= 1 + t.metrics.totalReturnPct / 100;
-    bench *= 1 + t.metrics.spyReturnPct / 100;
     windows.push({
       trainStart: dates[a]!,
       testStart: dates[tStart]!,
@@ -149,15 +160,15 @@ export async function walkForward(input: {
       testTrades: t.metrics.tradeCount,
     });
     if (persist && t.book.halted) {
-      haltedOn = dates[tStart + testDays - 1]!;
+      haltedOn = t.metrics.haltedDate;
       break;
     }
   }
 
   const sells = allTrades.filter((t) => t.side === 'sell' && t.pnl != null);
   const wins = sells.filter((t) => (t.pnl ?? 0) > 0).length;
-  const oosReturnPct = (oos - 1) * 100;
-  const oosBenchmarkPct = (bench - 1) * 100;
+  const oosReturnPct = totalReturnPctFromEquityPath(equityPath);
+  const oosBenchmarkPct = totalReturnPctFromLevelPath(benchmarkPath);
   return {
     windows,
     haltedOn,
