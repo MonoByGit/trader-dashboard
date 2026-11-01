@@ -83,3 +83,13 @@ Optioneel (observability, degradeert veilig): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CH
 `MONO_API_KEY` (de `x-mono-key` van de eigen Mono API voor Open Brain-sync).
 
 Zie `.env.example` voor de volledige lijst.
+
+## Momentum-schaduwtick (M2, M3, M5, M6)
+
+`POST /api/scheduler/tick` (de bestaande 5-minuten-cron) draait nu ook de Momentum-schaduwstappen, in-process, zonder aparte cron:
+- M2/M3/M5 `execute`: 10 min na de open (venster 80 min); `decide`: 10 min na de close (venster 170 min).
+- M6 (crypto) `decide` + `execute`: na 00:15 UTC (venster 5 uur), ook in het weekend.
+- Alleen strategieën met `MOMENTUMn_ENABLED=1`; `MOMENTUMn_DRY_RUN=0` wordt geweigerd. Geen M4. Alleen schaduw, geen Alpaca-orders.
+- Per (strategie, stap, dag) een markering in `settings` (`m:tick:<naam>:<stap>:<dag>`); een fout markeert ook, zodat een halve stap niet dubbel boekt.
+- Logregel per stap: `[momentum-shadow-tick] momentum2:execute dag=... schaduw=ja uitkomst=...`.
+- Optioneel: `MOMENTUM_TICK_SECRET` (min. 16 tekens). Met header `x-momentum-tick: <secret>` mag `POST /api/momentum{2,3,5,6}/run` langs de app-login (Bearer CRON_SECRET blijft ook vereist). Niet gezet = pad dicht.

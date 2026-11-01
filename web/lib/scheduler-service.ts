@@ -7,6 +7,7 @@ import { alpaca } from './alpaca';
 import { dispatchRoutine } from './routine-dispatch';
 import { logGuardEvent } from '@/lib/guards/service';
 import { ensureSchema } from '@/lib/migrate';
+import { runMomentumShadowTick } from './momentum-tick';
 import {
   listRecentRunsByRoutine,
   listRunsForTradingDate,
@@ -98,6 +99,16 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
       }
       results[routine] = { error: msg };
     }
+  }
+
+  // Momentum 2/3/5/6: alleen schaduw, nooit een reden om de rest van de tick te laten falen.
+  try {
+    const momentum = await runMomentumShadowTick(nowMs, calendarToday);
+    if (Object.keys(momentum).length) results['momentum-shadow'] = momentum;
+  } catch (e) {
+    const msg = schedulerTickErrorMessage(e);
+    console.error('[scheduler-tick] momentum-shadow failed', msg);
+    tickErrors.push(`momentum-shadow: ${msg}`);
   }
 
   return tickErrors.length ? { tradingDate, due, results, tickErrors } : { tradingDate, due, results };

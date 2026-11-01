@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authEnabled, SESSION_COOKIE, verifySessionCookieValue } from '@/lib/auth';
-import { shouldBlockMisconfiguredProduction } from '../src/security/middleware-auth';
+import {
+  isMomentumTickRequest,
+  MOMENTUM_TICK_HEADER,
+  shouldBlockMisconfiguredProduction,
+} from '../src/security/middleware-auth';
 
 function isPublicAsset(pathname: string): boolean {
   if (pathname.startsWith('/_next')) return true;
@@ -29,6 +33,11 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith('/api/cron')) return NextResponse.next();
   if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
   if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
+
+  // Momentum-schaduwtick: alleen met geheime header (MOMENTUM_TICK_SECRET); de route eist daarna ook Bearer.
+  if (isMomentumTickRequest(pathname, req.method, req.headers.get(MOMENTUM_TICK_HEADER))) {
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith('/api/auth/')) return NextResponse.next();
 
