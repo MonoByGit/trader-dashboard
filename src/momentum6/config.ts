@@ -10,6 +10,13 @@ export interface M6Config extends VersionConfig {
   trailFromPeakPct: number;
 }
 
+function parsePctEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : fallback;
+}
+
 export function m6Config(paperCapitalUsd = PAPER_CAPITAL_USD): M6Config {
   return {
     id: 'm6-btc-breakout',
@@ -24,8 +31,8 @@ export function m6Config(paperCapitalUsd = PAPER_CAPITAL_USD): M6Config {
     rebalanceEveryDays: 1,
     hardStopPct: 0.2,
     trailingStopPct: 0.99,
-    maxLossPct: 0.15,
-    floatingBudget: false,
+    maxLossPct: parsePctEnv('MOMENTUM6_MAX_LOSS_PCT', 0.15),
+    floatingBudget: true,
     maxGrossPct: 1,
     driftTolerance: 1,
     vetoEnabled: false,

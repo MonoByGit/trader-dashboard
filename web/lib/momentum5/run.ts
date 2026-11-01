@@ -16,12 +16,11 @@ export async function runMomentum5(step: 'decide' | 'execute', nowMs = Date.now(
   const mode = resolveShadowMode(process.env, 'MOMENTUM5');
   if (!mode.run) return { skipped: true, reason: mode.reason };
 
-  const includeTqqq = process.env.MOMENTUM5_TQQQ === '1';
-  const cfgs = m5Versions(undefined, includeTqqq);
+  const cfgs = m5Versions();
   const store = postgresStore();
   const today = tradingDateEt(nowMs);
   const syms = Array.from(new Set(cfgs.flatMap((c) => [c.signalSymbol, c.riskSymbol, c.cashSymbol, 'SPY'])));
-  const raw = await fetchStockDailyBars({ symbols: syms, lookbackCalendarDays: 420, adjustment: 'split' });
+  const raw = await fetchStockDailyBars({ symbols: syms, lookbackCalendarDays: 420, adjustment: 'all' });
   const barsBySymbol: Record<string, Bar[]> = {};
   for (const [s, b] of Object.entries(raw)) barsBySymbol[s] = toBars(b);
   const spy = barsBySymbol.SPY ?? [];

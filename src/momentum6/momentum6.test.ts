@@ -50,14 +50,30 @@ describe('momentum6 signals', () => {
 });
 
 describe('momentum6 risk', () => {
-  it('intraday noodstop 20% bij entry', () => {
-    expect(m6StopLevel({ entryPrice: 100, highWater: 100 }, cfg).level).toBeCloseTo(80, 6);
+  it('geen intraday stop (disaster is close-based in plan)', () => {
+    expect(m6StopLevel({ entryPrice: 100, highWater: 100 }, cfg).level).toBeLessThan(0);
   });
 
   it('close-trail 12% vanaf peak close', () => {
     const bars = makeBars(15, 100, 0.01, 0.02);
     bars[bars.length - 1] = { ...bars[bars.length - 1]!, c: 80, l: 80, h: 82, o: 81 };
     expect(exitTrailFromPeakClose(bars, cfg, bars[0]!.t.slice(0, 10))).toBe(true);
+  });
+});
+
+describe('momentum6 hold', () => {
+  it('max hold telt vanaf signaal-datum, niet fill-datum', () => {
+    const bars = makeBars(30, 100, 0, 0.001);
+    const book = newBook(cfg, null, null);
+    book.positions['BTC/USD'] = {
+      qty: 1,
+      entryPrice: 100,
+      entryDate: bars[25]!.t.slice(0, 10),
+      highWater: 100,
+      signalDate: bars[10]!.t.slice(0, 10),
+    };
+    const orders = planM6({ barsBySymbol: { 'BTC/USD': bars }, book, cfg }).orders;
+    expect(orders.some((o) => o.reason.includes('10 dagen vast'))).toBe(true);
   });
 });
 

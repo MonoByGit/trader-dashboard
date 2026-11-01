@@ -17,9 +17,9 @@ export function breakoutEntry(bars: Bar[], cfg: Pick<M6Config, 'breakoutDays'>):
 export function exitTrailFromPeakClose(
   bars: Bar[],
   cfg: Pick<M6Config, 'trailFromPeakPct'>,
-  entryDate: string,
+  sinceDate: string,
 ): boolean {
-  const entryIdx = bars.findIndex((b) => dateOf(b) >= entryDate.slice(0, 10));
+  const entryIdx = bars.findIndex((b) => dateOf(b) >= sinceDate.slice(0, 10));
   if (entryIdx < 0 || bars.length < entryIdx + 2) return false;
   const closes = closesOf(bars);
   const hist = closes.slice(entryIdx, -1);

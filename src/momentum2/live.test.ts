@@ -91,6 +91,46 @@ describe('live idempotentie', () => {
   });
 });
 
+describe('live m5 fresh-up', () => {
+  it('armt fresh-up na schaduw stop op het risico-ETF', async () => {
+    const s = fakeStore();
+    const m5Like = {
+      ...cfg,
+      id: 'm5-test',
+      orderTag: 'm5',
+      riskSymbol: 'AAA',
+    } as typeof cfg & { orderTag: string; riskSymbol: string };
+    const hooks = {
+      stopFor: () => ({ level: 200, kind: 'trailing' as const }),
+      plan: async () => ({ orders: [] as OrderIntent[], vetoes: [] }),
+    };
+    const b = bars.map((x) => ({ ...x }));
+    const entry = b[118]!.c;
+    s.books[m5Like.id] = {
+      versionId: m5Like.id,
+      startDate: null,
+      startBudgetUsd: 5000,
+      startSpyPrice: 100,
+      cash: 0,
+      positions: { AAA: { qty: 10, entryPrice: entry, entryDate: '2024-01-01', highWater: entry * 1.2 } },
+      peakEquity: 5000,
+      halted: false,
+      haltReason: null,
+      lastRebalanceIndex: 1,
+    };
+    b[119] = { ...b[119]!, l: 50, o: entry, h: entry, c: entry };
+    await decideDay({
+      date,
+      cfgs: [m5Like],
+      hooks,
+      barsBySymbol: { AAA: b, SPY: spy },
+      benchmark: spy,
+      store: s.store,
+    });
+    expect(s.books[m5Like.id]!.strategyState?.m5AwaitFreshUp).toBe(true);
+  });
+});
+
 describe('live schaduwstops', () => {
   it('emuleert de harde stop op de dagbar voor schaduwboeken', async () => {
     const s = fakeStore();

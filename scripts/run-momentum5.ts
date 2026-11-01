@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
  * Walk-forward backtest Momentum 5 (nasdaq-trend) vs QQQ en SPY.
- * Usage: npx tsx scripts/run-momentum5.ts --start=2018-01-01 --end=2026-10-30 [--test=90]
+ * Usage: npx tsx scripts/run-momentum5.ts --start=2018-01-01 --end=2026-10-30 [--test=90] [--trail=0.30]
  * Vereist ALPACA_API_KEY en ALPACA_SECRET_KEY (marktdata).
  */
 import { dateOf } from '../src/momentum2/indicators.js';
@@ -53,8 +53,12 @@ async function main() {
   const start = arg('start') ?? '2018-01-01';
   const testDays = Number(arg('test') ?? 90);
   const warm = new Date(new Date(start).getTime() - 330 * 86400000).toISOString().slice(0, 10);
-  const includeTqqq = process.env.MOMENTUM5_TQQQ === '1';
-  const versions = m5Versions(100_000, includeTqqq);
+  const trailArg = arg('trail');
+  const closeDisaster = trailArg != null && trailArg !== '' ? Number(trailArg) : undefined;
+  const versions = m5Versions(100_000, {
+    includeTqqq: process.env.MOMENTUM5_TQQQ === '1',
+    closeDisasterStopPct: Number.isFinite(closeDisaster!) ? closeDisaster : undefined,
+  });
 
   for (const cfg of versions) {
     const syms = ['QQQ', 'QLD', 'TQQQ', 'BIL', 'SPY'];

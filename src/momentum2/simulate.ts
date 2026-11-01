@@ -1,6 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
 import { rotationHooks, type StrategyHooks } from './hooks';
+import { armFreshUpAfterStop } from '../momentum5/signals';
 import { checkStopLevel, lossLimitBreached } from './risk';
 import type { Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
 
@@ -39,6 +40,19 @@ export interface SimResult {
     halted: boolean;
     haltedDate: string | null;
   };
+}
+
+/** Eén pending order per symbool en kant (geen dubbele buy na carry + plan). */
+export function dedupeOrderIntents(orders: OrderIntent[]): OrderIntent[] {
+  const seen = new Set<string>();
+  const out: OrderIntent[] = [];
+  for (const o of orders) {
+    const key = `${o.symbol}:${o.side}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(o);
+  }
+  return out;
 }
 
 /** Zet bars op de kalender: ontbrekende dagen na de eerste bar krijgen een vlakke bar op het vorige slot. */
@@ -146,7 +160,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         const px = bar.o * (1 + slip);
         const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
         const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
-        const t = applyBuy(book, o.symbol, qty, px, date, o.reason);
+        const t = applyBuy(book, o.symbol, qty, px, date, o.reason, o.signalDate ? { signalDate: o.signalDate } : undefined);
         if (t) trades.push(t);
       }
     }
@@ -174,13 +188,8 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
-        const riskSym = 'riskSymbol' in cfg ? (cfg as { riskSymbol: string }).riskSymbol : null;
-        if (riskSym && sym === riskSym && r.kind === 'trailing') {
-          book.strategyState = {
-            ...(book.strategyState ?? {}),
-            m5AwaitFreshUp: true,
-            m5DippedForFresh: false,
-          };
+        if (cfg.orderTag === 'm5' && 'riskSymbol' in cfg && sym === (cfg as { riskSymbol: string }).riskSymbol) {
+          armFreshUpAfterStop(book);
         }
       } else {
         pos.highWater = Math.max(pos.highWater, bar.h);
@@ -204,7 +213,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     const due = book.lastRebalanceIndex === null || i - book.lastRebalanceIndex >= cfg.rebalanceEveryDays;
     if (book.halted || due) {
       const plan = await hooks.plan({ barsBySymbol: upTo(date), book, cfg, veto: opts.veto });
-      pending = [...pending, ...plan.orders];
+      pending = dedupeOrderIntents([...pending, ...plan.orders]);
       for (const v of plan.vetoes) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
       if (!book.halted) book.lastRebalanceIndex = i;
     }

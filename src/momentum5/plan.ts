@@ -4,7 +4,8 @@ import type { StrategyHooks } from '../momentum2/hooks';
 import type { Bar, OrderIntent, VersionBook } from '../momentum2/types';
 import type { M5Config } from './config';
 import { M5_AWAIT_FRESH_UP, m5StopLevel } from './risk';
-import { bandTarget, freshUpSignal } from './signals';
+import { exitCloseDisasterFromPeak } from './signals-close';
+import { armFreshUpAfterStop, bandTarget, freshUpSignal } from './signals';
 
 function desiredHold(book: VersionBook, cfg: M5Config, qqqBars: Bar[]): 'risk' | 'cash' {
   const bt = bandTarget(qqqBars, cfg);
@@ -37,6 +38,24 @@ export function planM5(input: {
     for (const [symbol, p] of Object.entries(book.positions)) {
       orders.push({ symbol, side: 'sell', qty: p.qty, reason: `versie dicht: ${book.haltReason ?? 'verliesgrens'}` });
     }
+    return { orders };
+  }
+
+  const riskBars = barsBySymbol[cfg.riskSymbol] ?? [];
+  const riskPos = book.positions[cfg.riskSymbol];
+  if (
+    riskPos &&
+    riskBars.length > 0 &&
+    exitCloseDisasterFromPeak(riskBars, cfg.closeDisasterStopPct, riskPos.entryDate)
+  ) {
+    orders.push({
+      symbol: cfg.riskSymbol,
+      side: 'sell',
+      qty: riskPos.qty,
+      reason: `${(cfg.closeDisasterStopPct * 100).toFixed(0)}% close disaster`,
+    });
+    armFreshUpAfterStop(book);
+    orders.sort((a, b) => (a.side === b.side ? 0 : a.side === 'sell' ? -1 : 1));
     return { orders };
   }
 

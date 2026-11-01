@@ -20,7 +20,7 @@ describe('momentumStopClientPrefix', () => {
   it('M3/M5 gebruiken tags met version id', () => {
     const [crypto] = m3Versions();
     expect(momentumStopClientPrefix(crypto!)).toBe(`m3s-${crypto!.id}-`);
-    const [qld, tqqq] = m5Versions(100_000, true);
+    const [qld, tqqq] = m5Versions(100_000, { includeTqqq: true });
     expect(momentumStopClientPrefix(qld!)).toBe(`m5s-${qld!.id}-`);
     expect(momentumStopClientPrefix(tqqq!)).toBe(`m5s-${tqqq!.id}-`);
   });
@@ -35,7 +35,7 @@ describe('momentumClientOrderId', () => {
     expect(a).toContain(crypto!.id);
     expect(b).toContain(etf!.id);
 
-    const [qld, tqqq] = m5Versions(100_000, true);
+    const [qld, tqqq] = m5Versions(100_000, { includeTqqq: true });
     const c = momentumClientOrderId(qld!, '2026-11-01', 'BIL', 'b');
     const d = momentumClientOrderId(tqqq!, '2026-11-01', 'BIL', 'b');
     expect(c).not.toBe(d);

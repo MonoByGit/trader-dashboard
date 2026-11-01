@@ -1,10 +1,10 @@
 import type { Position } from '../momentum2/types';
 import type { M6Config } from './config';
 
-/** Alleen brede intraday-noodstop (20%); close-exits zitten in planM6. */
+/** Geen intraday disaster: 20% close-trail in planM6 (volgende open), geen bad-tick triggers. */
 export function m6StopLevel(
-  pos: Pick<Position, 'entryPrice' | 'highWater'>,
-  cfg: M6Config,
+  _pos: Pick<Position, 'entryPrice' | 'highWater'>,
+  _cfg: M6Config,
 ): { level: number; kind: 'hard' | 'trailing' } {
-  return { level: pos.entryPrice * (1 - cfg.hardStopPct), kind: 'hard' };
+  return { level: -1, kind: 'hard' };
 }

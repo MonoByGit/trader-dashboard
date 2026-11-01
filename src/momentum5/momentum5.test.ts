@@ -23,9 +23,10 @@ describe('momentum5 modus', () => {
 });
 
 describe('momentum5 config', () => {
-  it('floating budget aan, trailing default 25%', () => {
+  it('floating budget aan, close disaster default 30%', () => {
     expect(cfg!.floatingBudget).toBe(true);
-    expect(cfg!.trailingStopPct).toBe(0.25);
+    expect(cfg!.closeDisasterStopPct).toBe(0.3);
+    expect(cfg!.trailingStopPct).toBeGreaterThan(0.9);
   });
 });
 
@@ -66,9 +67,9 @@ describe('momentum5 signals', () => {
 });
 
 describe('momentum5 risk', () => {
-  it('25% trailing op QLD, geen stop op BIL', () => {
+  it('geen intraday stop op QLD, geen stop op BIL', () => {
     const p = { entryPrice: 100, highWater: 120 };
-    expect(m5StopLevel(p, cfg!, 'QLD').level).toBeCloseTo(90, 6);
+    expect(m5StopLevel(p, cfg!, 'QLD').level).toBeLessThan(0);
     expect(m5StopLevel(p, cfg!, 'BIL').level).toBeLessThan(0);
   });
 });
@@ -113,7 +114,22 @@ describe('momentum5 simulate', () => {
     expect(exp).toBeGreaterThanOrEqual(0.95);
   });
 
-  it('na trailing stop blijft cash tot fresh up crossing', () => {
+  it('close disaster armt fresh-up en plant verkoop', () => {
+    const book = newBook(cfg!, '2024-01-01', 100);
+    book.positions.QLD = { qty: 10, entryPrice: 50, entryDate: '2020-06-01', highWater: 80 };
+    const qld = makeBars(400, 50, 0.001, 0.02);
+    for (let i = 350; i < qld.length - 1; i++) {
+      qld[i] = { ...qld[i]!, c: 100, h: 100, l: 100, o: 100 };
+    }
+    const last = qld.length - 1;
+    qld[last] = { ...qld[last]!, c: 65, h: 66, l: 64, o: 66 };
+    const qqq = qqqTrend(400, 0.001);
+    const orders = planM5({ barsBySymbol: { QQQ: qqq, QLD: qld, BIL: [] }, book, cfg: cfg! }).orders;
+    expect(orders.some((o) => o.side === 'sell' && o.symbol === 'QLD')).toBe(true);
+    expect(book.strategyState?.[M5_AWAIT_FRESH_UP]).toBe(true);
+  });
+
+  it('na disaster armt fresh-up blijft cash tot fresh up crossing', () => {
     const book = newBook(cfg!, '2024-01-01', 100);
     book.strategyState = { [M5_AWAIT_FRESH_UP]: true, [M5_DIPPED_FOR_FRESH]: false };
     book.positions.BIL = { qty: 100, entryPrice: 1, entryDate: '2024-01-01', highWater: 1 };

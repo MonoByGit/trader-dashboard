@@ -56,6 +56,8 @@ export interface Position {
   entryDate: string;
   /** Hoogste koers sinds instap (intraday high). */
   highWater: number;
+  /** Signaal-datum (close); fill kan later zijn (M6 hold-teller). */
+  signalDate?: string;
 }
 
 export interface EquityLogRow {
@@ -108,6 +110,8 @@ export type OrderIntent = {
   notionalUsd?: number;
   qty?: number;
   reason: string;
+  /** Close-datum van het instapsignaal (uitvoering volgende open). */
+  signalDate?: string;
 };
 
 export interface VetoVerdict {

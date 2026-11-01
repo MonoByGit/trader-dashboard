@@ -3,10 +3,10 @@
 QLD wanneer QQQ boven 200d SMA × 1,02; BIL wanneer QQQ onder × 0,98; in de band huidige positie houden. Signaal op de close, uitvoering bij de volgende open.
 
 - Budget 10% paperkapitaal, verliesgrens 20% van de sleeve.
-- 25% trailing stop op QLD (configureerbaar via `trailingStopPct`); na hit naar BIL tot QQQ eerst op/onder de bovenband was en opnieuw boven SMA×1,02 sluit.
+- Geen intraday trailing: **close-disaster** default 30% onder hoogste close sinds instap, uitstap volgende open (`closeDisasterStopPct`, env `MOMENTUM5_CLOSE_DISASTER_PCT`, backtest `--trail=0.30`). Hoofduitstap blijft het QQQ-bandregime. Na disaster naar BIL tot fresh-up (dip onder bovenband, dan opnieuw erboven).
 - BIL heeft bewust geen stop (cash-sleeve, geen risicopositie).
 - `floatingBudget: true` (compounding binnen de sleeve; verliesgrens t.o.v. startbudget).
-- Optioneel: `MOMENTUM5_TQQQ=1` activeert een TQQQ-variant (3% budget) naast de hoofdversie.
+- Optioneel: `MOMENTUM5_TQQQ=1` activeert een **experimentele** TQQQ-variant (3% budget, hogere verliesgrens dan de close-disaster).
 
 Aan: `MOMENTUM5_ENABLED=1`. Schaduw alleen; `MOMENTUM5_DRY_RUN=0` wordt geweigerd (zelfde regel als M2/M3).
 
