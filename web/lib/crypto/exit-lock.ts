@@ -43,6 +43,17 @@ export async function acquireExitLock(symbol: string): Promise<{ acquired: boole
   }
 }
 
+/** True if this worker still owns the DB lock (another worker may have taken over). */
+export async function verifyExitLockOwner(symbol: string, owner: string): Promise<boolean> {
+  if (!hasDb()) return true;
+  await ensureSchema();
+  const rows = await dbQuery<{ key: string }>(
+    `UPDATE settings SET updated_at = NOW() WHERE key = $1 AND value = $2 RETURNING key`,
+    [exitLockKey(symbol), owner],
+  );
+  return rows.length > 0;
+}
+
 export async function releaseExitLock(symbol: string, owner: string): Promise<void> {
   const compact = alpacaPositionSymbol(symbol);
   inProcessExitLocks.delete(compact);

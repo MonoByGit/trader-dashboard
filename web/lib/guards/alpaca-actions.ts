@@ -29,9 +29,15 @@ export async function flattenAllPositions(): Promise<{ closed: string[]; errors:
   for (const p of positions) {
     try {
       if (isCryptoSymbol(p.symbol) || p.asset_class === 'crypto') {
-        const result = await exitCryptoPosition(p.symbol, 'emergency_flatten', {
+        let result = await exitCryptoPosition(p.symbol, 'emergency_flatten', {
           mode: 'close_position',
         });
+        if (result.skippedReason === 'locked') {
+          await new Promise((r) => setTimeout(r, 2500));
+          result = await exitCryptoPosition(p.symbol, 'emergency_flatten', {
+            mode: 'close_position',
+          });
+        }
         if (result.exited || result.skippedReason === 'no_qty' || result.skippedReason === 'broker_filled') {
           closed.push(p.symbol);
         } else if (result.skippedReason) {

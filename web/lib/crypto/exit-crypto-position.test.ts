@@ -2,11 +2,19 @@ import { jest } from '@jest/globals';
 
 const store = new Map<string, string>();
 const lockRows = new Map<string, { owner: string; updatedAt: number }>();
+let lockVerifyFails = false;
 const logGuardEvent = jest.fn(async () => {});
 
 await jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => true,
   dbQuery: jest.fn(async (sql: string, params?: unknown[]) => {
+    if (sql.includes('UPDATE settings SET updated_at') && sql.includes('RETURNING key')) {
+      if (lockVerifyFails) return [];
+      const key = params?.[0] as string;
+      const owner = params?.[1] as string;
+      if (lockRows.get(key)?.owner === owner) return [{ key }];
+      return [];
+    }
     if (sql.includes("INTERVAL '2 minutes'")) {
       const key = params?.[0] as string;
       const owner = params?.[1] as string;
@@ -68,6 +76,7 @@ describe('exitCryptoPosition', () => {
   beforeEach(() => {
     store.clear();
     lockRows.clear();
+    lockVerifyFails = false;
     clearInProcessExitLocksForTests();
     openOrders.mockReset();
     cancelOrder.mockReset();
@@ -148,5 +157,38 @@ describe('exitCryptoPosition', () => {
     unblock();
     getOrder.mockResolvedValue({ status: 'filled' });
     await first;
+  });
+
+  it('does not sell when DB lock is lost before placeOrder', async () => {
+    openOrders.mockResolvedValue([]);
+    positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.01', qty_available: '0.01' }]);
+    lockVerifyFails = true;
+
+    const result = await exitCryptoPosition('BTCUSD', 'software_stop');
+
+    expect(result).toEqual({ exited: false, skippedReason: 'lock_lost' });
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(logGuardEvent).toHaveBeenCalledWith(
+      'crypto_exit_lock_lost',
+      expect.any(String),
+      expect.objectContaining({ symbol: 'BTCUSD' }),
+    );
+  });
+
+  it('logs crypto_exit_sell_unfilled when market sell does not fill in time', async () => {
+    store.set('crypto_stop:BTCUSD', '{}');
+    openOrders.mockResolvedValue([]);
+    positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.01', qty_available: '0.01' }]);
+    getOrder.mockResolvedValue({ status: 'accepted' });
+
+    const result = await exitCryptoPosition('BTCUSD', 'software_stop');
+
+    expect(result.exited).toBe(true);
+    expect(logGuardEvent).toHaveBeenCalledWith(
+      'crypto_exit_sell_unfilled',
+      expect.stringContaining('mkt-1'),
+      expect.objectContaining({ symbol: 'BTCUSD', orderId: 'mkt-1' }),
+    );
+    expect(store.has('crypto_stop:BTCUSD')).toBe(true);
   });
 });

@@ -223,11 +223,22 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
       const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
       reportQty = protection.qty;
     } catch (e) {
-      await saveCryptoStop(c.symbol, stopPrice, qty);
-      await logGuardEvent('crypto_buy_unprotected', String(e), {
-        symbol: c.symbol,
-        orderId: order.id,
-      });
+      try {
+        await saveCryptoStop(c.symbol, stopPrice, qty);
+      } catch (stopErr) {
+        await logGuardEvent('crypto_buy_unprotected', `stop save failed: ${String(stopErr)}`, {
+          symbol: c.symbol,
+          orderId: order.id,
+        });
+      }
+      try {
+        await logGuardEvent('crypto_buy_unprotected', String(e), {
+          symbol: c.symbol,
+          orderId: order.id,
+        });
+      } catch {
+        /* guard log must not block BUY recording */
+      }
     }
     orders.push({ symbol: c.symbol, qty: reportQty, orderId: order.id });
     await saveDecision({

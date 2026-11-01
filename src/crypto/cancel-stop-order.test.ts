@@ -4,7 +4,9 @@ import { awaitStopOrderCanceled } from './cancel-stop-order.js';
 describe('awaitStopOrderCanceled', () => {
   it('polls after 422 when order is pending_cancel', async () => {
     const cancelOrder = jest.fn(async () => {
-      throw new Error('Alpaca DELETE x: 422 body');
+      throw new Error(
+        'Alpaca DELETE https://paper-api.alpaca.markets/v2/orders/o-1: 422 {"message":"pending"}',
+      );
     });
     const getOrder = jest
       .fn()

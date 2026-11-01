@@ -26,6 +26,9 @@ export async function DELETE(req: Request) {
   try {
     const { symbol } = await req.json();
     const result = await closePositionAfterCancelingOrders(String(symbol ?? ''));
+    if (result && typeof result === 'object' && 'alreadyClosed' in result) {
+      return NextResponse.json(result, { status: 409 });
+    }
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

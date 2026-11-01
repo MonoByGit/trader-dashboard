@@ -7,7 +7,7 @@ import { positionQtyAvailable } from '../../../src/crypto/buy-fill-qty';
 import { alpacaPositionSymbol, alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
-import { acquireExitLock, releaseExitLock } from './exit-lock';
+import { acquireExitLock, releaseExitLock, verifyExitLockOwner } from './exit-lock';
 
 export type CryptoExitReason = 'software_stop' | 'take_profit' | 'manual_close' | 'emergency_flatten' | (string & {});
 
@@ -16,7 +16,7 @@ export type ExitCryptoPositionMode = 'market_sell' | 'close_position';
 export type ExitCryptoPositionResult = {
   exited: boolean;
   orderId?: string;
-  skippedReason?: 'locked' | 'no_qty' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
+  skippedReason?: 'locked' | 'lock_lost' | 'no_qty' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
 };
 
 export async function clearCryptoExitSettings(symbol: string): Promise<void> {
@@ -38,6 +38,34 @@ async function logExitReason(symbol: string, reason: CryptoExitReason, detail: s
     return;
   }
   await logGuardEvent('crypto_exit', detail, { symbol, reason });
+}
+
+async function awaitPositionFlat(
+  symbol: string,
+  options?: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> },
+): Promise<boolean> {
+  const attempts = options?.attempts ?? 12;
+  const delayMs = options?.delayMs ?? 250;
+  const sleep = options?.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  for (let i = 0; i < attempts; i++) {
+    const positions = await alpaca.positions();
+    const pos = positions.find((p) => alpacaSymbolsEqual(p.symbol, symbol));
+    const sellQty = pos ? positionQtyAvailable(pos) : 0;
+    if (!(sellQty > 0)) return true;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return false;
+}
+
+async function abortIfLockLost(
+  symbol: string,
+  owner: string,
+  reason: CryptoExitReason,
+): Promise<ExitCryptoPositionResult | null> {
+  const stillOwner = await verifyExitLockOwner(symbol, owner);
+  if (stillOwner) return null;
+  await logGuardEvent('crypto_exit_lock_lost', 'Exit lock lost before sell', { symbol, reason });
+  return { exited: false, skippedReason: 'lock_lost' };
 }
 
 async function cancelOpenSellOrders(symbol: string, reason: CryptoExitReason): Promise<ExitCryptoPositionResult | null> {
@@ -103,11 +131,25 @@ export async function exitCryptoPosition(
     }
 
     if (mode === 'close_position') {
+      const lockBlock = await abortIfLockLost(symbol, owner, reason);
+      if (lockBlock) return lockBlock;
       await logExitReason(symbol, reason, `Close position ${sellQty} (${reason})`);
       await alpaca.closePosition(alpacaPositionSymbol(symbol));
-      await clearCryptoExitSettings(symbol);
+      const flat = await awaitPositionFlat(symbol);
+      if (flat) {
+        await clearCryptoExitSettings(symbol);
+      } else {
+        await logGuardEvent('crypto_exit_sell_unfilled', 'Position still open after close request', {
+          symbol,
+          reason,
+          mode,
+        });
+      }
       return { exited: true };
     }
+
+    const lockBlock = await abortIfLockLost(symbol, owner, reason);
+    if (lockBlock) return lockBlock;
 
     await logExitReason(symbol, reason, `Market sell ${sellQty} (${reason})`);
     const order = await alpaca.placeOrder({
@@ -120,6 +162,12 @@ export async function exitCryptoPosition(
     const filled = await awaitOrderFilled(order.id, (id) => alpaca.getOrder(id));
     if (filled) {
       await clearCryptoExitSettings(symbol);
+    } else {
+      await logGuardEvent('crypto_exit_sell_unfilled', `Sell order ${order.id} not filled in time`, {
+        symbol,
+        orderId: order.id,
+        reason,
+      });
     }
     return { exited: true, orderId: order.id };
   } finally {

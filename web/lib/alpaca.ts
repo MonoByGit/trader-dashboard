@@ -9,11 +9,20 @@ import {
 } from '../../src/alpaca/paper-host';
 import { logAlpacaModeAtStartup } from './alpaca-startup';
 import { alpacaPositionCloseUrl } from '../../src/alpaca/symbol-path';
+import { AlpacaHttpError } from '../../src/alpaca/alpaca-http-error';
 
 logAlpacaModeAtStartup();
 
 const BASE = alpacaTradingBaseUrl();
 const DATA = 'https://data.alpaca.markets';
+const FETCH_TIMEOUT_MS = 15_000;
+
+function fetchInit(init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  };
+}
 
 function headers() {
   return {
@@ -29,22 +38,25 @@ async function parseJsonBody<T>(res: Response): Promise<T> {
 }
 
 async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: headers(), cache: 'no-store' });
-  if (!res.ok) throw new Error(`Alpaca GET ${url}: ${res.status} ${await res.text()}`);
+  const res = await fetch(url, fetchInit({ headers: headers(), cache: 'no-store' }));
+  if (!res.ok) throw new AlpacaHttpError('GET', url, res.status, await res.text());
   return parseJsonBody<T>(res);
 }
 
 async function post<T>(url: string, body: unknown, options?: { trading?: boolean }): Promise<T> {
   if (options?.trading) assertAlpacaPaperTrading(BASE);
-  const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Alpaca POST ${url}: ${res.status} ${await res.text()}`);
+  const res = await fetch(
+    url,
+    fetchInit({ method: 'POST', headers: headers(), body: JSON.stringify(body) }),
+  );
+  if (!res.ok) throw new AlpacaHttpError('POST', url, res.status, await res.text());
   return parseJsonBody<T>(res);
 }
 
 async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> {
   if (options?.trading) assertAlpacaPaperTrading(BASE);
-  const res = await fetch(url, { method: 'DELETE', headers: headers() });
-  if (!res.ok) throw new Error(`Alpaca DELETE ${url}: ${res.status} ${await res.text()}`);
+  const res = await fetch(url, fetchInit({ method: 'DELETE', headers: headers() }));
+  if (!res.ok) throw new AlpacaHttpError('DELETE', url, res.status, await res.text());
   return parseJsonBody<T>(res);
 }
 

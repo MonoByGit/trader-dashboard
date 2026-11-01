@@ -1,14 +1,13 @@
 import type { AssetClassId } from './types';
 
-const CRYPTO_SUFFIX = '/USD';
-
 /** Alpaca crypto pairs use BASE/USD; equities are plain tickers. */
 export function classifySymbol(symbol: string, assetClassHint?: string | null): AssetClassId {
   if (assetClassHint === 'crypto' || assetClassHint === 'us_equity') {
     return assetClassHint === 'crypto' ? 'crypto' : 'etf';
   }
   if (symbol.includes('/')) return 'crypto';
-  if (symbol.endsWith('USD') && symbol.length > 3 && symbol.includes(CRYPTO_SUFFIX)) return 'crypto';
+  // Alpaca position symbols omit the slash (e.g. BTCUSD); avoid matching equity tickers that rarely end in USD.
+  if (!symbol.includes('/') && /^[A-Z0-9]{2,12}USD$/.test(symbol)) return 'crypto';
   return 'etf';
 }
 

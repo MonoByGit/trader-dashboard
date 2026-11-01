@@ -9,6 +9,12 @@ jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => true,
   dbQuery: jest.fn(async (sql: string, params?: unknown[]) => {
     if (dbDown) throw new Error('db down');
+    if (sql.includes('UPDATE settings SET updated_at') && sql.includes('RETURNING key')) {
+      const key = params?.[0] as string;
+      const owner = params?.[1] as string;
+      if (lockRows.get(key)?.owner === owner) return [{ key }];
+      return [];
+    }
     if (sql.includes('ON CONFLICT') && sql.includes("INTERVAL '2 minutes'")) {
       const key = params?.[0] as string;
       const owner = params?.[1] as string;
