@@ -23,10 +23,23 @@ export type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
 type UsageMeta = { input?: number; output?: number; finishReason?: string | null };
 
-const aiRoutineContext = new AsyncLocalStorage<{ routine?: string; decisionId?: string }>();
+const aiRoutineContext = new AsyncLocalStorage<{
+  routine?: string;
+  decisionId?: string;
+  assetClass?: 'etf' | 'crypto';
+}>();
 
 export function withAiRoutine<T>(routine: string, fn: () => Promise<T>): Promise<T> {
-  return aiRoutineContext.run({ routine }, fn);
+  const parent = aiRoutineContext.getStore();
+  return aiRoutineContext.run({ ...parent, routine }, fn);
+}
+
+export function withAiCallContext<T>(
+  ctx: { routine?: string; assetClass?: 'etf' | 'crypto' },
+  fn: () => Promise<T>,
+): Promise<T> {
+  const parent = aiRoutineContext.getStore();
+  return aiRoutineContext.run({ ...parent, ...ctx }, fn);
 }
 
 async function logAiUsage(
@@ -48,6 +61,8 @@ async function logAiUsage(
       outputTokens: tokens.outputTokens,
       finishReason: usage?.finishReason ?? null,
       decisionId: ctx?.decisionId,
+      assetClass:
+        ctx?.assetClass ?? (ctx?.routine?.startsWith('crypto') ? 'crypto' : 'etf'),
     });
   } catch {
     /* logging mag routines nooit breken */
@@ -253,6 +268,58 @@ async function generateJsonCompletion(
   return geminiGenerate(model, system, user, maxTokens, true);
 }
 
+async function generateNewsCompletion(
+  system: string,
+  user: string,
+  maxTokens: number,
+): Promise<JsonCompletion> {
+  const provider = activeProvider();
+  const model = modelForTier('fast');
+  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
+  return geminiGenerate(model, system, user, maxTokens, true, { disableThinking: true });
+}
+
+export type AgentNewsLookupResult = {
+  json: string;
+  status: 'ok' | 'empty' | 'failed';
+  finishReason: string | null;
+  error?: string;
+};
+
+/** News pre-call via active provider (DeepSeek/Gemini/Claude), logged to ai_calls. */
+export async function agentNewsLookup(
+  userPrompt: string,
+  options?: { routine?: string; assetClass?: 'etf' | 'crypto'; maxTokens?: number },
+): Promise<AgentNewsLookupResult> {
+  const routine = options?.routine ?? 'premarket-news';
+  const assetClass = options?.assetClass ?? 'etf';
+  const maxTokens = options?.maxTokens ?? 2048;
+  const system =
+    'You are a market analyst. Reply with JSON only (no markdown): an object mapping each symbol to a brief safe/risky note for today.';
+
+  return withAiCallContext({ routine, assetClass }, async () => {
+    try {
+      const { text, finishReason } = await generateNewsCompletion(system, userPrompt, maxTokens);
+      const truncated = finishReason === 'length' || finishReason === 'MAX_TOKENS';
+      const json = safeNewsJsonFromText(text, finishReason);
+      if (truncated) {
+        console.warn('[agentNewsLookup] truncated output', { routine, finishReason, provider: activeProvider() });
+      }
+      if (json === '{}') {
+        const status = truncated ? 'failed' : 'empty';
+        console.warn('[agentNewsLookup] no usable news JSON', { routine, status, finishReason });
+        return { json: '{}', status, finishReason };
+      }
+      return { json, status: 'ok', finishReason };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      console.error('[agentNewsLookup] error', { routine, provider: activeProvider(), error });
+      return { json: '{}', status: 'failed', finishReason: null, error };
+    }
+  });
+}
+
 export async function agentText(system: string, user: string, maxTokens = 2048, tier: Tier = 'fast'): Promise<string> {
   return generateText(system, user, maxTokens, tier);
 }
@@ -349,22 +416,11 @@ export function claudeJsonArray<T>(
 
 export { safeNewsJsonFromText };
 
-async function geminiNewsText(model: string, prompt: string, maxTokens: number): Promise<string> {
-  const tierModel = modelForTier(tierFromLegacyModel(model));
-  const { text, finishReason } = await geminiGenerate(tierModel, '', prompt, maxTokens, false, {
-    disableThinking: true,
-  });
-  const news = safeNewsJsonFromText(text, finishReason);
-  if (news === '{}' && finishReason && finishReason !== 'STOP') {
-    console.warn('[geminiText] news fallback empty', { finishReason });
-  }
-  return news;
-}
-
 export function claudeText(model: string, system: string, user: string, maxTokens = 2048): Promise<string> {
   return agentText(system, user, maxTokens, tierFromLegacyModel(model));
 }
 
-export function geminiText(model: string, prompt: string, maxTokens = 2048): Promise<string> {
-  return geminiNewsText(model, prompt, maxTokens);
+/** @deprecated name kept for call sites — uses active AGENT_PROVIDER, not Gemini-only. */
+export function geminiText(_model: string, prompt: string, maxTokens = 2048): Promise<string> {
+  return agentNewsLookup(prompt, { maxTokens }).then((r) => r.json);
 }
