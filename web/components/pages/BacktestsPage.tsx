@@ -10,7 +10,7 @@ type RunRow = {
   period_start: string;
   period_end: string;
   status: string;
-  metrics: Record<string, number | null> | null;
+  metrics: (Record<string, number | null> & { benchmarkSymbol?: string }) | null;
   error_message: string | null;
   created_at: string;
 };
@@ -107,6 +107,10 @@ export function BacktestsPage() {
   }
 
   const m = selected?.metrics;
+  const benchLabel =
+    typeof m?.benchmarkSymbol === 'string' && m.benchmarkSymbol.length > 0
+      ? m.benchmarkSymbol
+      : 'SPY';
 
   return (
     <div className="page-stack">
@@ -169,7 +173,7 @@ export function BacktestsPage() {
           {loading && <p className="muted">Laden…</p>}
           {selected && (
             <>
-              <h2 className="h3">Equity vs SPY</h2>
+              <h2 className="h3">Equity vs {benchLabel}</h2>
               {chartPoints.length >= 2 ? (
                 <EquityChart points={chartPoints} comparePoints={spyPoints} valueFormat="usd" />
               ) : (
@@ -186,7 +190,7 @@ export function BacktestsPage() {
                     <tr>
                       <th />
                       <th>Strategie</th>
-                      <th>SPY B&H</th>
+                      <th>{benchLabel} B&H</th>
                     </tr>
                   </thead>
                   <tbody>

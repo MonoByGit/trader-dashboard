@@ -118,4 +118,33 @@ describe('backtest engine', () => {
     expect(result.equityCurve[2]!.spyEquity).toBeGreaterThan(result.equityCurve[0]!.spyEquity);
   });
 
+  it('crypto: fractional benchmark and trades move BTC buy-and-hold off flat capital', () => {
+    const dates = ['2026-01-02', '2026-01-03', '2026-01-04'];
+    const btcCloses = [90_000, 99_000, 108_000];
+    const btcBars = barsFromCloses(dates, btcCloses);
+    const sym = 'BTC/USD';
+    const flat = barsFromCloses(dates, btcCloses);
+
+    const result = runBacktest({
+      tradingDates: dates,
+      barsBySymbol: { [sym]: flat },
+      spyBars: btcBars,
+      symbols: [sym],
+      rules: { ...rules, rsi_min: 99 },
+      params: {
+        initialCapital: 100_000,
+        fillMode: 'next_open',
+        slippageBps: 0,
+        commissionPerShare: 0,
+        minCommissionUsd: 0,
+      },
+      assetClass: 'crypto',
+      benchmarkSymbol: 'BTC',
+    });
+
+    expect(result.metrics.benchmarkSymbol).toBe('BTC');
+    expect(result.metrics.spyTotalReturnPct).toBeCloseTo(20, 0);
+    expect(result.equityCurve[0]!.spyEquity).toBeLessThan(100_500);
+    expect(result.equityCurve[2]!.spyEquity).toBeGreaterThan(result.equityCurve[0]!.spyEquity);
+  });
 });

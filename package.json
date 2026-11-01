@@ -33,6 +33,7 @@
       "^@scheduler/routine-lock$": "<rootDir>/src/scheduler/routine-lock.ts",
       "^@scheduler/run-status$": "<rootDir>/src/scheduler/run-status.ts",
       "^@scheduler/(.*)$": "<rootDir>/src/scheduler/$1",
+      "^@snapshots/baseline$": "<rootDir>/src/snapshots/baseline.ts",
       "^@snapshots/returns$": "<rootDir>/src/snapshots/returns.ts",
       "^@snapshots/(.*)$": "<rootDir>/src/snapshots/$1",
       "^@ai-cost/pricing$": "<rootDir>/src/ai-cost/pricing.ts",

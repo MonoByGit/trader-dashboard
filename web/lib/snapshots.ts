@@ -1,4 +1,9 @@
-import { baselineFromSnapshotRow } from '@snapshots/baseline';
+import {
+  baselineFromSnapshotRow,
+  firstNonZeroEquity,
+  resolveSnapshotBaselineEquity,
+  snapshotsForChart,
+} from '@snapshots/baseline';
 import { computeSnapshotSeries } from '@snapshots/returns';
 import { tradingDateEt } from '@scheduler/decide';
 import { filterByAssetClass } from '@/lib/asset-class';
@@ -310,7 +315,7 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
 export async function listSnapshots(limit = 400): Promise<DailySnapshot[]> {
   if (!hasDb()) return [];
   await ensureSchema();
-  return dbQuery<DailySnapshot>(
+  const rows = await dbQuery<DailySnapshot>(
     `SELECT trading_date::text AS trading_date, equity::float8 AS equity, cash::float8 AS cash, positions,
       spy_close::float8 AS spy_close, btc_close::float8 AS btc_close,
       momentum_daily_return_pct::float8 AS momentum_daily_return_pct,
@@ -320,9 +325,12 @@ export async function listSnapshots(limit = 400): Promise<DailySnapshot[]> {
       baseline_equity::float8 AS baseline_equity,
       baseline_spy_close::float8 AS baseline_spy_close,
       sleeves
-     FROM daily_snapshots ORDER BY trading_date ASC LIMIT $1`,
+     FROM daily_snapshots
+     WHERE equity > 0
+     ORDER BY trading_date ASC LIMIT $1`,
     [limit],
   );
+  return snapshotsForChart(rows);
 }
 
 interface PortfolioHistoryPoint {
@@ -370,8 +378,14 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
     row.spyClose = closeForDate(row.tradingDate, spyBars);
   }
 
-  const baselineEquity = parseFloat(process.env.SNAPSHOT_BASELINE_EQUITY ?? '') || inputs[0].equity;
-  const baselineSpy = inputs[0].spyClose;
+  const configuredBaseline = parseFloat(process.env.SNAPSHOT_BASELINE_EQUITY ?? '');
+  const baselineEquity = resolveSnapshotBaselineEquity(
+    inputs,
+    Number.isFinite(configuredBaseline) && configuredBaseline > 0 ? configuredBaseline : null,
+  );
+  const fundedRow = firstNonZeroEquity(inputs);
+  const baselineSpy =
+    fundedRow?.spyClose ?? inputs.find((r) => r.spyClose != null)?.spyClose ?? null;
 
   const computed = computeSnapshotSeries(inputs, baselineEquity, baselineSpy);
 
