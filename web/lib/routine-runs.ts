@@ -42,7 +42,9 @@ function normalizeTimestamp(v: unknown): string | null {
   return String(v);
 }
 
-function normalizeRoutineRunRow(row: RoutineRunRow & { started_at?: unknown; finished_at?: unknown }): RoutineRunRow {
+export function normalizeRoutineRunRow(
+  row: RoutineRunRow & { started_at?: unknown; finished_at?: unknown },
+): RoutineRunRow {
   return {
     ...row,
     started_at: normalizeTimestamp(row.started_at) ?? '',

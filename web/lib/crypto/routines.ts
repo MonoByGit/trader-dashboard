@@ -21,7 +21,6 @@ import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
 import { passesCryptoEntryCriteria } from '../../../src/crypto/entry-criteria';
 import { dailyBarsExcludingTodayPartial } from '../../../src/alpaca/daily-bars-partial';
-import { tradingDateEt } from '@scheduler/decide';
 import {
   enforceSoftwareCryptoStops,
   enforceSoftwareCryptoTakeProfit,
@@ -47,14 +46,20 @@ const RULES = cryptoStrategy.rules as {
   volume_ratio_min: number;
 };
 
+function utcDateYmd(nowMs = Date.now()): string {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+
 function buildSnapshots(
   symbols: string[],
   bars: Record<string, { c: number; v: number; t?: string }[]>,
-  todayEt: string,
 ) {
+  const todayUtc = utcDateYmd();
   return symbols
     .map((symbol) => {
-      const completed = dailyBarsExcludingTodayPartial(bars[symbol] ?? [], todayEt);
+      const completed = dailyBarsExcludingTodayPartial(bars[symbol] ?? [], todayUtc, {
+        calendar: 'utc',
+      });
       return snapshotFromDailyBars(symbol, completed);
     })
     .filter(Boolean);
@@ -143,8 +148,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     return { routine: 'crypto-scan', note: 'Max crypto positions', asset_class: 'crypto' };
   }
 
-  const todayEt = tradingDateEt(Date.now());
-  const snapshots = buildSnapshots(symbols, bars, todayEt);
+  const snapshots = buildSnapshots(symbols, bars);
   let candidates: { symbol: string; action: 'buy' | 'skip'; reason: string }[];
   try {
     candidates = await claudeJsonArray<{ symbol: string; action: 'buy' | 'skip'; reason: string }>(
@@ -168,6 +172,9 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
       !symbols.includes(c.symbol) ||
       hasCryptoPosition(cryptoPositions, c.symbol)
     ) {
+      if (c.action === 'skip' && c.reason?.trim()) {
+        console.info(`[crypto-scan] AI skip ${c.symbol}: ${c.reason.trim()}`);
+      }
       continue;
     }
     if (openSymbols.length + orders.length >= RULES.max_positions) break;

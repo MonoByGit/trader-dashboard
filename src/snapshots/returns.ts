@@ -1,3 +1,5 @@
+import { compareYmdAsc } from '../dates/pg.js';
+
 /** Daily and cumulative return math for Momentum vs SPY snapshots. */
 
 export function dailyReturnPct(prev: number, curr: number): number | null {
@@ -31,7 +33,7 @@ export function computeSnapshotSeries(
   baselineEquity: number,
   baselineSpyClose: number | null,
 ): SnapshotComputed[] {
-  const sorted = [...rows].sort((a, b) => a.tradingDate.localeCompare(b.tradingDate));
+  const sorted = [...rows].sort((a, b) => compareYmdAsc(a.tradingDate, b.tradingDate));
   let prevEquity: number | null = null;
   let prevSpy: number | null = null;
 
