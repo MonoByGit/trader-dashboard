@@ -32,6 +32,7 @@ export interface SimResult {
     maxDrawdownPct: number;
     tradeCount: number;
     halted: boolean;
+    haltedDate: string | null;
   };
 }
 
@@ -90,6 +91,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
   let pending: OrderIntent[] = [];
   let peakEq = book.peakEquity;
   let maxDd = 0;
+  let haltedDate: string | null = book.halted ? book.haltReason?.match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? null : null;
   const gapMiss: Record<string, { miss: number; lastClose: number }> = {};
 
   const markPrices = (date: string): Record<string, number> => {
@@ -166,6 +168,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     if (!book.halted && lossLimitBreached(eq, book, cfg)) {
       book.halted = true;
       book.haltReason = `verliesgrens ${(cfg.maxLossPct * 100).toFixed(0)}% geraakt op ${date}`;
+      haltedDate = date;
     }
 
     // 4. Besluit voor morgen.
@@ -197,6 +200,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
       maxDrawdownPct: maxDd * 100,
       tradeCount: trades.length,
       halted: book.halted,
+      haltedDate,
     },
   };
 }

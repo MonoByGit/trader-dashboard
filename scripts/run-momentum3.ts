@@ -40,7 +40,8 @@ async function fetchBars(kind: 'stocks' | 'crypto', symbols: string[], start: st
 
 function printSummary(label: string, w: Awaited<ReturnType<typeof walkForward>>, bench: string) {
   console.log(`\n=== ${label} ===`);
-  console.log(`Out-of-sample ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${w.haltedOn ? `, verliesgrens ${w.haltedOn}` : ''})`);
+  const halt = w.haltedOn ? `, verliesgrens op ${w.haltedOn}` : '';
+  console.log(`Out-of-sample ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${halt})`);
   console.log(
     `Return ${w.oosReturnPct.toFixed(1)}% | ${bench} ${w.oosBenchmarkPct.toFixed(1)}% | excess ${w.oosExcessPct.toFixed(1)} pp`,
   );
