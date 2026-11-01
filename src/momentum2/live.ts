@@ -1,7 +1,6 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
 import { rotationHooks, type StrategyHooks } from './hooks';
-import { armFreshUpAfterStop } from '../momentum5/signals';
 import { momentumClientOrderId, momentumStopClientPrefix } from './order-tag';
 import { checkStopLevel, lossLimitBreached } from './risk';
 import type {
@@ -87,9 +86,7 @@ export async function decideDay<C extends VersionConfig = VersionConfig>(input: 
           if (r.hit) {
             const t = applySell(book, sym, pos.qty, r.fillPrice, date, `${r.kind} stop (schaduw)`);
             if (t) { await store.logTrade(cfg.id, t); }
-            if (cfg.orderTag === 'm5' && 'riskSymbol' in cfg && sym === (cfg as { riskSymbol: string }).riskSymbol) {
-              armFreshUpAfterStop(book);
-            }
+            hooks.onStopFilled?.({ book, cfg, symbol: sym, date });
             await store.logDecision({ date, versionId: cfg.id, kind: 'stop', symbol: sym, detail: `${r.kind} stop geraakt @ ${r.fillPrice.toFixed(2)} (schaduw)` });
             continue;
           }
@@ -164,9 +161,7 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       if (f) {
         const t = applySell(book, sym, f.qty, f.price, date, 'stop (broker)');
         if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
-        if (cfg.orderTag === 'm5' && 'riskSymbol' in cfg && sym === (cfg as { riskSymbol: string }).riskSymbol) {
-          armFreshUpAfterStop(book);
-        }
+        hooks.onStopFilled?.({ book, cfg, symbol: sym, date });
         await store.logDecision({ date, versionId: cfg.id, kind: 'stop', symbol: sym, detail: `stop gevuld @ ${f.price.toFixed(2)}` });
       }
     }

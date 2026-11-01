@@ -1,9 +1,13 @@
+import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
+import type { OpenStopOrder } from '../../../src/momentum2/reconcile-disaster-stops';
+import { brokerStopIsCrypto } from '../../../src/momentum2/reconcile-disaster-stops';
 import { alpaca } from '../alpaca';
 import type { Broker, Fill } from '../../../src/momentum2/live';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stopPrefix = (clientPrefix: string, symbol: string) => `${clientPrefix}${symbol}-`;
 const OPEN = new Set(['new', 'accepted', 'held', 'pending_new', 'partially_filled']);
+const STOP_LIMIT_OFFSET = 0.995;
 
 /**
  * NIET AANSLUITEN op de route voordat de checklist in docs/momentum-2.md (echte orders) is afgewerkt.
@@ -31,13 +35,47 @@ export function alpacaPaperBroker(): Broker {
       const prefix = stopPrefix(o.stopClientPrefix, o.symbol);
       const open = (await alpaca.openOrders(100)).filter((x) => x.client_order_id?.startsWith(prefix) && OPEN.has(x.status));
       const cur = open.find((x) => x.stop_price);
-      if (cur && Number(cur.stop_price) >= o.stopPrice && Number(cur.qty) === o.qty) return; // alleen omhoog
+      const stopPx = Math.max(o.stopPrice, cur ? Number(cur.stop_price) : 0);
+      if (cur && Number(cur.stop_price) >= stopPx - 1e-6 && Number(cur.qty) === o.qty) return;
       for (const x of open) await alpaca.cancelOrder(x.id);
-      await alpaca.placeOrder({
-        symbol: o.symbol, qty: o.qty, side: 'sell', type: 'stop', time_in_force: 'gtc',
-        stop_price: Math.max(o.stopPrice, cur ? Number(cur.stop_price) : 0),
-        client_order_id: `${prefix}${Date.now()}`,
-      });
+      const clientOrderId = `${prefix}${Math.round(stopPx * 100)}`;
+      if (brokerStopIsCrypto(o.symbol)) {
+        const limit = +(stopPx * STOP_LIMIT_OFFSET).toFixed(2);
+        await alpaca.placeOrder({
+          symbol: o.symbol,
+          qty: o.qty,
+          side: 'sell',
+          type: 'stop_limit',
+          time_in_force: 'gtc',
+          stop_price: stopPx,
+          limit_price: limit,
+          client_order_id: clientOrderId,
+        });
+      } else {
+        await alpaca.placeOrder({
+          symbol: o.symbol,
+          qty: o.qty,
+          side: 'sell',
+          type: 'stop',
+          time_in_force: 'gtc',
+          stop_price: stopPx,
+          client_order_id: clientOrderId,
+        });
+      }
+    },
+
+    async listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]> {
+      const all = await alpaca.openOrders(200);
+      return all
+        .filter((x) => x.client_order_id?.startsWith(o.stopClientPrefix) && OPEN.has(x.status) && x.side === 'sell')
+        .map((x) => ({
+          symbol: x.symbol,
+          qty: Number(x.qty),
+          stopPrice: Number(x.stop_price ?? 0),
+          clientOrderId: x.client_order_id ?? '',
+          orderId: x.id,
+        }))
+        .filter((x) => x.stopPrice > 0 && x.qty > 0);
     },
 
     async cancelStop(o) {
@@ -60,11 +98,32 @@ export function alpacaPaperBroker(): Broker {
 }
 
 /** Schaduwmodus: geen enkele order naar Alpaca, vullingen op de laatste koers. */
-export function shadowBroker(lastPrice: Record<string, number>): Broker {
+type ShadowStop = { symbol: string; qty: number; stopPrice: number; clientOrderId: string };
+
+export function shadowBroker(lastPrice: Record<string, number>): Broker & { listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]> } {
+  const stops: ShadowStop[] = [];
   return {
     marketOrder: async (o) => ({ orderId: `shadow-${o.clientOrderId}`, qty: o.qty, price: lastPrice[o.symbol] ?? 0 }),
-    setStop: async () => {},
-    cancelStop: async () => {},
+    setStop: async (o) => {
+      const prefix = stopPrefix(o.stopClientPrefix, o.symbol);
+      const clientOrderId = `${prefix}${Math.round(o.stopPrice * 100)}`;
+      const rest = stops.filter((s) => !s.clientOrderId.startsWith(prefix) || !alpacaSymbolsEqual(s.symbol, o.symbol));
+      rest.push({ symbol: o.symbol, qty: o.qty, stopPrice: o.stopPrice, clientOrderId });
+      stops.length = 0;
+      stops.push(...rest);
+    },
+    cancelStop: async (o) => {
+      const prefix = stopPrefix(o.stopClientPrefix ?? `m2s-${o.versionId}-`, o.symbol);
+      for (let i = stops.length - 1; i >= 0; i--) {
+        if (stops[i]!.clientOrderId.startsWith(prefix) && alpacaSymbolsEqual(stops[i]!.symbol, o.symbol)) {
+          stops.splice(i, 1);
+        }
+      }
+    },
     stopFill: async () => null,
+    listOpenStops: async (o) =>
+      stops
+        .filter((s) => s.clientOrderId.startsWith(o.stopClientPrefix))
+        .map((s) => ({ ...s, orderId: s.clientOrderId })),
   };
 }

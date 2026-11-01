@@ -28,6 +28,7 @@ export async function middleware(req: NextRequest) {
   // Cron/scheduler: Bearer CRON_SECRET (geen app-cookie).
   if (pathname.startsWith('/api/cron')) return NextResponse.next();
   if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
+  if (pathname.startsWith('/api/momentum')) return NextResponse.next();
   if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
 
   if (pathname.startsWith('/api/auth/')) return NextResponse.next();

@@ -6,7 +6,11 @@ Aan: `MOMENTUM6_ENABLED=1`. Schaduw alleen; `MOMENTUM6_DRY_RUN=0` wordt geweiger
 
 Boek: `m:book:m6-btc-breakout`. Orders: prefix `m6-`.
 
-Alle exits inclusief 20% disaster zijn **close-based** en vullen bij de volgende open (geen intraday stops; slechte ticks raken de low niet). Kosten: 25 bp fee + slippage in sim.
+De 20% disaster zit alleen in de **broker GTC stop_limit** (zelfde afstand als peak-close); planM6 plant die exit niet dubbel. Overige uitstappen (trail, 10d low, max hold) blijven close-based op de volgende open.
+
+**Bad ticks:** live crypto gebruikt `stop_limit` met limit ~0,5% onder stop (zie `web/lib/momentum2/broker.ts`). In backtest/sim negeert `barLowForStopCheck` een dag-low die meer dan 15% onder zowel open als close ligt (`src/momentum2/bad-tick.ts`).
+
+Kosten: 25 bp fee + slippage in sim.
 
 Walk-forward: raakt de sleeve de verliesgrens, dan blijft hij gehalt voor de rest van de run (bedoeld).
 

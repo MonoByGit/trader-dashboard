@@ -23,3 +23,15 @@ export function resolveShadowMode(env: Record<string, string | undefined>, name:
   }
   return { run: true, shadow: true };
 }
+
+/** M5/M6: standaard schaduw; `DRY_RUN=0` + safety layer → papier bij Alpaca (nog steeds geen live). */
+export type MomentumPaperMode =
+  | { run: false; reason: string }
+  | { run: true; shadow: true }
+  | { run: true; shadow: false; paper: true };
+
+export function resolveMomentumPaperMode(env: Record<string, string | undefined>, name: string): MomentumPaperMode {
+  if (env[`${name}_ENABLED`] !== '1') return { run: false, reason: `${name}_ENABLED staat niet aan` };
+  if (env[`${name}_DRY_RUN`] === '0') return { run: true, shadow: false, paper: true };
+  return { run: true, shadow: true };
+}

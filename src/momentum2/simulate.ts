@@ -1,7 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
+import { barLowForStopCheck } from './bad-tick';
 import { rotationHooks, type StrategyHooks } from './hooks';
-import { armFreshUpAfterStop } from '../momentum5/signals';
 import { checkStopLevel, lossLimitBreached } from './risk';
 import type { Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
 
@@ -42,17 +42,11 @@ export interface SimResult {
   };
 }
 
-/** Eén pending order per symbool en kant (geen dubbele buy na carry + plan). */
+/** Eén pending order per symbool en kant; nieuwste plan wint over een meegedragen order. */
 export function dedupeOrderIntents(orders: OrderIntent[]): OrderIntent[] {
-  const seen = new Set<string>();
-  const out: OrderIntent[] = [];
-  for (const o of orders) {
-    const key = `${o.symbol}:${o.side}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(o);
-  }
-  return out;
+  const byKey = new Map<string, OrderIntent>();
+  for (const o of orders) byKey.set(`${o.symbol}:${o.side}`, o);
+  return [...byKey.values()];
 }
 
 /** Zet bars op de kalender: ontbrekende dagen na de eerste bar krijgen een vlakke bar op het vorige slot. */
@@ -184,13 +178,12 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         pos.highWater = Math.max(pos.highWater, bar.h);
         continue;
       }
-      const r = checkStopLevel(st.level, st.kind, bar);
+      const effLow = barLowForStopCheck(bar);
+      const r = checkStopLevel(st.level, st.kind, { o: bar.o, l: effLow });
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
-        if (cfg.orderTag === 'm5' && 'riskSymbol' in cfg && sym === (cfg as { riskSymbol: string }).riskSymbol) {
-          armFreshUpAfterStop(book);
-        }
+        hooks.onStopFilled?.({ book, cfg, symbol: sym, date });
       } else {
         pos.highWater = Math.max(pos.highWater, bar.h);
       }

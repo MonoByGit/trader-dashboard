@@ -1,3 +1,4 @@
+import { armFreshUpAfterStop } from '../momentum5/signals';
 import { MOMENTUM2_BASE } from './config';
 import { makeBars } from './fixtures';
 import { decideDay, executeDay, type Broker, type DecisionRecord, type Store } from './live';
@@ -103,6 +104,9 @@ describe('live m5 fresh-up', () => {
     const hooks = {
       stopFor: () => ({ level: 200, kind: 'trailing' as const }),
       plan: async () => ({ orders: [] as OrderIntent[], vetoes: [] }),
+      onStopFilled: ({ book, symbol }: { book: typeof s.books[string]; symbol: string }) => {
+        if (symbol === m5Like.riskSymbol) armFreshUpAfterStop(book);
+      },
     };
     const b = bars.map((x) => ({ ...x }));
     const entry = b[118]!.c;

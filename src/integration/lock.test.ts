@@ -32,6 +32,10 @@ beforeAll(async () => {
   );`);
 });
 
+afterAll(async () => {
+  if (pg && 'close' in pg && typeof pg.close === 'function') await pg.close();
+});
+
 describe('B-2 lock on real Postgres (pglite)', () => {
   beforeEach(async () => {
     jest.resetModules();

@@ -114,6 +114,9 @@ export function m5RiskExposurePct(book: VersionBook, cfg: M5Config, prices: Reco
 }
 
 export const m5Hooks: StrategyHooks<M5Config> = {
-  stopFor: (pos, cfg, _bars, symbol) => m5StopLevel(pos, cfg, symbol ?? cfg.riskSymbol),
+  stopFor: (pos, cfg, bars, symbol) => m5StopLevel(pos, cfg, symbol ?? cfg.riskSymbol, bars),
   plan: async (i) => ({ ...planM5(i), vetoes: [] }),
+  onStopFilled: ({ book, cfg, symbol }) => {
+    if (symbol === cfg.riskSymbol) armFreshUpAfterStop(book);
+  },
 };

@@ -3,7 +3,8 @@
 QLD wanneer QQQ boven 200d SMA × 1,02; BIL wanneer QQQ onder × 0,98; in de band huidige positie houden. Signaal op de close, uitvoering bij de volgende open.
 
 - Budget 10% paperkapitaal, verliesgrens 20% van de sleeve.
-- Geen intraday trailing: **close-disaster** default 30% onder hoogste close sinds instap, uitstap volgende open (`closeDisasterStopPct`, env `MOMENTUM5_CLOSE_DISASTER_PCT`, backtest `--trail=0.30`). Hoofduitstap blijft het QQQ-bandregime. Na disaster naar BIL tot fresh-up (dip onder bovenband, dan opnieuw erboven).
+- **Close-disaster** default 30% onder hoogste close sinds instap: in schaduw/plan nog steeds uitstap volgende open; bij papier (`MOMENTUM5_DRY_RUN=0`) ook broker GTC stop op QLD/TQQQ (`m5s-<versie>-` prefix). Hoofduitstap blijft het QQQ-bandregime. Na disaster naar BIL tot fresh-up (dip onder bovenband, dan opnieuw erboven).
+- Bad-tick filter in sim: zie `docs/momentum-6.md` (zelfde 15%-regel).
 - BIL heeft bewust geen stop (cash-sleeve, geen risicopositie).
 - `floatingBudget: true` (compounding binnen de sleeve; verliesgrens t.o.v. startbudget).
 - Optioneel: `MOMENTUM5_TQQQ=1` activeert een **experimentele** TQQQ-variant (3% budget, hogere verliesgrens dan de close-disaster).
