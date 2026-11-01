@@ -21,9 +21,9 @@ export function newsContextPrompt(status: NewsLookupStatus): string {
     return 'Nieuwslookup: OK. Beoordeel no_earnings_risk en news_sentiment op basis van het nieuws-JSON.';
   }
   if (status === 'failed') {
-    return 'Nieuwslookup: MISLUKT. Zet no_earnings_risk en news_sentiment op "unknown" (nooit "pass"). Geen BUY als soft-start actief is.';
+    return 'Nieuwslookup: MISLUKT. Zet no_earnings_risk en news_sentiment op "unknown" (nooit "pass"). Geen BUY zolang die criteria unknown zijn.';
   }
-  return 'Nieuwslookup: LEEG/onbruikbaar. Zet no_earnings_risk en news_sentiment op "unknown" (nooit "pass"). Geen BUY als soft-start actief is.';
+  return 'Nieuwslookup: LEEG/onbruikbaar. Zet no_earnings_risk en news_sentiment op "unknown" (nooit "pass"). Geen BUY zolang die criteria unknown zijn.';
 }
 
 export function momentumRsiRuleText(rsiMin: number, rsiMax: number): string {
@@ -73,7 +73,7 @@ export function allPremarketCriteriaPass(criteria: Record<PremarketCriterionKey,
   return PREMARKET_ENTRY_CRITERIA.every((k) => criteria[k] === 'pass');
 }
 
-/** Deterministic post-check: full six criteria; soft-start BUY only if all pass. */
+/** Deterministic post-check: full six criteria; BUY only if all pass (soft-start or not). */
 export function applyPremarketDecisionRules(
   row: { symbol?: string; decision?: string; criteria?: Record<string, unknown> },
   opts: {
@@ -87,7 +87,7 @@ export function applyPremarketDecisionRules(
   const criteria = buildFullPremarketCriteria(row.criteria, opts);
 
   let decision = String(row.decision ?? 'NO_GO').toUpperCase();
-  if (decision === 'BUY' && opts.softStartEnabled && !allPremarketCriteriaPass(criteria)) {
+  if (decision === 'BUY' && !allPremarketCriteriaPass(criteria)) {
     decision = 'NO_GO';
   }
 

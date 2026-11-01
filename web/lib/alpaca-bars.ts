@@ -7,6 +7,8 @@ const DATA = 'https://data.alpaca.markets';
 
 export const DEFAULT_DAILY_BAR_LOOKBACK_DAYS = 120;
 
+export { cryptoBarsSymbolsQueryString } from './alpaca-bars.symbols';
+
 export function alpacaDataFeed(): string {
   return process.env.ALPACA_DATA_FEED ?? 'iex';
 }
