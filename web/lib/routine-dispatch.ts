@@ -1,6 +1,10 @@
 import { canRunRoutine } from '@guards/index';
 import { loadGuardState } from '@/lib/guards/service';
-import { finishRoutineRun, tryBeginRoutineRun } from '@/lib/routine-runs';
+import {
+  finishRoutineRun,
+  recordFailedRoutineRunAttempt,
+  tryBeginRoutineRun,
+} from '@/lib/routine-runs';
 import { withAiRoutine } from '@/lib/ai';
 import { tradingDateEt } from '@scheduler/decide';
 import { withRoutineRunContext } from '@/lib/routine-run-context';
@@ -20,7 +24,10 @@ function flattenFailuresFrom(result: Record<string, unknown>): string[] {
   return ff.map(String);
 }
 
-export async function dispatchRoutine(routine: string): Promise<Record<string, unknown>> {
+export async function dispatchRoutine(
+  routine: string,
+  nowMs: number = Date.now(),
+): Promise<Record<string, unknown>> {
   const state = await loadGuardState();
   const gate = canRunRoutine({
     routine,
@@ -28,12 +35,19 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     tradingEnabled: state.tradingEnabled,
     circuitBreakerTripped: state.circuitBreakerTripped,
   });
-  const tradingDate = tradingDateEt(Date.now());
+  const tradingDate = tradingDateEt(nowMs);
 
   if (!gate.allowed) {
-    const begun = await tryBeginRoutineRun(routine, tradingDate);
+    let begun: Awaited<ReturnType<typeof tryBeginRoutineRun>>;
+    try {
+      begun = await tryBeginRoutineRun(routine, tradingDate, nowMs);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await recordFailedRoutineRunAttempt(routine, tradingDate, msg, nowMs);
+      throw e;
+    }
     const runId = 'blocked' in begun ? null : begun.runId;
-    const started = Date.now();
+    const started = nowMs;
     await finishRoutineRun(runId, 'skipped', { skipReason: gate.reason, startedMs: started });
     return { skipped: true, reason: gate.reason };
   }
@@ -43,12 +57,19 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     return { error: 'Unknown routine' };
   }
 
-  const begun = await tryBeginRoutineRun(routine, tradingDate);
+  let begun: Awaited<ReturnType<typeof tryBeginRoutineRun>>;
+  try {
+    begun = await tryBeginRoutineRun(routine, tradingDate, nowMs);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await recordFailedRoutineRunAttempt(routine, tradingDate, msg, nowMs);
+    throw e;
+  }
   if ('blocked' in begun) {
     return { skipped: true, reason: begun.reason };
   }
   const runId = begun.runId;
-  const startedMs = Date.now();
+  const startedMs = nowMs;
   const deadlineMs = startedMs + ROUTINE_RUN_DEADLINE_MS;
 
   try {

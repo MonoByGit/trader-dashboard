@@ -68,6 +68,38 @@ describe('decideDueCryptoRoutines', () => {
     expect(due).toEqual(['crypto-scan']);
   });
 
+  it('retries same UTC slot after grace when no run row was started this slot (post-tick-500)', () => {
+    const due = decideDueCryptoRoutines({
+      nowMs: Date.parse('2026-11-01T10:12:00.000Z'),
+      runs: [
+        {
+          routine: 'crypto-scan',
+          status: 'ok',
+          finished_at: '2026-11-01T08:05:00.000Z',
+          started_at: '2026-11-01T08:00:00.000Z',
+        },
+      ],
+      config: { tickIntervalHours: 2, tickGraceMinutes: 10 },
+    });
+    expect(due).toEqual(['crypto-scan']);
+  });
+
+  it('does not double-schedule after a run started in the current slot', () => {
+    const due = decideDueCryptoRoutines({
+      nowMs: Date.parse('2026-11-01T10:12:00.000Z'),
+      runs: [
+        {
+          routine: 'crypto-scan',
+          status: 'failed',
+          started_at: '2026-11-01T10:07:00.000Z',
+          finished_at: '2026-11-01T10:07:01.000Z',
+        },
+      ],
+      config: { tickIntervalHours: 2, tickGraceMinutes: 10, retryWindowMinutes: 45 },
+    });
+    expect(due).toEqual([]);
+  });
+
   it('schedules again after the full interval (2 hours)', () => {
     const due = decideDueCryptoRoutines({
       nowMs: Date.parse('2026-11-01T16:05:00.000Z'),

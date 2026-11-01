@@ -23,6 +23,8 @@ export async function middleware(req: NextRequest) {
     );
   }
 
+  if (pathname === '/api/health') return NextResponse.next();
+
   // Cron/scheduler: Bearer CRON_SECRET (geen app-cookie).
   if (pathname.startsWith('/api/cron')) return NextResponse.next();
   if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
