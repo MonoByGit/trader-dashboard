@@ -68,6 +68,38 @@ describe('decideDueCryptoRoutines', () => {
     expect(due).toEqual(['crypto-scan']);
   });
 
+  it('failed 10:06Z then tick 14:02Z also runs (no permanent stop)', () => {
+    const due = decideDueCryptoRoutines({
+      nowMs: Date.parse('2026-11-01T14:02:00.000Z'),
+      runs: [
+        {
+          routine: 'crypto-scan',
+          status: 'failed',
+          started_at: '2026-11-01T10:05:00.000Z',
+          finished_at: '2026-11-01T10:06:00.000Z',
+        },
+      ],
+      config: { tickIntervalHours: 2, tickGraceMinutes: 10, retryWindowMinutes: 45 },
+    });
+    expect(due).toEqual(['crypto-scan']);
+  });
+
+  it('failed without finished_at stays blocked (residual)', () => {
+    const due = decideDueCryptoRoutines({
+      nowMs: Date.parse('2026-11-01T12:02:00.000Z'),
+      runs: [
+        {
+          routine: 'crypto-scan',
+          status: 'failed',
+          started_at: '2026-11-01T10:05:00.000Z',
+          finished_at: null,
+        },
+      ],
+      config: { tickIntervalHours: 2, tickGraceMinutes: 10, retryWindowMinutes: 45 },
+    });
+    expect(due).toEqual([]);
+  });
+
   it('schedules again after the full interval (2 hours)', () => {
     const due = decideDueCryptoRoutines({
       nowMs: Date.parse('2026-11-01T16:05:00.000Z'),

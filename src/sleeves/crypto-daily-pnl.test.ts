@@ -3,6 +3,7 @@ import { loadCryptoGuardConfig } from '../guards/crypto-config.js';
 import {
   changeTodayIsFractionNotUsd,
   computeCryptoDailyPnlUsd,
+  CRYPTO_SELL_FEE_PCT,
   cryptoDailyLossPctOfAccount,
   sumCryptoRealizedPlTodayUsd,
 } from './crypto-daily-pnl.js';
@@ -40,7 +41,7 @@ describe('crypto daily P&L for loss guard', () => {
       ],
       { todayUtcYmd: '2026-11-01', isCryptoSymbol: (s) => s.includes('BTC') },
     );
-    expect(realized).toBe(-500);
+    expect(realized).toBeCloseTo(-500 - 95000 * 0.1 * CRYPTO_SELL_FEE_PCT, 4);
     const pnl = computeCryptoDailyPnlUsd({
       positions: [{ unrealized_intraday_pl: '-4500' }],
       realizedPlUsdToday: realized,

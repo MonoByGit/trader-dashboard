@@ -2,18 +2,23 @@ import { alpaca, AlpacaPosition } from '@/lib/alpaca';
 import { cancelSellLegsAndWait } from '@/lib/alpaca-orders';
 import { logGuardEvent } from '@/lib/guards/service';
 import { retryAsync } from '../../src/trading/eod-close-retry';
-import strategy from '@/strategy.json';
+import { getActiveStrategyContent } from '@/lib/strategy-versions';
 
 export type EodFlattenResult =
   | { ok: true; symbol: string }
   | { ok: false; symbol: string; error: string; cancelReady: boolean; remainingLegs: number; restopPlaced?: boolean };
+
+async function eodHardStopPct(): Promise<number> {
+  const strat = await getActiveStrategyContent();
+  return strat.rules.hard_stop_pct ?? 0.02;
+}
 
 async function placeEodSafetyStop(symbol: string, position: AlpacaPosition): Promise<boolean> {
   const qtyRaw = position.qty_available ?? position.qty;
   const qty = parseFloat(qtyRaw);
   const last = parseFloat(position.current_price);
   if (!qty || !last) return false;
-  const hardStopPct = (strategy as { rules: { hard_stop_pct: number } }).rules.hard_stop_pct ?? 0.02;
+  const hardStopPct = await eodHardStopPct();
   const stop = +(last * (1 - hardStopPct)).toFixed(2);
   try {
     await alpaca.placeOrder({
@@ -36,6 +41,10 @@ async function placeEodSafetyStop(symbol: string, position: AlpacaPosition): Pro
   }
 }
 
+function qtyAvailableForRestop(pos: AlpacaPosition): number {
+  return parseFloat(pos.qty_available ?? pos.qty);
+}
+
 async function getEtfPosition(symbol: string): Promise<AlpacaPosition | undefined> {
   const positions = await alpaca.positions();
   return positions.find((p) => p.symbol === symbol);
@@ -52,7 +61,9 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
     console.error('[eod-flatten]', msg);
     const pos = await getEtfPosition(symbol);
     let restopPlaced = false;
-    if (pos) restopPlaced = await placeEodSafetyStop(symbol, pos);
+    if (pos && qtyAvailableForRestop(pos) > 0) {
+      restopPlaced = await placeEodSafetyStop(symbol, pos);
+    }
     return {
       ok: false,
       symbol,
@@ -76,7 +87,9 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
     console.error('[eod-flatten]', symbol, error);
     const pos = await getEtfPosition(symbol);
     let restopPlaced = false;
-    if (pos) restopPlaced = await placeEodSafetyStop(symbol, pos);
+    if (pos && qtyAvailableForRestop(pos) > 0) {
+      restopPlaced = await placeEodSafetyStop(symbol, pos);
+    }
     return {
       ok: false,
       symbol,

@@ -1,10 +1,8 @@
-/**
- * Lock must be verified before each buy (B-2).
- */
+/** Lock gate uses real verifyRoutineRunLock (no mock of routine-runs). */
 import { jest } from '@jest/globals';
 
-describe('gateBuyIfLockLost', () => {
-  it('blocks when run lost the slot lock', async () => {
+describe('gateBuyIfLockLost with verifyRoutineRunLock', () => {
+  it('blocks when lock row is missing', async () => {
     jest.resetModules();
     jest.unstable_mockModule('@/lib/db', () => ({
       hasDb: () => true,
@@ -15,12 +13,9 @@ describe('gateBuyIfLockLost', () => {
         fn(async () => ({ rows: [], rowCount: 0 })),
     }));
     jest.unstable_mockModule('@/lib/migrate', () => ({ ensureSchema: async () => {} }));
-    jest.unstable_mockModule('@/lib/routine-runs', () => ({
-      verifyRoutineRunLock: async () => false,
-    }));
 
     const { gateBuyIfLockLost } = await import('@/lib/buy-idempotency');
-    const gate = await gateBuyIfLockLost('run-a', 'QQQ');
+    const gate = await gateBuyIfLockLost('run-not-held', 'QQQ');
     expect(gate.allowed).toBe(false);
     expect(gate.reason).toMatch(/lock/i);
   });

@@ -70,8 +70,12 @@ describe('PR31 integration (mocked)', () => {
     jest.resetModules();
     const placeOrder = jest.fn(async () => ({ id: 'stop-1' }));
     let closeAttempts = 0;
-    jest.unstable_mockModule('@/strategy.json', () => ({
-      default: { rules: { hard_stop_pct: 0.02, take_profit_pct: 0.05 } },
+    jest.unstable_mockModule('@/lib/strategy-versions', () => ({
+      getActiveStrategyContent: async () => ({
+        rules: { hard_stop_pct: 0.02, take_profit_pct: 0.05, max_positions: 3 },
+        symbols: ['QQQ'],
+        name: 't',
+      }),
     }));
     jest.unstable_mockModule('@/lib/alpaca', () => ({
       alpaca: {

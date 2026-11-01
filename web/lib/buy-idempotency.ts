@@ -3,14 +3,30 @@ import type { AlpacaPosition } from '@/lib/alpaca';
 import { verifyRoutineRunLock } from '@/lib/routine-runs';
 
 export async function hasBuyDecisionTodayEt(symbol: string, routine: string): Promise<boolean> {
+  return hasBuyDecisionToday(symbol, routine, 'et');
+}
+
+export async function hasBuyDecisionTodayUtc(symbol: string, routine: string): Promise<boolean> {
+  return hasBuyDecisionToday(symbol, routine, 'utc');
+}
+
+async function hasBuyDecisionToday(
+  symbol: string,
+  routine: string,
+  boundary: 'et' | 'utc',
+): Promise<boolean> {
   if (!hasDb()) return false;
   await initDb();
-  const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const day =
+    boundary === 'utc'
+      ? new Date().toISOString().slice(0, 10)
+      : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const tz = boundary === 'utc' ? 'UTC' : 'America/New_York';
   const rows = await dbQuery<{ c: string }>(
     `SELECT COUNT(*)::text AS c FROM decisions
      WHERE symbol = $1 AND routine = $2 AND decision = 'BUY'
-       AND (ts AT TIME ZONE 'America/New_York')::date = $3::date`,
-    [symbol, routine, day],
+       AND (ts AT TIME ZONE $4)::date = $3::date`,
+    [symbol, routine, day, tz],
   );
   return rows.length ? parseInt(rows[0].c, 10) > 0 : false;
 }

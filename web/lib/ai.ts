@@ -293,9 +293,12 @@ async function generateNewsCompletion(
 ): Promise<JsonCompletion> {
   const provider = activeProvider();
   const model = modelForTier('fast');
-  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
-  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
-  return geminiGenerate(model, system, user, maxTokens, true, { disableThinking: true });
+  const run = () => {
+    if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+    if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
+    return geminiGenerate(model, system, user, maxTokens, true, { disableThinking: true });
+  };
+  return withAiAbort(run());
 }
 
 export type AgentNewsLookupResult = {
@@ -457,14 +460,18 @@ export function geminiText(_model: string, prompt: string, maxTokens = 2048): Pr
   return agentNewsLookup(prompt, { routine: 'legacy-news', maxTokens }).then((r) => r.json);
 }
 
-export async function logFailedAiCall(error: unknown, routineOverride?: string): Promise<void> {
+export async function logFailedAiCall(
+  error: unknown,
+  routineOverride?: string,
+  modelOverride?: string,
+): Promise<void> {
   const ctx = aiRoutineContext.getStore();
   const routine = routineOverride ?? ctx?.routine;
   const msg = error instanceof Error ? error.message : String(error);
   await recordAiCallFailure({
     routine,
     provider: activeProvider(),
-    model: modelForTier('fast'),
+    model: modelOverride ?? modelForTier('fast'),
     finishReason: `error:${msg.slice(0, 200)}`,
     assetClass: ctx?.assetClass ?? (routine?.startsWith('crypto') ? 'crypto' : 'etf'),
   });

@@ -1,8 +1,8 @@
 import cryptoStrategy from '@/crypto-strategy.json';
 import { AiJsonParseError, claudeJsonArray, logFailedAiCall, MODELS } from '@/lib/ai';
-import { gateBuyIfLockLost, hasBuyDecisionTodayEt } from '@/lib/buy-idempotency';
+import { gateBuyIfLockLost, hasBuyDecisionTodayUtc } from '@/lib/buy-idempotency';
 import { getRoutineRunContext } from '@/lib/routine-run-context';
-import { cryptoDailyPnlFromLive } from './daily-pnl-live';
+import { cryptoDailyPnlFromLive, yesterdayUtcCloseBySymbol } from './daily-pnl-live';
 import { blocksNewEntries, evaluateCryptoLimits } from '@guards/index';
 import { filterByAssetClass } from '@/lib/asset-class';
 import { alpaca } from '@/lib/alpaca';
@@ -99,7 +99,10 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   const newToday = await countCryptoBuysTodayUtc();
 
   const recentOrders = await alpaca.orders(100);
-  const cryptoDailyPnlUsd = cryptoDailyPnlFromLive(cryptoPositions, recentOrders);
+  const yesterdayClose = yesterdayUtcCloseBySymbol(bars);
+  const cryptoDailyPnlUsd = cryptoDailyPnlFromLive(cryptoPositions, recentOrders, {
+    yesterdayCloseBySymbol: yesterdayClose,
+  });
   const cryptoLimitsBlock = evaluateCryptoLimits(
     {
       totalEquityUsd: equity,
@@ -133,7 +136,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
     console.error('[crypto-scan] AI call failed — marking run failed for retry:', msg);
-    await logFailedAiCall(e, 'crypto-scan');
+    await logFailedAiCall(e, 'crypto-scan', MODELS.sonnet);
     throw new Error(`[crypto-scan] ${msg}`);
   }
 
@@ -223,6 +226,11 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
       continue;
     }
 
+    const freshPositions = await alpaca.positions();
+    const freshCrypto = filterByAssetClass(freshPositions, 'crypto');
+    if (hasCryptoPosition(freshCrypto, c.symbol)) continue;
+    if (await hasBuyDecisionTodayUtc(c.symbol, 'crypto-scan')) continue;
+
     const runCtx = getRoutineRunContext();
     const lockGate = await gateBuyIfLockLost(runCtx?.runId, c.symbol);
     if (!lockGate.allowed) {
@@ -237,11 +245,6 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
       });
       break;
     }
-
-    const freshPositions = await alpaca.positions();
-    const freshCrypto = filterByAssetClass(freshPositions, 'crypto');
-    if (hasCryptoPosition(freshCrypto, c.symbol)) continue;
-    if (await hasBuyDecisionTodayEt(c.symbol, 'crypto-scan')) continue;
 
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
     let order;

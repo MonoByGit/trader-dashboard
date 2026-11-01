@@ -212,13 +212,13 @@ export async function countDailyTrades(): Promise<number> {
 export async function countDailyCryptoTrades(): Promise<number> {
   if (!hasDb()) return 0;
   await initDb();
-  const day = todayEt();
+  const dayUtc = new Date().toISOString().slice(0, 10);
   const rows = await dbQuery<{ c: string }>(
     `SELECT COUNT(*)::text AS c FROM decisions
      WHERE decision='BUY'
        AND routine = 'crypto-scan'
-       AND (ts AT TIME ZONE 'America/New_York')::date = $1::date`,
-    [day]
+       AND (ts AT TIME ZONE 'UTC')::date = $1::date`,
+    [dayUtc]
   );
   return rows.length ? parseInt(rows[0].c, 10) : 0;
 }

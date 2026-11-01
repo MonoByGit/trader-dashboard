@@ -1,7 +1,7 @@
 import { canRunRoutine } from '@guards/index';
 import { loadGuardState } from '@/lib/guards/service';
 import { finishRoutineRun, tryBeginRoutineRun } from '@/lib/routine-runs';
-import { logFailedAiCall, withAiRoutine } from '@/lib/ai';
+import { withAiRoutine } from '@/lib/ai';
 import { tradingDateEt } from '@scheduler/decide';
 import { withRoutineRunContext } from '@/lib/routine-run-context';
 import { ROUTINE_RUN_DEADLINE_MS } from '@/lib/ai-timeout';
@@ -72,7 +72,6 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     }
     return result;
   } catch (e) {
-    await logFailedAiCall(e, routine).catch(() => {});
     await finishRoutineRun(runId, 'failed', {
       errorMessage: String(e),
       startedMs,

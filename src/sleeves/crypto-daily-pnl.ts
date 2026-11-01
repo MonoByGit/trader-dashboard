@@ -13,10 +13,30 @@ type OrderFillLike = {
   qty?: string | null;
 };
 
+export const CRYPTO_SELL_FEE_PCT = 0.0025;
+
 function num(v: string | number | null | undefined): number {
   if (v === undefined || v === null || v === '') return 0;
   const n = typeof v === 'number' ? v : parseFloat(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function dayStartUtcIso(todayUtcYmd: string): string {
+  return `${todayUtcYmd}T00:00:00.000Z`;
+}
+
+type BuyLot = { filledAt: string; qtyRemaining: number; buyPrice: number };
+
+function referencePriceForLot(
+  lot: BuyLot,
+  dayStart: string,
+  yesterdayCloseBySymbol: Record<string, number>,
+  symbol: string,
+): number {
+  if (lot.filledAt >= dayStart) return lot.buyPrice;
+  const yc = yesterdayCloseBySymbol[symbol];
+  if (yc > 0) return yc;
+  return lot.buyPrice;
 }
 
 /** Sum Alpaca crypto position unrealized_intraday_pl (USD). Ignores change_today (fraction). */
@@ -28,30 +48,73 @@ export function sumCryptoUnrealizedIntradayPlUsd(positions: CryptoPositionPnl[])
   return total;
 }
 
-/** Realized P&L today from filled crypto sells vs most recent prior buy (USD, signed). */
+/**
+ * Realized P&L for UTC calendar day: FIFO vs reference at max(buy time, 00:00Z).
+ * Overnight lots use yesterdayCloseBySymbol at day start; same-day buys use fill price.
+ * Subtracts sell fee (0.25% of exit notional) per fill.
+ */
 export function sumCryptoRealizedPlTodayUsd(
   orders: OrderFillLike[],
-  opts: { todayUtcYmd: string; isCryptoSymbol: (symbol: string) => boolean },
+  opts: {
+    todayUtcYmd: string;
+    isCryptoSymbol: (symbol: string) => boolean;
+    yesterdayCloseBySymbol?: Record<string, number>;
+    sellFeePct?: number;
+  },
 ): number {
-  let total = 0;
+  const dayStart = dayStartUtcIso(opts.todayUtcYmd);
+  const yesterdayCloseBySymbol = opts.yesterdayCloseBySymbol ?? {};
+  const sellFeePct = opts.sellFeePct ?? CRYPTO_SELL_FEE_PCT;
   const filled = orders.filter((o) => o.status === 'filled' && o.filled_at);
+
+  const lotsBySymbol = new Map<string, BuyLot[]>();
+  for (const o of filled) {
+    if (o.side !== 'buy' || !opts.isCryptoSymbol(o.symbol)) continue;
+    const qty = num(o.filled_qty ?? o.qty);
+    const price = num(o.filled_avg_price);
+    if (!qty || !price) continue;
+    const list = lotsBySymbol.get(o.symbol) ?? [];
+    list.push({ filledAt: o.filled_at!, qtyRemaining: qty, buyPrice: price });
+    lotsBySymbol.set(o.symbol, list);
+  }
+  for (const list of lotsBySymbol.values()) {
+    list.sort((a, b) => a.filledAt.localeCompare(b.filledAt));
+  }
+
+  let total = 0;
   for (const o of filled) {
     if (o.side !== 'sell' || !o.filled_at!.startsWith(opts.todayUtcYmd)) continue;
     if (!opts.isCryptoSymbol(o.symbol)) continue;
     const exit = num(o.filled_avg_price);
-    const qty = num(o.filled_qty ?? o.qty);
-    if (!exit || !qty) continue;
-    const buys = filled
-      .filter(
-        (b) =>
-          b.side === 'buy' &&
-          b.symbol === o.symbol &&
-          b.filled_at &&
-          b.filled_at <= o.filled_at!,
-      )
-      .sort((a, b) => (b.filled_at ?? '').localeCompare(a.filled_at ?? ''));
-    const entry = buys.length ? num(buys[0].filled_avg_price) : exit;
-    total += (exit - entry) * qty;
+    let sellQty = num(o.filled_qty ?? o.qty);
+    if (!exit || !sellQty) continue;
+
+    const lots = lotsBySymbol.get(o.symbol) ?? [];
+    let pl = 0;
+    let matchedQty = 0;
+    while (sellQty > 0) {
+      const lot = lots.find((l) => l.qtyRemaining > 0);
+      if (lot) {
+        const take = Math.min(sellQty, lot.qtyRemaining);
+        const ref = referencePriceForLot(lot, dayStart, yesterdayCloseBySymbol, o.symbol);
+        pl += (exit - ref) * take;
+        matchedQty += take;
+        lot.qtyRemaining -= take;
+        sellQty -= take;
+        continue;
+      }
+      const yc = yesterdayCloseBySymbol[o.symbol];
+      if (yc > 0) {
+        pl += (exit - yc) * sellQty;
+        matchedQty += sellQty;
+        sellQty = 0;
+      } else {
+        break;
+      }
+    }
+    if (matchedQty <= 0) continue;
+    const notional = exit * matchedQty;
+    total += pl - notional * sellFeePct;
   }
   return total;
 }

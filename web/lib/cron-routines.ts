@@ -143,7 +143,7 @@ Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
     console.error('[premarket] AI call failed — marking run failed for retry:', msg);
-    await logFailedAiCall(e, 'premarket');
+    await logFailedAiCall(e, 'premarket', MODELS.sonnet);
     throw new Error(`[premarket] ${msg}`);
   }
 
@@ -272,7 +272,7 @@ export async function runMarketOpen() {
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
     console.error('[market-open] AI call failed — marking run failed for retry:', msg);
-    await logFailedAiCall(e, 'market-open');
+    await logFailedAiCall(e, 'market-open', MODELS.sonnet);
     throw new Error(`[market-open] ${msg}`);
   }
 
@@ -372,20 +372,6 @@ export async function runMarketOpen() {
       continue;
     }
 
-    const runCtx = getRoutineRunContext();
-    const lockGate = await gateBuyIfLockLost(runCtx?.runId, c.symbol);
-    if (!lockGate.allowed) {
-      await saveDecision({
-        routine: 'market-open',
-        symbol: c.symbol,
-        decision: 'NO_GO',
-        rationale: lockGate.reason,
-        agentNote: 'Run lock lost before order.',
-        confidence: 0,
-      });
-      break;
-    }
-
     const freshEtf = filterByAssetClass(await alpaca.positions(), 'etf');
     if (symbolHeldInPositions(freshEtf, c.symbol)) continue;
     if (await hasBuyDecisionTodayEt(c.symbol, 'market-open')) continue;
@@ -407,6 +393,20 @@ export async function runMarketOpen() {
           : [];
       await recordLessonInfluence(vetoIds, decId, c.symbol, 'veto');
       continue;
+    }
+
+    const runCtx = getRoutineRunContext();
+    const lockGate = await gateBuyIfLockLost(runCtx?.runId, c.symbol);
+    if (!lockGate.allowed) {
+      await saveDecision({
+        routine: 'market-open',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: lockGate.reason,
+        agentNote: 'Run lock lost before order.',
+        confidence: 0,
+      });
+      break;
     }
 
     // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.

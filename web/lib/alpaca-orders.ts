@@ -39,7 +39,14 @@ function sleep(ms: number): Promise<void> {
 
 async function openSellLegsForSymbol(symbol: string): Promise<Array<{ id: string; status: string }>> {
   const orders = await alpaca.orders(100);
-  const openStatuses = new Set(['new', 'accepted', 'held', 'partially_filled', 'pending_new']);
+  const openStatuses = new Set([
+    'new',
+    'accepted',
+    'held',
+    'partially_filled',
+    'pending_new',
+    'pending_cancel',
+  ]);
   return orders
     .filter(
       (o) =>

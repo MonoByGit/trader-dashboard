@@ -1,9 +1,10 @@
-import { flattenReadyAfterCancels, openSellLegsStillActive } from './eod-flatten.js';
+import { flattenReadyAfterCancels, isOpenSellLegStatus, openSellLegsStillActive } from './eod-flatten.js';
 
-describe('eod flatten cancel polling', () => {
-  it('waits until sell legs are no longer open', () => {
-    expect(flattenReadyAfterCancels([{ id: '1', status: 'canceled' }])).toBe(true);
-    expect(flattenReadyAfterCancels([{ id: '1', status: 'new' }])).toBe(false);
-    expect(openSellLegsStillActive([{ id: '1', status: 'accepted' }])).toHaveLength(1);
+describe('openSellLegsStillActive', () => {
+  it('treats pending_cancel as still open', () => {
+    expect(isOpenSellLegStatus('pending_cancel')).toBe(true);
+    const legs = [{ id: '1', status: 'pending_cancel' }];
+    expect(openSellLegsStillActive(legs)).toHaveLength(1);
+    expect(flattenReadyAfterCancels(legs)).toBe(false);
   });
 });

@@ -85,9 +85,13 @@ export async function tryBeginRoutineRun(
 export async function verifyRoutineRunLock(runId: string): Promise<boolean> {
   if (!hasDb()) return true;
   await ensureSchema();
+  const staleSec = Math.ceil(RUNNING_STALE_MS / 1000);
   const rows = await dbQuery<{ ok: string }>(
-    `SELECT 1::text AS ok FROM routine_run_locks WHERE run_id = $1 LIMIT 1`,
-    [runId],
+    `SELECT 1::text AS ok FROM routine_run_locks
+     WHERE run_id = $1
+       AND acquired_at > NOW() - ($2::text || ' seconds')::interval
+     LIMIT 1`,
+    [runId, String(staleSec)],
   );
   return rows.length > 0;
 }
