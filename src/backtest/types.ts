@@ -44,12 +44,16 @@ export interface BacktestEngineInput {
   barsBySymbol: Record<string, DailyBar[]>;
   /** When barMode is hourly: raw hourly bars per symbol for bracket walks. */
   hourlyBarsBySymbol?: Record<string, DailyBar[]>;
+  /** Benchmark buy-and-hold bars (SPY for ETF runs, BTC for crypto). */
   spyBars: DailyBar[];
   vixBars?: DailyBar[];
   symbols: string[];
   rules: StrategyRulesLike;
   params: BacktestParams;
   guardEnv?: Record<string, string>;
+  assetClass?: 'etf' | 'crypto';
+  /** Label for benchmark metrics/UI (default SPY). */
+  benchmarkSymbol?: string;
 }
 
 export interface BacktestTrade {
@@ -82,6 +86,8 @@ export interface BacktestMetrics {
   spyAnnualizedReturnPct: number;
   spyMaxDrawdownPct: number;
   spySharpeRatio: number | null;
+  /** Buy-and-hold benchmark ticker shown in summaries (SPY or BTC). */
+  benchmarkSymbol: string;
 }
 
 export interface BacktestEngineResult {

@@ -30,5 +30,15 @@ describe('backtest metrics', () => {
     const { strategy, spy } = computeMetrics(curve, []);
     expect(strategy.totalReturnPct).toBeCloseTo(5);
     expect(spy.spyTotalReturnPct).toBeCloseTo(2);
+    expect(spy.benchmarkSymbol).toBe('SPY');
+  });
+
+  it('tags benchmark symbol for crypto runs', () => {
+    const curve = [
+      { date: '2026-01-02', equity: 100_000, cash: 100_000, exposure: 0, spyEquity: 100_000 },
+      { date: '2026-01-03', equity: 100_000, cash: 100_000, exposure: 0, spyEquity: 110_000 },
+    ];
+    const { spy } = computeMetrics(curve, [], 'BTC');
+    expect(spy.benchmarkSymbol).toBe('BTC');
   });
 });

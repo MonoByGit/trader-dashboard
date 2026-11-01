@@ -1,5 +1,7 @@
 /** Minimal copy of web/lib/sizing.ts for backtests (no web dependency). */
 
+import { qtyFromNotional, type QtyMode } from './order-qty';
+
 const TARGET_VOL = 0.12;
 const TRADING_DAYS = 252;
 const BASE_CAP = 0.25;
@@ -11,6 +13,8 @@ export interface SizingInputs {
   price: number;
   equity: number;
   availableCash: number;
+  /** Whole shares for ETFs; fractional for crypto. */
+  qtyMode?: QtyMode;
 }
 
 export function realizedVolAnnual(closes: number[], lookback = 20): number | null {
@@ -27,7 +31,7 @@ export function realizedVolAnnual(closes: number[], lookback = 20): number | nul
 }
 
 export function computePositionSize(inp: SizingInputs): { shares: number; notional: number } {
-  const { closes, price, equity, availableCash } = inp;
+  const { closes, price, equity, availableCash, qtyMode = 'whole' } = inp;
   const volAnnual = realizedVolAnnual(closes);
   const volTargetWeight = volAnnual && volAnnual > 0 ? TARGET_VOL / volAnnual : null;
 
@@ -38,7 +42,7 @@ export function computePositionSize(inp: SizingInputs): { shares: number; notion
   const maxByCash = availableCash - equity * CASH_FLOOR;
   if (notional > maxByCash) notional = Math.max(0, maxByCash);
 
-  const shares = price > 0 ? Math.floor(notional / price) : 0;
+  const shares = qtyFromNotional(notional, price, qtyMode);
   const finalNotional = shares > 0 ? +(shares * price).toFixed(2) : 0;
   return { shares, notional: finalNotional };
 }

@@ -49,5 +49,7 @@ export async function executeCryptoBacktest(input: {
     symbols,
     rules,
     params,
+    assetClass: 'crypto',
+    benchmarkSymbol: 'BTC',
   });
 }

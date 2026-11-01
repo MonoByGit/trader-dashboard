@@ -9,6 +9,7 @@ import { rollBacktestSessionGuards } from './session-guards';
 import { barIndexByDate, barTradingDate, snapshotAtIndex } from './indicators';
 import { vixyStressRatio } from '../volatility/vixy-stress';
 import { computeMetrics } from './metrics';
+import { qtyFromNotional, qtyModeForAssetClass } from './order-qty';
 import { computePositionSize } from './sizing';
 import type {
   BacktestEngineInput,
@@ -63,6 +64,9 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
     guardEnv,
   } = input;
 
+  const assetClass = input.assetClass ?? 'etf';
+  const benchmarkSymbol = input.benchmarkSymbol ?? (assetClass === 'crypto' ? 'BTC' : 'SPY');
+  const qtyMode = qtyModeForAssetClass(assetClass);
   const guardConfig = loadGuardConfig({ ...process.env, ...guardEnv } as NodeJS.ProcessEnv);
 
   let cash = params.initialCapital;
@@ -82,7 +86,7 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
   const firstSpy = barOnOrBefore(spyBars, tradingDates[0]!) ?? spyBars[0];
   const firstSpyOpen = firstSpy?.o ?? firstSpy?.c;
   if (firstSpyOpen != null && firstSpyOpen > 0) {
-    spyShares = Math.floor(spyCash / firstSpyOpen);
+    spyShares = qtyFromNotional(spyCash, firstSpyOpen, qtyMode);
     spyCash -= spyShares * firstSpyOpen;
   }
 
@@ -173,6 +177,7 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
         price: fillPx,
         equity,
         availableCash: cash,
+        qtyMode,
       });
       if (sizing.shares <= 0) continue;
 
@@ -326,7 +331,7 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
     dayStartEquity = equity;
   }
 
-  const { strategy, spy } = computeMetrics(equityCurve, trades);
+  const { strategy, spy } = computeMetrics(equityCurve, trades, benchmarkSymbol);
 
   return {
     trades,

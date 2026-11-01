@@ -57,7 +57,17 @@ export function winRatePct(trades: BacktestTrade[]): number | null {
 export function computeMetrics(
   curve: BacktestEquityPoint[],
   trades: BacktestTrade[],
-): { strategy: Omit<BacktestMetrics, 'spyTotalReturnPct' | 'spyAnnualizedReturnPct' | 'spyMaxDrawdownPct' | 'spySharpeRatio'>; spy: Pick<BacktestMetrics, 'spyTotalReturnPct' | 'spyAnnualizedReturnPct' | 'spyMaxDrawdownPct' | 'spySharpeRatio'> } {
+  benchmarkSymbol = 'SPY',
+): {
+  strategy: Omit<
+    BacktestMetrics,
+    'spyTotalReturnPct' | 'spyAnnualizedReturnPct' | 'spyMaxDrawdownPct' | 'spySharpeRatio' | 'benchmarkSymbol'
+  >;
+  spy: Pick<
+    BacktestMetrics,
+    'spyTotalReturnPct' | 'spyAnnualizedReturnPct' | 'spyMaxDrawdownPct' | 'spySharpeRatio' | 'benchmarkSymbol'
+  >;
+} {
   if (!curve.length) {
     const empty = {
       totalReturnPct: 0,
@@ -75,6 +85,7 @@ export function computeMetrics(
         spyAnnualizedReturnPct: 0,
         spyMaxDrawdownPct: 0,
         spySharpeRatio: null,
+        benchmarkSymbol,
       },
     };
   }
@@ -108,6 +119,7 @@ export function computeMetrics(
       spyAnnualizedReturnPct: annualizedReturnPct(spyTotal, numDays),
       spyMaxDrawdownPct: maxDrawdownPct(spyEquities),
       spySharpeRatio: sharpeRatio(dailyReturnsFromEquity(curve.map((c) => ({ equity: c.spyEquity })))),
+      benchmarkSymbol,
     },
   };
 }
