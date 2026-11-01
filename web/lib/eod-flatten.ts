@@ -3,6 +3,7 @@ import { cancelSellLegsAndWait } from '@/lib/alpaca-orders';
 import { logGuardEvent } from '@/lib/guards/service';
 import { retryAsync } from '../../src/trading/eod-close-retry';
 import { getActiveStrategyContent } from '@/lib/strategy-versions';
+import { etfClientOrderId } from '@/lib/etf-order-id';
 
 export type EodFlattenResult =
   | { ok: true; symbol: string }
@@ -28,6 +29,12 @@ async function placeEodSafetyStop(symbol: string, position: AlpacaPosition): Pro
       type: 'stop',
       time_in_force: 'gtc',
       stop_price: stop,
+      client_order_id: etfClientOrderId({
+        routine: 'eod',
+        symbol,
+        side: 'sell',
+        tag: 'restop',
+      }),
     });
     await logGuardEvent('eod_flatten_restop', `GTC stop placed after failed EOD close @ ${stop}`, {
       symbol,

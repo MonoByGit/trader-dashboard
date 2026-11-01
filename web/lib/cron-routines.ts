@@ -6,6 +6,7 @@ import {
   symbolHeldInPositions,
 } from '@/lib/buy-idempotency';
 import { getRoutineRunContext } from '@/lib/routine-run-context';
+import { etfClientOrderId } from '@/lib/etf-order-id';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { saveDecision } from '@/lib/decisions';
 import { registerRoutineHandler } from '@/lib/routine-dispatch';
@@ -416,11 +417,19 @@ export async function runMarketOpen() {
 
     try {
       const order = await alpaca.placeOrder({
-        symbol: c.symbol, qty: c.qty, side: 'buy',
-        type: 'market', time_in_force: 'day',
+        symbol: c.symbol,
+        qty: c.qty,
+        side: 'buy',
+        type: 'market',
+        time_in_force: 'day',
         order_class: 'bracket',
         stop_loss: { stop_price: stopPrice },
         take_profit: { limit_price: takeProfitPrice },
+        client_order_id: etfClientOrderId({
+          routine: 'market-open',
+          symbol: c.symbol,
+          side: 'buy',
+        }),
       });
       orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id, stop: stopPrice, takeProfit: takeProfitPrice });
       dailyTrades = tradeSlot.next;
