@@ -11,6 +11,7 @@ import { fmt } from '@/lib/format';
 import { buildLivePortfolio, DEFAULT_GUARDS } from '@/lib/live-portfolio';
 import { useAccount, usePositions } from '@/hooks/useAlpaca';
 import { useUnread } from '@/hooks/useUnread';
+import { VandaagPage } from '@/components/pages/VandaagPage';
 import { OverviewPage } from '@/components/pages/OverviewPage';
 import { PositionsPage } from '@/components/pages/PositionsPage';
 import { DecisionLogPage } from '@/components/pages/DecisionLogPage';
@@ -26,6 +27,7 @@ import { CryptoPage } from '@/components/pages/CryptoPage';
 import { AiCostsPage } from '@/components/pages/AiCostsPage';
 
 const PAGES = [
+  { id: 'vandaag', label: 'Vandaag', icon: 'sparkle' },
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
   { id: 'crypto', label: 'Crypto', icon: 'bolt' },
   { id: 'positions', label: 'ETF Positions', icon: 'positions' },
@@ -44,7 +46,6 @@ const PAGES = [
 type PageId = typeof PAGES[number]['id'];
 type Decision = { id: string; symbol: string; decision: string; ts: string; agentNote?: string; rationale: string; criteria?: Record<string, string>; routine: string; orderId?: string; };
 type Position = { symbol: string; name: string; sector: string; qty: number; avgEntryPrice: number; currentPrice: number; highWatermark: number; entryAt: string; stopLoss: number; trailingStop: number; takeProfit: number; sma20: number; marketValue: number; costBasis: number; unrealizedPnl: number; unrealizedPnlPct: number; };
-type Routine = { id: string; name: string; time: string; lastRun: string; summary: string; status: string; nextRun: string; };
 type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; emergencyStop?: boolean; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; softStartEnabled?: boolean; effectiveMaxOpenPositions?: number; effectiveMaxDailyTrades?: number; effectiveMaxPositionSizePct?: number; effectiveMaxTotalExposurePct?: number; };
 type Portfolio = { totalEquity: number; cashBalance: number; dayStartEquity: number; dailyPnl: number; dailyPnlPct: number; tradingEnabled: boolean; circuitBreakerTripped: boolean; positions: Position[]; };
 
@@ -59,14 +60,13 @@ export function DashboardShell() {
     } catch { return TWEAK_DEFAULTS; }
   });
   const [page, setPage] = useState<PageId>(() => {
-    try { if (typeof window === 'undefined') return 'overview'; return (localStorage.getItem('trader-page') || 'overview') as PageId; } catch { return 'overview'; }
+    try { if (typeof window === 'undefined') return 'vandaag'; return (localStorage.getItem('trader-page') || 'vandaag') as PageId; } catch { return 'vandaag'; }
   });
   const [showTweaks, setShowTweaks] = useState(false);
   const [selectedDecision, setSelectedDecision] = useState<Decision | null>(null);
   const [confirmClose, setConfirmClose] = useState<Position | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmEmergency, setConfirmEmergency] = useState(false);
-  const [confirmRoutine, setConfirmRoutine] = useState<Routine | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // v2-sleutels: oude builds bewaarden trader-left/right=false op mobiel,
   // waardoor de panelen dichtbleven. Nieuwe sleutels -> iedereen start met
@@ -243,23 +243,6 @@ export function DashboardShell() {
     showToastMsg(`Sessie gestart: ${opt.symbol}. Conversations geopend.`);
   };
 
-  const doTriggerRoutine = async () => {
-    const r = confirmRoutine!;
-    setConfirmRoutine(null);
-    showToastMsg(`Routine "${r.name}" wordt uitgevoerd…`);
-    try {
-      const res = await fetch('/api/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routine: r.id }),
-      });
-      const data = await res.json();
-      showToastMsg(res.ok ? `"${r.name}" voltooid.` : `Fout: ${data.error ?? res.status}`);
-    } catch {
-      showToastMsg(`Verbindingsfout bij "${r.name}".`);
-    }
-  };
-
   const liveEquity = portfolio.totalEquity;
   const liveCash = portfolio.cashBalance;
   const liveDayPnl = portfolio.dailyPnl;
@@ -276,12 +259,13 @@ export function DashboardShell() {
 
   const currentPage = (() => {
     switch (page) {
-      case 'overview': return <OverviewPage portfolio={portfolio} guards={guards} marketOpen={live.data?.marketOpen ?? null} accountLoading={accountLoading} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect}/>;
+      case 'vandaag': return <VandaagPage/>;
+      case 'overview': return <OverviewPage portfolio={portfolio} guards={guards} marketOpen={live.data?.marketOpen ?? null} accountLoading={accountLoading} onOpenDecision={setSelectedDecision} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect}/>;
       case 'crypto': return <CryptoPage/>;
       case 'positions': return <PositionsPage portfolio={portfolio} onClose={handleClosePosition}/>;
       case 'decisions': return <DecisionLogPage onOpenDecision={setSelectedDecision}/>;
       case 'conversations': return <ConversationsPage pendingThread={pendingKickoffThread} onKickoffHandled={() => setPendingKickoffThread(null)}/>;
-      case 'routines': return <RoutinesPage onTrigger={r => setConfirmRoutine(r as Routine)}/>;
+      case 'routines': return <RoutinesPage/>;
       case 'risk': return (
         <RiskPage
           guards={guards}
@@ -576,14 +560,6 @@ export function DashboardShell() {
         )}
       </Modal>
 
-      <Modal open={!!confirmRoutine} onClose={() => setConfirmRoutine(null)}
-        title={confirmRoutine ? `Run ${confirmRoutine.name}?` : ''}
-        description={confirmRoutine ? `Handmatige trigger. De routine wordt normaal gescheduled op ${confirmRoutine.time}.` : ''}
-        footer={<><button className="btn ghost" onClick={() => setConfirmRoutine(null)}>Cancel</button><button className="btn primary" onClick={doTriggerRoutine}>Run now</button></>}>
-        {confirmRoutine && (
-          <div style={{padding:10,background:'var(--bg-app)',borderRadius:6,fontSize:11,color:'var(--text-secondary)'}}>{confirmRoutine.summary}</div>
-        )}
-      </Modal>
 
       {/* Toast */}
       {toast && (

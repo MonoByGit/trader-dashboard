@@ -5,7 +5,8 @@ import { Pill } from '@/components/ui/Pill';
 import { Toggle } from '@/components/ui/Toggle';
 import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
+import strategyJson from '../../strategy.json';
+import { etfMeta } from '@/lib/etf-meta';
 
 type VersionRow = {
   id: string;
@@ -25,7 +26,7 @@ type ComparisonSummary = {
 };
 
 export function StrategyPage() {
-  const c = MOCK.strategyConfig as Record<string, unknown>;
+  const c = { strategyName: strategyJson.name, approvedSymbols: strategyJson.symbols, ...strategyJson.rules } as Record<string, unknown>;
   const [holdOvernight, setHoldOvernight] = useState(c.hold_overnight as boolean);
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [activeId, setActiveId] = useState<string>('');
@@ -191,12 +192,12 @@ export function StrategyPage() {
         <div className="card-head"><h3><Icon name="eye" size={12}/> Approved Universe <InfoTip id="etf"/></h3><span className="text-tertiary mono" style={{fontSize:10}}>10 symbols · no exceptions</span></div>
         <div className="card-body" style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
           {(c.approvedSymbols as string[]).map(s => {
-            const w = MOCK.watchlist.find(ww => ww.symbol === s);
+            const w = { name: etfMeta(s).name, price: null as number | null };
             return (
               <div key={s} style={{padding:10,background:'var(--bg-app)',border:'1px solid var(--border-subtle)',borderRadius:6}}>
                 <div className="sym" style={{fontSize:13}}>{s}</div>
                 <div className="text-tertiary" style={{fontSize:10,marginTop:2}}>{w?.name}</div>
-                <div className="mono" style={{fontSize:10,marginTop:6,color:'var(--text-secondary)'}}>{w ? fmt.usd(w.price) : '—'}</div>
+                <div className="mono" style={{fontSize:10,marginTop:6,color:'var(--text-secondary)'}}>—</div>
               </div>
             );
           })}

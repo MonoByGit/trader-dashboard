@@ -7,8 +7,8 @@ import { Sparkline } from '@/components/charts/Sparkline';
 import { EquityChart } from '@/components/charts/EquityChart';
 import { SessionKickoff } from '@/components/ui/SessionKickoff';
 import { fmt } from '@/lib/format';
-import { intradayFromAccount } from '@/lib/live-portfolio';
 import { TRADER_ROUTINES } from '@/lib/routines-config';
+import { intradayFromAccount } from '@/lib/live-portfolio';
 
 interface Portfolio {
   totalEquity: number;
@@ -48,14 +48,13 @@ interface OverviewPageProps {
   marketOpen: boolean | null;
   accountLoading: boolean;
   onOpenDecision: (d: Decision) => void;
-  onTriggerRoutine: (r: { id: string; name: string; time: string; summary: string }) => void;
   onClosePosition: (p: Position) => void;
   onOpenKillSwitch: () => void;
   onKickoffSelect: (opt: KickoffOption) => void;
 }
 
 export function OverviewPage({
-  portfolio, guards, marketOpen, accountLoading, onOpenDecision, onTriggerRoutine,
+  portfolio, guards, marketOpen, accountLoading, onOpenDecision,
   onClosePosition, onOpenKillSwitch, onKickoffSelect,
 }: OverviewPageProps) {
   const [range, setRange] = useState('1D');
@@ -304,24 +303,6 @@ export function OverviewPage({
       <div className="grid-2" style={{ gridTemplateColumns: '1.3fr 1fr' }}>
         <PositionsCard positions={portfolio.positions} onClose={onClosePosition}/>
         <WatchlistCard heldSymbols={portfolio.positions.map(p => p.symbol)}/>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <h3><Icon name="routines" size={12}/> Today&apos;s Routines</h3>
-        </div>
-        <div className="card-body">
-          <div className="routines-grid">
-            {TRADER_ROUTINES.map(r => (
-              <div key={r.id} className="routine-card" onClick={() => onTriggerRoutine(r)} style={{cursor:'pointer'}}>
-                <div className="r-time mono">{r.time}</div>
-                <div className="r-name">{r.name}</div>
-                <div className="r-status"><Icon name="clock" size={10}/> <span className="text-tertiary">Gepland</span></div>
-                <div className="text-tertiary" style={{fontSize:10,lineHeight:1.4}}>{r.summary}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       <GuardSnapshot guards={guards} onOpenKill={onOpenKillSwitch}/>
