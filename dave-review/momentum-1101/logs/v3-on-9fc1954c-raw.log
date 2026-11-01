@@ -1,0 +1,103 @@
+
+> trader-agent@0.1.0 test
+> node --experimental-vm-modules node_modules/.bin/jest web/lib/momentum2/__dave
+
+(node:988608) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:988623) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-broker.test.ts
+(node:988649) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-crypto-m1.test.ts
+(node:988632) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-misc.test.ts
+(node:988610) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-a2.test.ts
+(node:988631) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-mode.test.ts
+  ● Console
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=api.alpaca.markets is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+      at assertAlpacaPaperTrading (src/alpaca/paper-host.ts:44:13)
+      at web/lib/momentum2/__dave/dave-pr47-mode.test.ts:41:18
+      at Object.<anonymous> (../../pr33/repo/node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (../../pr33/repo/node_modules/expect/build/index.js:320:21)
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-mode.test.ts:41:74)
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=paper-api.alpaca.markets.evil.io is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+      at assertAlpacaPaperTrading (src/alpaca/paper-host.ts:44:13)
+      at web/lib/momentum2/__dave/dave-pr47-mode.test.ts:42:18
+      at Object.<anonymous> (../../pr33/repo/node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (../../pr33/repo/node_modules/expect/build/index.js:320:21)
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-mode.test.ts:42:88)
+
+    console.error
+      [alpaca] ORDER BLOCKED: host= is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+      at assertAlpacaPaperTrading (src/alpaca/paper-host.ts:44:13)
+      at web/lib/momentum2/__dave/dave-pr47-mode.test.ts:43:18
+      at Object.<anonymous> (../../pr33/repo/node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (../../pr33/repo/node_modules/expect/build/index.js:320:21)
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-mode.test.ts:43:57)
+
+PASS web/lib/momentum2/__dave/dave-pr47-flip.test.ts
+(node:988643) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-live.test.ts
+PASS web/lib/momentum2/__dave/dave-pr47-int.test.ts
+  ● Console
+
+    console.log
+      P1 {"pos":0,"orders":[["stop","sell","20","canceled"],["market","sell","20","filled"]],"pending":[]}
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-int.test.ts:158:13)
+
+    console.log
+      P3 {"pos":20,"orders":[["market","buy","20","filled"],["stop","sell","20","new"]],"book":{"qty":20,"entryPrice":50,"entryDate":"2024-06-03","highWater":50,"signalDate":"2024-06-03"},"pending":[]}
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-int.test.ts:178:13)
+
+    console.log
+      P3b {"pos":20,"book":20,"stopQty":20}
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-int.test.ts:181:13)
+
+
+Test Suites: 8 passed, 8 total
+Tests:       44 passed, 44 total
+Snapshots:   0 total
+Time:        4.451 s
+Ran all test suites matching /web\/lib\/momentum2\/__dave/i.
+exit 0

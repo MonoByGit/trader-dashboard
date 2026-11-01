@@ -1,0 +1,200 @@
+
+> trader-agent@0.1.0 test
+> node --experimental-vm-modules node_modules/.bin/jest web/lib/__dave48
+
+(node:995548) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  console.log
+    S1 {
+     "orderCalls": [],
+     "readCalls": [
+      "clock",
+      "latestQuotes"
+     ],
+     "net": [
+      "GET https://data.alpaca.markets/v1beta3/crypto/us/bars",
+      "GET https://data.alpaca.markets/v2/stocks/bars"
+     ],
+     "runs": [
+      [
+       "momentum6-run",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum2-execute",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum3-execute",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum5-execute",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum2-decide",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum3-decide",
+       "2026-11-02",
+       "ok",
+       ""
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum5-decide",
+       "2026-11-02",
+       "skipped",
+       "QQQ dagbar nog niet gesloten"
+      ],
+      [
+       "momentum6-run",
+       "2026-11-03",
+       "ok",
+       ""
+      ],
+      [
+       "momentum2-execute",
+       "2026-11-03",
+       "ok",
+       ""
+      ],
+      [
+       "momentum3-execute",
+       "2026-11-03",
+       "ok",
+       ""
+      ],
+      [
+       "momentum5-execute",
+       "2026-11-03",
+       "ok",
+       ""
+      ]
+     ],
+     "startedAtIsDate": true,
+     "settings": [
+      "m:book:m3-crypto",
+      "m:book:m6-btc-breakout",
+      "m:pending:m3-crypto",
+      "m:pending:m6-btc-breakout"
+     ],
+     "logs": [
+      "[momentum-tick] momentum6-run 2026-11-02 ok schaduw {\"decide\":{\"date\":\"2026-11-01\",\"shadow\":true,\"planned\":1},\"execute\":{\"date\":\"2026-11-01\",\"shadow\":true,\"trades\":1}}",
+      "[momentum-tick] momentum2-execute 2026-11-02 ok schaduw {\"execute\":{\"date\":\"2026-11-02\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum3-execute 2026-11-02 ok schaduw {\"execute\":{\"date\":\"2026-11-02\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum5-execute 2026-11-02 ok schaduw {\"execute\":{\"date\":\"2026-11-02\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum2-decide 2026-11-02 ok schaduw {\"decide\":{\"date\":\"2026-11-02\",\"shadow\":true,\"planned\":0}}",
+      "[momentum-tick] momentum3-decide 2026-11-02 ok schaduw {\"decide\":{\"date\":\"2026-11-02\",\"shadow\":true}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum5-decide 2026-11-02 skipped schaduw {\"decide\":{\"skipped\":\"QQQ dagbar nog niet gesloten\"}}",
+      "[momentum-tick] momentum6-run 2026-11-03 ok schaduw {\"decide\":{\"date\":\"2026-11-02\",\"shadow\":true,\"planned\":1},\"execute\":{\"date\":\"2026-11-02\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum2-execute 2026-11-03 ok schaduw {\"execute\":{\"date\":\"2026-11-03\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum3-execute 2026-11-03 ok schaduw {\"execute\":{\"date\":\"2026-11-03\",\"shadow\":true,\"trades\":0}}",
+      "[momentum-tick] momentum5-execute 2026-11-03 ok schaduw {\"execute\":{\"date\":\"2026-11-03\",\"shadow\":true,\"trades\":0}}"
+     ]
+    }
+
+      at Object.<anonymous> (web/lib/__dave48/dave-pr48-tick-e2e.test.ts:97:13)
+
+  console.log
+    S2 {
+     "orderCalls": [
+      "alpaca.openOrders",
+      "alpaca.openOrders",
+      "alpaca.openOrders"
+     ],
+     "logs": [
+      "[momentum-tick] momentum2-execute 2026-11-02 skipped schaduw {\"execute\":{\"skipped\":\"echte orders zijn in deze versie geblokkeerd (MOMENTUM2_DRY_RUN=0 wordt geweigerd)\"}}",
+      "[momentum-tick] momentum3-execute 2026-11-02 skipped schaduw {\"execute\":{\"skipped\":\"echte orders zijn in deze versie geblokkeerd (MOMENTUM3_DRY_RUN=0 wordt geweigerd)\"}}",
+      "[momentum-tick] momentum5-execute 2026-11-02 failed: verboden Alpaca-aanroep openOrders",
+      "[momentum-tick] momentum6-run 2026-11-02 failed: verboden Alpaca-aanroep openOrders",
+      "[momentum-tick] momentum6-run 2026-11-03 failed: verboden Alpaca-aanroep openOrders"
+     ]
+    }
+
+      at Object.<anonymous> (web/lib/__dave48/dave-pr48-tick-e2e.test.ts:110:13)
+
+FAIL web/lib/__dave48/dave-pr48-tick-e2e.test.ts
+  PR48 tick e2e: vlaggen aan, DRY_RUN ongewijzigd
+    ✓ S1 alle vier ENABLED=1 (+ MOMENTUM4 aan): twee handelsdagen lang tikken, nul order-aanroepen, alleen schaduw, geen momentum4 (181 ms)
+    ✕ S2 ENABLED=1 met DRY_RUN=0: weigert (skipped), nog steeds nul order-aanroepen (28 ms)
+
+  ● PR48 tick e2e: vlaggen aan, DRY_RUN ongewijzigd › S2 ENABLED=1 met DRY_RUN=0: weigert (skipped), nog steeds nul order-aanroepen
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 5
+
+    - Array []
+    + Array [
+    +   "alpaca.openOrders",
+    +   "alpaca.openOrders",
+    +   "alpaca.openOrders",
+    + ]
+
+      109 |     await tick('2026-11-03T00:35:00Z', '2026-11-03');
+      110 |     console.log('S2', JSON.stringify({ orderCalls, logs }, null, 1));
+    > 111 |     expect(orderCalls).toEqual([]);
+          |                        ^
+      112 |     expect(logs.every((l) => / skipped /.test(l))).toBe(true);
+      113 |   }, 60000);
+      114 | });
+
+      at Object.<anonymous> (web/lib/__dave48/dave-pr48-tick-e2e.test.ts:111:24)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 passed, 2 total
+Snapshots:   0 total
+Time:        2.43 s
+Ran all test suites matching /web\/lib\/__dave48/i.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+exit 1
