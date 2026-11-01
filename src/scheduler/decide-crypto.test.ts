@@ -100,6 +100,47 @@ describe('decideDueCryptoRoutines', () => {
     expect(due).toEqual([]);
   });
 
+  it('sorts multiple runs when timestamps are Date objects (pg driver shape)', () => {
+    const nowMs = Date.parse('2026-11-01T16:05:00.000Z');
+    expect(() =>
+      decideDueCryptoRoutines({
+        nowMs,
+        runs: [
+          {
+            routine: 'crypto-scan',
+            status: 'ok',
+            finished_at: new Date('2026-11-01T14:05:00.000Z'),
+            started_at: new Date('2026-11-01T14:00:00.000Z'),
+          },
+          {
+            routine: 'crypto-scan',
+            status: 'ok',
+            finished_at: new Date('2026-11-01T16:01:00.000Z'),
+            started_at: new Date('2026-11-01T16:00:00.000Z'),
+          },
+        ],
+        config: { tickIntervalHours: 2, tickGraceMinutes: 10 },
+      }),
+    ).not.toThrow();
+    const due = decideDueCryptoRoutines({
+      nowMs,
+      runs: [
+        {
+          routine: 'crypto-scan',
+          status: 'ok',
+          finished_at: new Date('2026-11-01T14:05:00.000Z'),
+        },
+        {
+          routine: 'crypto-scan',
+          status: 'ok',
+          finished_at: new Date('2026-11-01T16:01:00.000Z'),
+        },
+      ],
+      config: { tickIntervalHours: 2, tickGraceMinutes: 10 },
+    });
+    expect(due).toEqual([]);
+  });
+
   it('schedules again after the full interval (2 hours)', () => {
     const due = decideDueCryptoRoutines({
       nowMs: Date.parse('2026-11-01T16:05:00.000Z'),

@@ -6,8 +6,8 @@ import { isInUtcCryptoSlotWindow, utcCryptoScanSlot } from './crypto-slot.js';
 export interface CryptoRunRecord {
   routine: string;
   status: string;
-  finished_at?: string | null;
-  started_at?: string | null;
+  finished_at?: string | Date | null;
+  started_at?: string | Date | null;
 }
 
 export interface CryptoSchedulerConfig {
@@ -26,11 +26,16 @@ export function utcDateYmd(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 10);
 }
 
+function runTimeMs(v: string | Date | null | undefined): number {
+  return new Date(v ?? 0).getTime();
+}
+
 function lastRun(runs: CryptoRunRecord[]): CryptoRunRecord | undefined {
   return runs
     .filter((r) => r.routine === 'crypto-scan')
-    .sort((a, b) =>
-      (b.finished_at ?? b.started_at ?? '').localeCompare(a.finished_at ?? a.started_at ?? ''),
+    .sort(
+      (a, b) =>
+        runTimeMs(b.finished_at ?? b.started_at) - runTimeMs(a.finished_at ?? a.started_at),
     )[0];
 }
 

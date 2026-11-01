@@ -12,8 +12,8 @@ export interface RoutineRunRecord {
   routine: string;
   trading_date: string;
   status: string;
-  finished_at?: string | null;
-  started_at?: string | null;
+  finished_at?: string | Date | null;
+  started_at?: string | Date | null;
 }
 
 export interface SchedulerConfig {
@@ -101,7 +101,10 @@ function lastRunFor(
 ): RoutineRunRecord | undefined {
   return runs
     .filter((r) => r.routine === routine && r.trading_date === tradingDate)
-    .sort((a, b) => (b.finished_at ?? '').localeCompare(a.finished_at ?? ''))[0];
+    .sort(
+      (a, b) =>
+        new Date(b.finished_at ?? 0).getTime() - new Date(a.finished_at ?? 0).getTime(),
+    )[0];
 }
 
 function shouldRunRoutine(
