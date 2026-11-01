@@ -7,7 +7,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "dev": "tsx src/routines/index.ts"
+    "dev": "tsx src/routines/index.ts",
+    "backtest": "tsx scripts/run-backtest.ts"
   },
   "dependencies": {
     "typescript": "^5.7.0"

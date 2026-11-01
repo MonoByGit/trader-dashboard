@@ -21,6 +21,7 @@ import { StrategyPage } from '@/components/pages/StrategyPage';
 import { LessonsPage } from '@/components/pages/LessonsPage';
 import { ReportsPage } from '@/components/pages/ReportsPage';
 import { HistoryPage } from '@/components/pages/HistoryPage';
+import { BacktestsPage } from '@/components/pages/BacktestsPage';
 
 const PAGES = [
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
@@ -33,6 +34,7 @@ const PAGES = [
   { id: 'lessons', label: 'Lessons', icon: 'sparkle' },
   { id: 'reports', label: 'Reports', icon: 'logs' },
   { id: 'history', label: 'History', icon: 'history' },
+  { id: 'backtests', label: 'Backtests', icon: 'history' },
 ] as const;
 
 type PageId = typeof PAGES[number]['id'];
@@ -273,6 +275,7 @@ export function DashboardShell() {
       case 'lessons': return <LessonsPage/>;
       case 'reports': return <ReportsPage/>;
       case 'history': return <HistoryPage/>;
+      case 'backtests': return <BacktestsPage/>;
       default: return null;
     }
   })();
