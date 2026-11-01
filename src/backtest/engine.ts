@@ -5,6 +5,7 @@ import { blocksNewEntries } from '../guards/routine-gates';
 import { evaluateEntryRules } from './entry-rules';
 import { firstBracketHit, hourlyBarsForTradingDate } from './intraday-brackets';
 import { barIndexByDate, barTradingDate, snapshotAtIndex } from './indicators';
+import { vixyStressRatio } from '../volatility/vixy-stress';
 import { computeMetrics } from './metrics';
 import { computePositionSize } from './sizing';
 import type {
@@ -39,6 +40,13 @@ function commission(qty: number, params: BacktestEngineInput['params']): number 
 
 function getBar(bars: DailyBar[], date: string): DailyBar | undefined {
   return bars.find((b) => barTradingDate(b) === date);
+}
+
+function vixStressAtDate(vixBars: DailyBar[], date: string): number | null {
+  const idx = barIndexByDate(vixBars, date);
+  if (idx < 0) return null;
+  const closes = vixBars.slice(0, idx + 1).map((b) => b.c);
+  return vixyStressRatio(closes);
 }
 
 export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
@@ -283,11 +291,8 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
       })
     ) {
       const candidates: { symbol: string; score: number }[] = [];
-      let vixClose: number | null = null;
-      if (vixBars?.length) {
-        const vb = getBar(vixBars, date);
-        vixClose = vb?.c ?? null;
-      }
+      const vixStressRatio =
+        vixBars?.length ? vixStressAtDate(vixBars, date) : null;
 
       for (const symbol of symbols) {
         if (positions.has(symbol)) continue;
@@ -297,7 +302,7 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
         const snap = snapshotAtIndex(bars, idx);
         if (!snap) continue;
         snap.symbol = symbol;
-        const entry = evaluateEntryRules(snap, rules, { vixClose });
+        const entry = evaluateEntryRules(snap, rules, { vixStressRatio });
         if (entry.pass) candidates.push({ symbol, score: entry.score });
       }
 

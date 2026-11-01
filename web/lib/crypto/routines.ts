@@ -17,6 +17,7 @@ import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
 import { enforceSoftwareCryptoStops, placeCryptoStopLimit, saveCryptoStop } from './stops';
 import { getCryptoSymbols } from './strategy-version';
+import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
 
 const RULES = cryptoStrategy.rules as {
   max_positions: number;
@@ -29,33 +30,7 @@ function buildSnapshots(
   bars: Record<string, { c: number; v: number }[]>,
 ) {
   return symbols
-    .map((symbol) => {
-      const b = bars[symbol] ?? [];
-      if (b.length < 5) return null;
-      const closes = b.slice(-20).map((x) => x.c);
-      const sma20 = closes.reduce((a, v) => a + v, 0) / closes.length;
-      const last = closes[closes.length - 1];
-      const vols = b.slice(-20).map((x) => x.v);
-      const avgVol = vols.slice(0, -1).reduce((a, v) => a + v, 0) / (vols.length - 1);
-      const gains: number[] = [];
-      const losses: number[] = [];
-      for (let i = 1; i < Math.min(15, closes.length); i++) {
-        const d = closes[i] - closes[i - 1];
-        if (d >= 0) gains.push(d);
-        else losses.push(-d);
-      }
-      const ag = gains.reduce((a, v) => a + v, 0) / 14;
-      const al = losses.reduce((a, v) => a + v, 0) / 14;
-      const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-      return {
-        symbol,
-        lastClose: last,
-        sma20: +sma20.toFixed(2),
-        aboveSma20: last > sma20,
-        rsi: +rsi.toFixed(1),
-        volumeRatio: +(vols[vols.length - 1] / avgVol).toFixed(2),
-      };
-    })
+    .map((symbol) => snapshotFromDailyBars(symbol, bars[symbol] ?? []))
     .filter(Boolean);
 }
 

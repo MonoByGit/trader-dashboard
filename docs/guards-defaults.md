@@ -32,6 +32,14 @@ Bij trip: geen nieuwe entries; bestaande bracket-stops blijven bij Alpaca staan.
 - **Kill switch** (`trading_enabled` in DB): blokkeert nieuwe entries; routines blijven draaien.
 - **Noodstop** (`emergency_stop` in DB): annuleert orders, sluit posities, kill switch aan, **alle** cron-routines geblokkeerd tot `POST /api/guards/emergency-resume` (achter `APP_PASSWORD`-login).
 
+## Volatility proxy (`vix_below_limit`)
+
+We do not compare VIXY ETF price to the VIX index level (e.g. 30). The gate uses **VIXY stress ratio**:
+
+- `VIXY close / 20-day SMA(VIXY close)`
+- **Pass** when ratio ≤ `vol_stress_ratio_max` (default **1.15** in `strategy.json`, ~15% above its own recent average)
+- Backtests and deterministic entry rules use the same ratio; live routines pass the computed value into agent prompts.
+
 ## EOD clock
 
 - Flatten alleen als markt open is en ≥ `EOD_MIN_MINUTES_BEFORE_CLOSE` (default 2) minuten voor `next_close`.

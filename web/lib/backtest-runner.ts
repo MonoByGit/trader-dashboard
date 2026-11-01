@@ -19,6 +19,7 @@ import type { StrategyContent as FullStrategyContent } from '../../src/strategy/
 import { getStrategyVersion } from '@/lib/strategy-version';
 import { executeCryptoBacktest } from '@/lib/backtest-crypto-runner';
 import { getActiveCryptoStrategyVersionLabel } from '@/lib/crypto/strategy-version';
+import { toTradingDateString } from '../../src/dates/trading-date';
 
 export const DEFAULT_BACKTEST_PARAMS: BacktestParams = {
   initialCapital: 100_000,
@@ -63,6 +64,8 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
   trades: Awaited<ReturnType<typeof runBacktest>>['trades'];
   equityCurve: Awaited<ReturnType<typeof runBacktest>>['equityCurve'];
 }> {
+  const periodStart = toTradingDateString(input.periodStart);
+  const periodEnd = toTradingDateString(input.periodEnd);
   const { content } = await resolveStrategyForRun(input);
   const symbols = content.symbols as string[];
   const rules = content.rules as StrategyRulesLike;
@@ -78,7 +81,7 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
     );
   }
 
-  const tradingDates = await fetchTradingDates(input.periodStart, input.periodEnd);
+  const tradingDates = await fetchTradingDates(periodStart, periodEnd);
   if (tradingDates.length < 5) {
     throw new Error('Te weinig handelsdagen in de gekozen periode');
   }
@@ -88,10 +91,10 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
   let barsBySymbol: Record<string, import('@backtest/types').DailyBar[]>;
 
   if (params.barMode === 'hourly') {
-    hourlyBarsBySymbol = await fetchHistoricalHourlyBars(allSymbols, input.periodStart, input.periodEnd);
+    hourlyBarsBySymbol = await fetchHistoricalHourlyBars(allSymbols, periodStart, periodEnd);
     barsBySymbol = dailyBarsFromHourly(hourlyBarsBySymbol);
   } else {
-    barsBySymbol = await fetchHistoricalDailyBars(allSymbols, input.periodStart, input.periodEnd);
+    barsBySymbol = await fetchHistoricalDailyBars(allSymbols, periodStart, periodEnd);
   }
 
   const spyBars = barsBySymbol.SPY ?? [];
@@ -100,7 +103,7 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
     delete hourlyBarsBySymbol.SPY;
   }
 
-  const vixBars = await fetchHistoricalDailyBars(['VIXY'], input.periodStart, input.periodEnd)
+  const vixBars = await fetchHistoricalDailyBars(['VIXY'], periodStart, periodEnd)
     .then((m) => m.VIXY)
     .catch(() => undefined);
 
@@ -122,6 +125,9 @@ export async function startBacktestRun(input: StartBacktestInput): Promise<Backt
   const paramsAsset = input.params?.assetClass;
   const isCrypto = input.assetClass === 'crypto' || paramsAsset === 'crypto';
 
+  const periodStart = toTradingDateString(input.periodStart);
+  const periodEnd = toTradingDateString(input.periodEnd);
+
   let versionLabel: string;
   if (isCrypto) {
     versionLabel =
@@ -140,8 +146,8 @@ export async function startBacktestRun(input: StartBacktestInput): Promise<Backt
 
   const run = await createBacktestRun({
     strategyVersion: versionLabel,
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
+    periodStart,
+    periodEnd,
     params,
   });
   queueBacktestJob(run.id);
@@ -167,15 +173,17 @@ async function runBacktestJob(runId: string): Promise<void> {
   try {
     const runParams = run.params as BacktestParams & { assetClass?: string; strategyVersionId?: string };
     const isCrypto = runParams.assetClass === 'crypto';
+    const periodStart = toTradingDateString(run.period_start);
+    const periodEnd = toTradingDateString(run.period_end);
     const result = isCrypto
       ? await executeCryptoBacktest({
-          periodStart: run.period_start,
-          periodEnd: run.period_end,
+          periodStart,
+          periodEnd,
           params: runParams,
         })
       : await executeBacktest({
-          periodStart: run.period_start,
-          periodEnd: run.period_end,
+          periodStart,
+          periodEnd,
           strategyVersion: run.strategy_version,
           strategyVersionId: runParams.strategyVersionId,
           params: runParams,

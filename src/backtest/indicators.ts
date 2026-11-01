@@ -1,3 +1,4 @@
+import { rsi14 } from '../indicators/rsi';
 import type { DailyBar } from './types';
 
 export interface SymbolSnapshot {
@@ -26,17 +27,9 @@ export function snapshotAtIndex(bars: DailyBar[], barIndex: number): SymbolSnaps
     prevVols.length > 0 ? prevVols.reduce((a, v) => a + v, 0) / prevVols.length : vols[vols.length - 1]!;
   const volumeRatio = avgVol > 0 ? vols[vols.length - 1]! / avgVol : 0;
 
-  const rsiCloses = closes.slice(-15);
-  const gains: number[] = [];
-  const losses: number[] = [];
-  for (let i = 1; i < rsiCloses.length; i++) {
-    const d = rsiCloses[i]! - rsiCloses[i - 1]!;
-    if (d >= 0) gains.push(d);
-    else losses.push(-d);
-  }
-  const ag = gains.length ? gains.reduce((a, v) => a + v, 0) / 14 : 0;
-  const al = losses.length ? losses.reduce((a, v) => a + v, 0) / 14 : 0;
-  const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  const rsiVal = rsi14(closes);
+  if (rsiVal == null) return null;
+  const rsi = rsiVal;
 
   return {
     symbol: '',

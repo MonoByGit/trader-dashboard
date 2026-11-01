@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { backfillSnapshotsFromAlpaca, listSnapshots, writeDailySnapshot } from '@/lib/snapshots';
+import {
+  backfillSnapshotsFromAlpaca,
+  backfillSpyClosesForExistingRows,
+  listSnapshots,
+  writeDailySnapshot,
+} from '@/lib/snapshots';
 import { requireCronAuth } from '@/lib/cron-auth';
 
 export async function GET(req: Request) {
@@ -15,6 +20,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));
+  if (body.action === 'fill_spy') {
+    const result = await backfillSpyClosesForExistingRows({
+      start: body.start,
+      end: body.end,
+    });
+    return NextResponse.json(result);
+  }
   if (body.action === 'today' || body.date) {
     const snap = await writeDailySnapshot(body.date);
     return NextResponse.json(snap);

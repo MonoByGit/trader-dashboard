@@ -30,6 +30,8 @@ import { cancelOpenStopTakeProfitForSymbol, isStopFill, isTakeProfitFill } from 
 import { runWeeklyReview } from '@/lib/weekly-review';
 import strategy from '@/strategy.json';
 import { filterByAssetClass } from '@/lib/asset-class';
+import { snapshotFromDailyBars } from '../../src/indicators/live-snapshot';
+import { loadVolStressSnapshot } from '@/lib/vol-stress';
 
 async function liveStrategy(): Promise<StrategyContent> {
   try {
@@ -83,24 +85,10 @@ async function runPremarket() {
   const equity = parseFloat(account.equity);
   const openSymbols = positions.map(p => p.symbol);
 
-  const snapshots = watchlist.map(symbol => {
-    const b = bars[symbol] ?? [];
-    if (b.length < 5) return null;
-    const closes = b.slice(-20).map((x: { c: number }) => x.c);
-    const sma20 = closes.reduce((a: number, v: number) => a + v, 0) / closes.length;
-    const last = closes[closes.length - 1];
-    const vols = b.slice(-20).map((x: { v: number }) => x.v);
-    const avgVol = vols.slice(0, -1).reduce((a: number, v: number) => a + v, 0) / (vols.length - 1);
-    const gains: number[] = [], losses: number[] = [];
-    for (let i = 1; i < Math.min(15, closes.length); i++) {
-      const d = closes[i] - closes[i - 1];
-      if (d >= 0) gains.push(d); else losses.push(-d);
-    }
-    const ag = gains.reduce((a, v) => a + v, 0) / 14;
-    const al = losses.reduce((a, v) => a + v, 0) / 14;
-    const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
-    return { symbol, lastClose: last, sma20: +sma20.toFixed(2), aboveSma20: last > sma20, rsi: +rsi.toFixed(1), volumeRatio: +(vols[vols.length - 1] / avgVol).toFixed(2) };
-  }).filter(Boolean);
+  const volStress = await loadVolStressSnapshot();
+  const snapshots = watchlist
+    .map((symbol) => snapshotFromDailyBars(symbol, bars[symbol] ?? []))
+    .filter(Boolean);
 
   let news = '{}';
   try {
@@ -114,9 +102,9 @@ async function runPremarket() {
     decisions = await claudeJson<Record<string, unknown>[]>(
       MODELS.sonnet,
       `Je bent Momentum. Strategie: ${strat.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
-Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit, no_earnings_risk, news_sentiment.
+Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit (VIXY stress ratio ≤ ${volStress.maxRatio}, nu ${volStress.ratio?.toFixed(2) ?? 'n/a'}), no_earnings_risk, news_sentiment.
 Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
-      `Data:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
+      `Vol stress: ${JSON.stringify(volStress)}\nData:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { toTradingDateString } from '../../../../src/dates/trading-date';
 import { listBacktestRuns } from '@/lib/backtests';
 import { DEFAULT_BACKTEST_PARAMS, startBacktestRun } from '@/lib/backtest-runner';
 
@@ -23,8 +24,8 @@ export async function POST(req: Request) {
       body.params?.barMode === 'hourly' || body.barMode === 'hourly' ? 'hourly' : 'daily';
 
     const run = await startBacktestRun({
-      periodStart,
-      periodEnd,
+      periodStart: toTradingDateString(periodStart),
+      periodEnd: toTradingDateString(periodEnd),
       strategyVersion: body.strategyVersion,
       strategyVersionId: body.strategyVersionId ?? body.params?.strategyVersionId,
       assetClass,
