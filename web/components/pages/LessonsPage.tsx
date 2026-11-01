@@ -16,6 +16,8 @@ interface Proposal {
   id: string; title: string; description: string; category: string; confidence: number;
   proposedAt: string; relatedTrades: RelatedTrade[];
   suggestedTrigger: { human: string; code: string };
+  strategyDraftId?: string | null;
+  comparisonId?: string | null;
 }
 
 const CAT_STYLE: Record<string, { color: string; bg: string; label: string }> = {
@@ -71,6 +73,8 @@ export function LessonsPage() {
                 human: String(p.description ?? p.title),
                 code: 'proposed_lesson',
               },
+              strategyDraftId: (p.strategyDraftId ?? p.strategy_draft_id) as string | null | undefined,
+              comparisonId: (p.comparisonId ?? p.comparison_id) as string | null | undefined,
             }))
           : [];
         setLessons(ls);
@@ -285,6 +289,49 @@ function LessonDetail({ L, onToggle, relTime }: { L: Lesson; onToggle: () => voi
   );
 }
 
+function ProposalBacktestCompare({ draftId }: { draftId: string }) {
+  const [summary, setSummary] = useState<{
+    draftBeatsActive: boolean | null;
+    draftBeatsSpy: boolean | null;
+    draft?: { metrics?: { totalReturnPct?: number } };
+    active?: { metrics?: { totalReturnPct?: number } };
+    spyTotalReturnPct?: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const res = await fetch(`/api/strategy-versions/${draftId}/compare`);
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      setSummary(data.comparison?.summary ?? null);
+    };
+    void load();
+    const t = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [draftId]);
+
+  if (!summary) {
+    return (
+      <div className="lesson-section">
+        <div className="lesson-section-h"><Icon name="history" size={11}/><span>Strategie-backtest</span></div>
+        <p className="text-tertiary" style={{ fontSize: 11, margin: 0 }}>Backtest-vergelijking loopt (draft vs actief vs SPY)…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="lesson-section">
+      <div className="lesson-section-h"><Icon name="history" size={11}/><span>Strategie-backtest (geen auto-activatie)</span></div>
+      <p className="text-secondary" style={{ fontSize: 11, margin: '0 0 8px' }}>
+        Draft {fmt.pct(summary.draft?.metrics?.totalReturnPct ?? 0)} vs actief {fmt.pct(summary.active?.metrics?.totalReturnPct ?? 0)} vs SPY {fmt.pct(summary.spyTotalReturnPct ?? 0)}.
+        {' '}
+        {summary.draftBeatsActive ? 'Draft presteert beter dan actief.' : 'Actief presteert minstens zo goed als draft.'}
+      </p>
+    </div>
+  );
+}
+
 function ProposalDetail({ p, onApprove, onReject }: { p: Proposal; onApprove: () => void; onReject: () => void }) {
   const s = CAT_STYLE[p.category];
   return (
@@ -300,6 +347,7 @@ function ProposalDetail({ p, onApprove, onReject }: { p: Proposal; onApprove: ()
         </div>
       </div>
       <p className="lesson-desc">{p.description}</p>
+      {p.strategyDraftId && <ProposalBacktestCompare draftId={p.strategyDraftId} />}
       <div className="lesson-section">
         <div className="lesson-section-h"><Icon name="bolt" size={11}/><span>Voorgestelde trigger</span></div>
         <div className="lesson-trigger">

@@ -41,7 +41,7 @@ type PageId = typeof PAGES[number]['id'];
 type Decision = { id: string; symbol: string; decision: string; ts: string; agentNote?: string; rationale: string; criteria?: Record<string, string>; routine: string; orderId?: string; };
 type Position = { symbol: string; name: string; sector: string; qty: number; avgEntryPrice: number; currentPrice: number; highWatermark: number; entryAt: string; stopLoss: number; trailingStop: number; takeProfit: number; sma20: number; marketValue: number; costBasis: number; unrealizedPnl: number; unrealizedPnlPct: number; };
 type Routine = { id: string; name: string; time: string; lastRun: string; summary: string; status: string; nextRun: string; };
-type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; emergencyStop?: boolean; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; };
+type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; emergencyStop?: boolean; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; softStartEnabled?: boolean; effectiveMaxOpenPositions?: number; effectiveMaxDailyTrades?: number; effectiveMaxPositionSizePct?: number; effectiveMaxTotalExposurePct?: number; };
 type Portfolio = { totalEquity: number; cashBalance: number; dayStartEquity: number; dailyPnl: number; dailyPnlPct: number; tradingEnabled: boolean; circuitBreakerTripped: boolean; positions: Position[]; };
 
 const TWEAK_DEFAULTS = { theme: 'dark', density: 'comfortable', agentPersona: true, accent: '#0d99ff' };
@@ -195,6 +195,21 @@ export function DashboardShell() {
       .catch(e => showToastMsg(String(e)));
   };
 
+  const doToggleSoftStart = (enabled: boolean) => {
+    fetch('/api/guards/soft-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        refreshGuards();
+        showToastMsg(`Soft-start ${enabled ? 'aan' : 'uit'}.`);
+      })
+      .catch(e => showToastMsg(String(e.message ?? e)));
+  };
+
   const doResetBreaker = () => {
     fetch('/api/guards/reset-breaker', {
       method: 'POST',
@@ -269,6 +284,7 @@ export function DashboardShell() {
           onResetBreaker={doResetBreaker}
           onEmergencyStop={() => setConfirmEmergency(true)}
           onEmergencyResume={doEmergencyResume}
+          onToggleSoftStart={doToggleSoftStart}
         />
       );
       case 'strategy': return <StrategyPage/>;

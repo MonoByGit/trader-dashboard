@@ -3,6 +3,7 @@ import { evaluateCircuitBreakers } from '../guards/circuit-breakers';
 import { evaluatePortfolioLimits } from '../guards/portfolio-limits';
 import { blocksNewEntries } from '../guards/routine-gates';
 import { evaluateEntryRules } from './entry-rules';
+import { firstBracketHit, hourlyBarsForTradingDate } from './intraday-brackets';
 import { barIndexByDate, barTradingDate, snapshotAtIndex } from './indicators';
 import { computeMetrics } from './metrics';
 import { computePositionSize } from './sizing';
@@ -202,16 +203,35 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
       dailyTrades += 1;
     }
 
-    // 2) Intraday brackets on daily high/low (stop before take-profit if both hit)
+    // 2) Brackets: hourly walk when available, else daily high/low
+    const useHourly = input.params.barMode === 'hourly' && input.hourlyBarsBySymbol;
     for (const pos of Array.from(positions.values())) {
       const bar = getBar(barsBySymbol[pos.symbol] ?? [], date);
       if (!bar) continue;
-      if (bar.l <= pos.stop) {
-        closePosition(pos, date, pos.stop, 'hard_stop');
-        continue;
-      }
-      if (bar.h >= pos.takeProfit) {
-        closePosition(pos, date, pos.takeProfit, 'take_profit');
+      if (useHourly) {
+        const intraday = hourlyBarsForTradingDate(
+          input.hourlyBarsBySymbol![pos.symbol] ?? [],
+          date,
+        );
+        const hit = intraday.length
+          ? firstBracketHit(pos.stop, pos.takeProfit, intraday)
+          : null;
+        if (hit?.hit === 'stop') {
+          closePosition(pos, date, hit.price, 'hard_stop');
+          continue;
+        }
+        if (hit?.hit === 'take_profit') {
+          closePosition(pos, date, hit.price, 'take_profit');
+          continue;
+        }
+      } else {
+        if (bar.l <= pos.stop) {
+          closePosition(pos, date, pos.stop, 'hard_stop');
+          continue;
+        }
+        if (bar.h >= pos.takeProfit) {
+          closePosition(pos, date, pos.takeProfit, 'take_profit');
+        }
       }
     }
 

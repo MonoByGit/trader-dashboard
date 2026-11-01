@@ -3,7 +3,8 @@ import { alpaca } from '@/lib/alpaca';
 import { sendMessage, killSwitchMessage } from '@/lib/telegram';
 import { openOrAppendThread } from '@/lib/threads';
 import { buildGuardStatus, setTradingEnabled, loadGuardState } from '@/lib/guards/service';
-import { loadGuardConfig } from '@guards/index';
+import { applySoftStartToGuardConfig, loadGuardConfig, SOFT_START_DEFAULTS } from '@guards/index';
+import { isSoftStartEnabled } from '@/lib/strategy-versions';
 
 export async function GET() {
   try {
@@ -19,6 +20,8 @@ export async function GET() {
       openPositions = positions.length;
     } catch {
       const state = await loadGuardState();
+      const softStartEnabled = await isSoftStartEnabled();
+      const effective = applySoftStartToGuardConfig(config, softStartEnabled);
       return NextResponse.json({
         tradingEnabled: state.tradingEnabled,
         circuitBreakerTripped: state.circuitBreakerTripped,
@@ -34,20 +37,27 @@ export async function GET() {
         tradesLast10Min: 0,
         tradesLast10MinLimit: config.maxOrdersPer10Min,
         openPositions: 0,
-        maxOpenPositions: config.maxPositions,
+        maxOpenPositions: effective.maxPositions,
         dailyTrades: 0,
-        maxDailyTrades: config.maxDailyTrades,
+        maxDailyTrades: effective.maxDailyTrades,
         cashReservePct: 100,
         cashReserveMin: config.minCashReservePct,
         maxOrderSize: config.maxOrderSizeUsd,
         minOrderSize: config.minOrderSizeUsd,
-        maxTotalExposurePct: config.maxTotalExposurePct,
-        maxPositionSizePct: config.maxPositionSizePct,
+        maxTotalExposurePct: effective.maxTotalExposurePct,
+        maxPositionSizePct: effective.maxPositionSizePct,
+        softStartEnabled,
+        softStartLimits: SOFT_START_DEFAULTS,
+        effectiveMaxOpenPositions: effective.maxPositions,
+        effectiveMaxDailyTrades: effective.maxDailyTrades,
+        effectiveMaxPositionSizePct: effective.maxPositionSizePct,
+        effectiveMaxTotalExposurePct: effective.maxTotalExposurePct,
       });
     }
 
     const status = await buildGuardStatus(equity, cash, openPositions);
     const cfg = status.config;
+    const softStartEnabled = status.softStartEnabled;
 
     return NextResponse.json({
       tradingEnabled: status.tradingEnabled,
@@ -74,6 +84,12 @@ export async function GET() {
       minOrderSize: cfg.minOrderSizeUsd,
       maxTotalExposurePct: cfg.maxTotalExposurePct,
       maxPositionSizePct: cfg.maxPositionSizePct,
+      softStartEnabled,
+      softStartLimits: SOFT_START_DEFAULTS,
+      effectiveMaxOpenPositions: cfg.maxPositions,
+      effectiveMaxDailyTrades: cfg.maxDailyTrades,
+      effectiveMaxPositionSizePct: cfg.maxPositionSizePct,
+      effectiveMaxTotalExposurePct: cfg.maxTotalExposurePct,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

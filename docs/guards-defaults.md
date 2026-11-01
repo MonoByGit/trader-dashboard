@@ -2,6 +2,8 @@
 
 Hard limits worden afgedwongen in `src/guards/` en via `web/lib/guards/service.ts` in Postgres (`settings` + `guard_events`).
 
+**Soft-start** (`settings.soft_start_enabled`, default `true`): tijdens paper ramp-up worden effectieve limieten verlaagd via `applySoftStartToGuardConfig` — max 2 nieuwe posities/dag, 5% per positie, 15% totale exposure. Market-open gebruikt `getEffectiveGuardConfig()`.
+
 ## Circuit breakers
 
 | Parameter | Default | Env |
