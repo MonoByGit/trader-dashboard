@@ -5,7 +5,13 @@ const logGuardEvent = jest.fn(async () => {});
 
 await jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => true,
-  dbQuery: jest.fn(async (_sql: string, params?: unknown[]) => {
+  dbQuery: jest.fn(async (sql: string, params?: unknown[]) => {
+    if (sql.includes('ON CONFLICT') && sql.includes('RETURNING')) {
+      const key = params?.[0] as string;
+      if (store.has(key)) return [];
+      store.set(key, params?.[1] as string);
+      return [{ key }];
+    }
     const key = params?.[0] as string;
     const val = store.get(key);
     return val ? [{ value: val }] : [];
@@ -148,7 +154,7 @@ describe('enforceSoftwareCryptoStops', () => {
     expect(result).toEqual({ triggered: false });
     expect(placeOrder).not.toHaveBeenCalled();
     expect(logGuardEvent).toHaveBeenCalledWith(
-      'crypto_software_stop_cancel_fail',
+      'crypto_exit_cancel_fail',
       expect.any(String),
       expect.objectContaining({ symbol: 'BTCUSD' }),
     );
