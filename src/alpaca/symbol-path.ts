@@ -1,12 +1,16 @@
 /**
- * Alpaca path segments for symbol_or_asset_id must be URL-encoded
- * (e.g. BTC/USD → BTC%2FUSD). See Alpaca assets/positions API reference.
+ * Alpaca open positions use crypto symbols without a slash (BTCUSD for pair BTC/USD).
+ * URL-encoding the slash is not reliable — many stacks decode %2F back to /.
+ * Equities keep dots and other characters (e.g. BRK.B, QQQ).
  */
-export function alpacaSymbolPathSegment(symbol: string): string {
-  return encodeURIComponent(symbol);
+export function alpacaPositionSymbol(symbol: string): string {
+  const trimmed = symbol.trim();
+  if (!trimmed.includes('/')) return trimmed;
+  return trimmed.replaceAll('/', '');
 }
 
 export function alpacaPositionCloseUrl(baseUrl: string, symbol: string): string {
   const base = baseUrl.replace(/\/$/, '');
-  return `${base}/v2/positions/${alpacaSymbolPathSegment(symbol)}`;
+  const positionSymbol = alpacaPositionSymbol(symbol);
+  return `${base}/v2/positions/${encodeURIComponent(positionSymbol)}`;
 }

@@ -1,11 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { jest } from '@jest/globals';
 import { cryptoBarsSymbolsQueryString } from './crypto-bars-query.js';
+import { fetchCryptoBars } from './fetch-crypto-bars.js';
 
-const repoRoot = join(fileURLToPath(import.meta.url), '../../..');
-
-describe('crypto bars symbols query (web/lib/alpaca-bars uses this module)', () => {
+describe('crypto bars symbols query (shared with web/lib/alpaca-bars)', () => {
   it('encodes BTC/USD once (not %252F)', () => {
     const qs = cryptoBarsSymbolsQueryString(['BTC/USD']);
     expect(qs).toContain('symbols=BTC%2FUSD');
@@ -17,10 +14,32 @@ describe('crypto bars symbols query (web/lib/alpaca-bars uses this module)', () 
     expect(qs).toMatch(/symbols=BTC%2FUSD%2CETH%2FUSD/);
   });
 
-  it('wires fetchCryptoBars and re-export through web/lib/alpaca-bars', () => {
-    const bars = readFileSync(join(repoRoot, 'web/lib/alpaca-bars.ts'), 'utf8');
-    expect(bars).toMatch(/from ['"].*crypto-bars-query/);
-    expect(bars).toMatch(/setCryptoBarsSymbols\(url, opts\.symbols\)/);
-    expect(bars).toMatch(/export \{ cryptoBarsSymbolsQueryString \}/);
+  it('fetchCryptoBars requests symbols query once (mocked fetch)', async () => {
+    const originalFetch = global.fetch;
+    const capturedUrls: string[] = [];
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      capturedUrls.push(String(input));
+      return {
+        ok: true,
+        json: async () => ({ bars: { 'BTC/USD': [] } }),
+      } as Response;
+    });
+
+    process.env.ALPACA_API_KEY = 'test-key';
+    process.env.ALPACA_SECRET_KEY = 'test-secret';
+
+    try {
+      await fetchCryptoBars({
+        symbols: ['BTC/USD'],
+        start: '2024-01-01',
+        end: '2024-01-02',
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(capturedUrls.length).toBeGreaterThan(0);
+    expect(capturedUrls[0]).toContain('symbols=BTC%2FUSD');
+    expect(capturedUrls[0]).not.toContain('%252F');
   });
 });
