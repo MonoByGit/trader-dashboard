@@ -31,7 +31,10 @@ export const alpaca = {
   account: () => get<AlpacaAccount>(`${BASE}/v2/account`),
   positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`),
   closePosition: (symbol: string) => del<unknown>(`${BASE}/v2/positions/${symbol}`),
+  cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`),
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
+  openOrders: (limit = 100) =>
+    get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
   placeOrder: (o: AlpacaOrderRequest) => post<AlpacaOrder>(`${BASE}/v2/orders`, o),
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
   bars: (symbols: string[], timeframe = '1Day', limit = 30) =>

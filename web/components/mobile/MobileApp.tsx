@@ -62,7 +62,7 @@ export function MobileApp() {
   const toggleEquity = () => setEquityOpen(o => { if (!o && heroRef.current) setDrawerTop(Math.round(heroRef.current.getBoundingClientRect().bottom)); return !o; });
 
   useEffect(() => {
-    fetch('/api/guards').then(r => r.json()).then(d => setGuards(g => ({ ...g, tradingEnabled: d.tradingEnabled }))).catch(() => null);
+    fetch('/api/guards').then(r => r.json()).then(d => setGuards(g => ({ ...g, ...d }))).catch(() => null);
     fetch('/api/decisions?limit=200')
       .then(r => r.json())
       .then(d => setDecisions(Array.isArray(d) ? mapDecisions(d) : []))
@@ -79,8 +79,11 @@ export function MobileApp() {
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
 
   const effPortfolio: Portfolio = useMemo(
-    () => buildLivePortfolio(live.data, livePositions.data, guards.tradingEnabled),
-    [live.data, livePositions.data, guards.tradingEnabled],
+    () => ({
+      ...buildLivePortfolio(live.data, livePositions.data, guards.tradingEnabled),
+      circuitBreakerTripped: guards.circuitBreakerTripped ?? false,
+    }),
+    [live.data, livePositions.data, guards.tradingEnabled, guards.circuitBreakerTripped],
   );
 
   const liveEquity = effPortfolio.totalEquity;

@@ -1,49 +1,109 @@
 import { NextResponse } from 'next/server';
-import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
+import { alpaca } from '@/lib/alpaca';
 import { sendMessage, killSwitchMessage } from '@/lib/telegram';
 import { openOrAppendThread } from '@/lib/threads';
-
-let memTradingEnabled = true;
+import { buildGuardStatus, setTradingEnabled, loadGuardState } from '@/lib/guards/service';
+import { loadGuardConfig } from '@guards/index';
 
 export async function GET() {
-  if (!hasDb()) return NextResponse.json({ tradingEnabled: memTradingEnabled });
-  await initDb();
-  const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key='trading_enabled'`);
-  return NextResponse.json({ tradingEnabled: rows.length === 0 || rows[0].value === 'true' });
+  try {
+    const config = loadGuardConfig();
+    let equity = 0;
+    let cash = 0;
+    let openPositions = 0;
+
+    try {
+      const [account, positions] = await Promise.all([alpaca.account(), alpaca.positions()]);
+      equity = parseFloat(account.equity);
+      cash = parseFloat(account.cash);
+      openPositions = positions.length;
+    } catch {
+      const state = await loadGuardState();
+      return NextResponse.json({
+        tradingEnabled: state.tradingEnabled,
+        circuitBreakerTripped: state.circuitBreakerTripped,
+        circuitBreakerReason: state.circuitBreakerReason,
+        emergencyStop: state.emergencyStop,
+        emergencyStopAt: state.emergencyStopAt,
+        dailyDrawdownPct: 0,
+        peakDrawdownPct: 0,
+        dailyDrawdownLimit: -config.maxDailyDrawdownPct,
+        peakDrawdownLimit: -config.maxPeakDrawdownPct,
+        consecLosses: state.consecutiveLosses,
+        consecLossesLimit: config.maxConsecutiveLosses,
+        tradesLast10Min: 0,
+        tradesLast10MinLimit: config.maxOrdersPer10Min,
+        openPositions: 0,
+        maxOpenPositions: config.maxPositions,
+        dailyTrades: 0,
+        maxDailyTrades: config.maxDailyTrades,
+        cashReservePct: 100,
+        cashReserveMin: config.minCashReservePct,
+        maxOrderSize: config.maxOrderSizeUsd,
+        minOrderSize: config.minOrderSizeUsd,
+        maxTotalExposurePct: config.maxTotalExposurePct,
+        maxPositionSizePct: config.maxPositionSizePct,
+      });
+    }
+
+    const status = await buildGuardStatus(equity, cash, openPositions);
+    const cfg = status.config;
+
+    return NextResponse.json({
+      tradingEnabled: status.tradingEnabled,
+      circuitBreakerTripped: status.circuitBreakerTripped,
+      circuitBreakerReason: status.circuitBreakerReason,
+      circuitBreakerTrippedAt: status.circuitBreakerTrippedAt,
+      emergencyStop: status.emergencyStop,
+      emergencyStopAt: status.emergencyStopAt,
+      dailyDrawdownPct: -status.dailyDrawdownPct,
+      peakDrawdownPct: -status.peakDrawdownPct,
+      dailyDrawdownLimit: -cfg.maxDailyDrawdownPct,
+      peakDrawdownLimit: -cfg.maxPeakDrawdownPct,
+      consecLosses: status.consecutiveLosses,
+      consecLossesLimit: cfg.maxConsecutiveLosses,
+      tradesLast10Min: status.ordersLast10Min,
+      tradesLast10MinLimit: cfg.maxOrdersPer10Min,
+      openPositions: status.openPositions,
+      maxOpenPositions: cfg.maxPositions,
+      dailyTrades: status.dailyTrades,
+      maxDailyTrades: cfg.maxDailyTrades,
+      cashReservePct: status.cashReservePct,
+      cashReserveMin: cfg.minCashReservePct,
+      maxOrderSize: cfg.maxOrderSizeUsd,
+      minOrderSize: cfg.minOrderSizeUsd,
+      maxTotalExposurePct: cfg.maxTotalExposurePct,
+      maxPositionSizePct: cfg.maxPositionSizePct,
+    });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
   const { tradingEnabled, who } = await req.json();
   const enabled = !!tradingEnabled;
 
-  // Notify only on an actual state change.
-  let previous = true;
-  if (hasDb()) {
-    await initDb();
-    const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key='trading_enabled'`);
-    previous = rows.length === 0 || rows[0].value === 'true';
-  } else {
-    previous = memTradingEnabled;
-  }
-
-  if (!hasDb()) {
-    memTradingEnabled = enabled;
-  } else {
-    await dbRun(
-      `INSERT INTO settings (key, value) VALUES ('trading_enabled', $1)
-       ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=NOW()`,
-      [String(enabled)]
+  const state = await loadGuardState();
+  if (state.emergencyStop && enabled) {
+    return NextResponse.json(
+      { error: 'Emergency stop active — resume noodstop before re-enabling trading' },
+      { status: 409 }
     );
   }
 
+  const previous = state.tradingEnabled;
+  await setTradingEnabled(enabled);
+
   if (previous !== enabled) {
     await sendMessage(killSwitchMessage(enabled, typeof who === 'string' && who ? who : 'Dusty'));
-    // Verankering: een kill-switch-wissel is een guard-gebeurtenis; log het op het bord.
     const day = new Date().toISOString().slice(0, 10);
     await openOrAppendThread({
       title: enabled ? 'Trading weer ingeschakeld' : 'Trading gestopt (kill switch)',
-      type: 'gesprek', priority: enabled ? 'normaal' : 'hoog',
-      anchorType: 'guard', anchorId: `killswitch-${day}`,
+      type: 'gesprek',
+      priority: enabled ? 'normaal' : 'hoog',
+      anchorType: 'guard',
+      anchorId: `killswitch-${day}`,
       summary: enabled ? 'Kill switch uit · trading actief' : 'Kill switch aan · geen nieuwe orders',
       tags: ['#killswitch', '#guard'],
       body: enabled

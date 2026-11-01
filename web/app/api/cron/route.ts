@@ -7,6 +7,14 @@ import { captureEvent } from '@/lib/openbrain';
 import { computePositionSize } from '@/lib/sizing';
 import { openOrAppendThread } from '@/lib/threads';
 import {
+  checkOrderAgainstLimits,
+  countDailyTrades,
+  loadGuardState,
+  logGuardEvent,
+  refreshCircuitBreaker,
+} from '@/lib/guards/service';
+import { canRunRoutine, blocksNewEntries, planEodClose, loadGuardConfig } from '@guards/index';
+import {
   checkLessonsForBuy,
   getActiveLessons,
   marketOpenLessonsSystemSuffix,
@@ -68,6 +76,8 @@ async function notifyStopFills() {
 }
 
 async function runPremarket() {
+  const accountEarly = await alpaca.account();
+  await refreshCircuitBreaker(parseFloat(accountEarly.equity));
   const [barsData, account, positions, clock] = await Promise.all([
     alpaca.bars(WATCHLIST, '1Day', 30),
     alpaca.account(),
@@ -122,15 +132,6 @@ Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
 }
 
 async function runMarketOpen() {
-  // Kill switch check
-  if (hasDb()) {
-    await initDb();
-    const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key='trading_enabled'`);
-    if (rows.length > 0 && rows[0].value === 'false') {
-      return { skipped: true, reason: 'Kill switch activated' };
-    }
-  }
-
   const [account, positions, clock] = await Promise.all([
     alpaca.account(),
     alpaca.positions(),
@@ -141,8 +142,27 @@ async function runMarketOpen() {
 
   const equity = parseFloat(account.equity);
   const availableCash = parseFloat(account.cash);
+  const guardState = await refreshCircuitBreaker(equity);
+  if (blocksNewEntries({
+    routine: 'market-open',
+    emergencyStop: guardState.emergencyStop,
+    tradingEnabled: guardState.tradingEnabled,
+    circuitBreakerTripped: guardState.circuitBreakerTripped,
+  })) {
+    const reason = guardState.emergencyStop
+      ? 'Emergency stop active'
+      : guardState.circuitBreakerTripped
+        ? `Circuit breaker: ${guardState.circuitBreakerReason ?? 'tripped'}`
+        : 'Kill switch activated';
+    return { skipped: true, reason };
+  }
+
   const openSymbols = positions.map(p => p.symbol);
-  if (openSymbols.length >= strategy.rules.max_positions) {
+  const totalExposure = positions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+  const dailyTrades = await countDailyTrades();
+  const config = loadGuardConfig();
+
+  if (openSymbols.length >= config.maxPositions) {
     return { skipped: true, reason: 'Max positions reached' };
   }
 
@@ -169,7 +189,7 @@ async function runMarketOpen() {
   const orders: { symbol: string; qty: number; orderId: string; stop?: number; takeProfit?: number }[] = [];
   for (const c of candidates) {
     if (c.action !== 'buy' || openSymbols.includes(c.symbol)) continue;
-    if (openSymbols.length + orders.length >= strategy.rules.max_positions) break;
+    if (openSymbols.length + orders.length >= config.maxPositions) break;
 
     // Volatility-targeting position sizing (vervangt de vaste 25%-cap).
     // Bepaalt de grootte op basis van de beweeglijkheid van het symbool, met
@@ -193,6 +213,35 @@ async function runMarketOpen() {
       continue;
     }
     c.qty = sizing.shares;
+
+    const orderValue = c.qty * lastPrice;
+    const symbolExposure = positions
+      .filter(p => p.symbol === c.symbol)
+      .reduce((s, p) => s + parseFloat(p.market_value), 0);
+    const limits = checkOrderAgainstLimits({
+      equity,
+      cash: availableCash,
+      openPositionCount: openSymbols.length + orders.length,
+      dailyTrades,
+      proposedOrderValueUsd: orderValue,
+      currentSymbolExposureUsd: symbolExposure,
+      totalExposureUsd: totalExposure + orders.reduce((s, o) => s + o.qty * (lastPrices[o.symbol] ?? 0), 0),
+    });
+    if (!limits.allowed) {
+      await saveDecision({
+        routine: 'market-open',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: limits.failReasons.join('; '),
+        agentNote: 'Portfolio limits guard rejected order.',
+        confidence: 0,
+      });
+      await logGuardEvent('portfolio_limits', limits.failReasons.join('; '), {
+        symbol: c.symbol,
+        orderValue,
+      });
+      continue;
+    }
 
     const gate = await checkLessonsForBuy(c.symbol, c.reason, activeLessons);
     if (gate.veto) {
@@ -269,6 +318,8 @@ async function runMarketOpen() {
 }
 
 async function runMidday() {
+  const account = await alpaca.account();
+  await refreshCircuitBreaker(parseFloat(account.equity));
   await notifyStopFills();
   const positions = await alpaca.positions();
   if (positions.length === 0) return { routine: 'midday', note: 'Geen posities.' };
@@ -284,26 +335,71 @@ async function runMidday() {
 
 async function runEod() {
   await notifyStopFills();
-  const positions = await alpaca.positions();
-  const closed = [];
-  for (const p of positions) {
-    try {
-      await cancelOpenStopTakeProfitForSymbol(p.symbol);
-      const qty = parseFloat(p.qty);
-      const entry = parseFloat(p.avg_entry_price);
-      const exitPx = parseFloat(p.current_price);
-      await alpaca.closePosition(p.symbol);
-      closed.push(p.symbol);
-      await saveDecision({ routine: 'eod', symbol: p.symbol, decision: 'CLOSE', rationale: 'EOD — geen overnight holding per strategie.', agentNote: `Gesloten op $${p.current_price}`, confidence: 1 });
-      await postMortemFromEodClose(p.symbol, qty, entry, exitPx).catch((e) => console.error('[postMortem eod]', e));
-    } catch { /* position may already be closed */ }
+  const [clock, positions] = await Promise.all([alpaca.clock(), alpaca.positions()]);
+  const guardConfig = loadGuardConfig();
+  const eodPlan = planEodClose(clock, positions.length > 0, guardConfig);
+  const closed: string[] = [];
+  const eodNote = eodPlan.reason;
+
+  if (eodPlan.action === 'flatten') {
+    for (const p of positions) {
+      try {
+        await cancelOpenStopTakeProfitForSymbol(p.symbol);
+        const qty = parseFloat(p.qty);
+        const entry = parseFloat(p.avg_entry_price);
+        const exitPx = parseFloat(p.current_price);
+        await alpaca.closePosition(p.symbol);
+        closed.push(p.symbol);
+        await saveDecision({
+          routine: 'eod',
+          symbol: p.symbol,
+          decision: 'CLOSE',
+          rationale: 'EOD — geen overnight holding per strategie.',
+          agentNote: `Gesloten op $${p.current_price}`,
+          confidence: 1,
+        });
+        await postMortemFromEodClose(p.symbol, qty, entry, exitPx).catch((e) => console.error('[postMortem eod]', e));
+      } catch {
+        /* position may already be closed */
+      }
+    }
+  } else if (positions.length > 0) {
+    await logGuardEvent('eod_clock', eodPlan.reason, {
+      action: eodPlan.action,
+      symbols: positions.map(p => p.symbol),
+    });
+    for (const p of positions) {
+      await saveDecision({
+        routine: 'eod',
+        symbol: p.symbol,
+        decision: 'HOLD',
+        rationale: 'EOD flatten overgeslagen — bracket stops blijven actief.',
+        agentNote: eodPlan.reason,
+        confidence: 1,
+      });
+    }
   }
+
   const account = await alpaca.account();
+  await refreshCircuitBreaker(parseFloat(account.equity));
+
+  let guardEventsSummary = '';
+  if (hasDb()) {
+    await initDb();
+    const events = await dbQuery<{ kind: string; reason: string }>(
+      `SELECT kind, reason FROM guard_events
+       WHERE (ts AT TIME ZONE 'America/New_York')::date = (NOW() AT TIME ZONE 'America/New_York')::date
+       ORDER BY ts DESC LIMIT 10`
+    );
+    if (events.length) {
+      guardEventsSummary = `\nGuard events vandaag:\n${events.map(e => `- ${e.kind}: ${e.reason}`).join('\n')}`;
+    }
+  }
   const equity = parseFloat(account.equity);
   const lastEquity = parseFloat(account.last_equity);
   const report = await claudeText(MODELS.sonnet,
     'Je bent Momentum. Schrijf een EOD rapport in het Nederlands. Max 3 alinea\'s. Wat is er gebeurd, wat zijn de lessen, wat kijk ik naar morgen.',
-    `Dag P&L: $${(equity - lastEquity).toFixed(2)} (${((equity - lastEquity) / lastEquity * 100).toFixed(2)}%). Equity: $${lastEquity.toFixed(0)} → $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}.`,
+    `Dag P&L: $${(equity - lastEquity).toFixed(2)} (${((equity - lastEquity) / lastEquity * 100).toFixed(2)}%). Equity: $${lastEquity.toFixed(0)} → $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}. EOD: ${eodNote}.${guardEventsSummary}`,
     1024);
 
   const reportId = `report-${Date.now()}`;
@@ -337,13 +433,24 @@ async function runEod() {
     body: `${report}\n\nResultaat vandaag: ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}%. ${bigDay ? 'Dit was een opvallende dag. ' : ''}Wil je dat ik ergens dieper op inga?`,
   }).catch(() => {});
 
-  return { routine: 'eod', closed, equity, report: report.slice(0, 200) };
+  return { routine: 'eod', closed, equity, eodPlan: eodPlan.action, report: report.slice(0, 200) };
 }
 
 export async function POST(req: Request) {
   if (!requireAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { routine } = await req.json();
   try {
+    const state = await loadGuardState();
+    const gate = canRunRoutine({
+      routine,
+      emergencyStop: state.emergencyStop,
+      tradingEnabled: state.tradingEnabled,
+      circuitBreakerTripped: state.circuitBreakerTripped,
+    });
+    if (!gate.allowed) {
+      return NextResponse.json({ skipped: true, reason: gate.reason });
+    }
+
     let result;
     switch (routine) {
       case 'premarket':    result = await runPremarket(); break;

@@ -1,5 +1,7 @@
 /** Sessie-cookie voor APP_PASSWORD-login (Edge + Node). */
 
+import { cookies } from 'next/headers';
+
 export const SESSION_COOKIE = 'momentum_session';
 const SESSION_DAYS = 30;
 
@@ -10,6 +12,11 @@ function secret(): string | null {
 
 export function authEnabled(): boolean {
   return !!secret();
+}
+
+/** Alias gebruikt door guard/session routes. */
+export function authRequired(): boolean {
+  return authEnabled();
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -79,6 +86,12 @@ export async function verifySessionCookieValue(token: string | undefined | null)
   } catch {
     return false;
   }
+}
+
+export async function isAuthenticated(): Promise<boolean> {
+  if (!authEnabled()) return true;
+  const jar = await cookies();
+  return verifySessionCookieValue(jar.get(SESSION_COOKIE)?.value);
 }
 
 export function sessionCookieOptions(): {

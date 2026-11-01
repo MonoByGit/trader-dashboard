@@ -77,7 +77,7 @@ Close a position when **any one** of the following conditions is met. Conditions
 | 2 | Trailing stop | Price falls 3% below the position's high watermark (highest price reached since entry) |
 | 3 | Take profit | Price reaches +5% above entry price |
 | 4 | Trend break | Price closes below the 20-day SMA |
-| 5 | EOD close | Market close routine at 16:10 ET — all positions closed regardless of P&L unless `hold_overnight` config is explicitly set to `true` |
+| 5 | EOD close | Market close routine at 15:50 ET (cron `50 20 * * 1-5` UTC in EST) — flatten while market open; if closed, keep bracket stops |
 
 ### Exit Notes
 - **Hard stop (priority 1) overrides everything.** It cannot be skipped, adjusted, or delayed.

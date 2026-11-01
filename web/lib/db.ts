@@ -93,6 +93,15 @@ export async function initDb(): Promise<void> {
       value TEXT NOT NULL,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS guard_events (
+      id TEXT PRIMARY KEY,
+      ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      kind TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      meta JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 }
 
