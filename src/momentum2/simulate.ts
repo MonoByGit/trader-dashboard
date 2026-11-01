@@ -74,6 +74,12 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     }
     return out;
   };
+  /** Bars t/m gisteren (geen lookahead voor stops/ATR op de huidige dag). */
+  const barsThroughYesterday = (symbol: string, date: string): Bar[] | undefined => {
+    const i = idx[symbol]?.get(date);
+    if (i === undefined || i === 0) return undefined;
+    return data.barsBySymbol[symbol]!.slice(0, i);
+  };
 
   const startI = cfg.smaDays; // genoeg historie voor het 200d filter
   const book =
@@ -147,8 +153,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         continue;
       }
       gapMiss[sym] = { miss: 0, lastClose: bar.c };
-      const hist = upTo(date)[sym];
-      const st = hooks.stopFor(pos, cfg, hist);
+      const st = hooks.stopFor(pos, cfg, barsThroughYesterday(sym, date));
       const r = checkStopLevel(st.level, st.kind, bar);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);

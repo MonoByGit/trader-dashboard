@@ -34,6 +34,38 @@ describe('config', () => {
 });
 
 describe('risk', () => {
+  it('ATR-trail mag de bar van vandaag niet meenemen (geen lookahead)', () => {
+    const cfg = { ...crypto!, trailingAtrMult: 8 };
+    const pos = { entryPrice: 100, highWater: 112 };
+    const calm = makeBars(20, 100, 0.001);
+    const spike = { ...calm[calm.length - 1]!, h: 250, l: 40, c: 110, o: 100 };
+    const withSpike = [...calm.slice(0, -1), spike];
+    const toYesterday = calm.slice(0, -1);
+    const withoutToday = m3StopLevel(pos, cfg, toYesterday);
+    const withToday = m3StopLevel(pos, cfg, withSpike);
+    expect(withoutToday.kind).toBe('trailing');
+    expect(withToday.level).not.toBeCloseTo(withoutToday.level, 4);
+  });
+
+  it('simulate stopFor krijgt alleen bars t/m gisteren', async () => {
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], smaDays: 5, topN: 1, positionPct: 1 };
+    const bars = makeBars(30, 100, 0.01);
+    const lens: number[] = [];
+    const hooks = {
+      ...m3Hooks,
+      stopFor: (p: Parameters<typeof m3Hooks.stopFor>[0], c: Parameters<typeof m3Hooks.stopFor>[1], b?: Bar[]) => {
+        if (b) lens.push(b.length);
+        return m3Hooks.stopFor(p, c, b);
+      },
+    };
+    const book = newBook(cfg, null, null);
+    book.positions[sym] = { qty: 1, entryPrice: 100, entryDate: bars[5]!.t.slice(0, 10), highWater: 100 };
+    await simulateVersion(cfg, { benchmark: bars, barsBySymbol: { [sym]: bars } }, { hooks, initialBook: book });
+    expect(lens.length).toBeGreaterThan(0);
+    expect(lens[0]).toBe(5);
+  });
+
   it('harde stop 7% bij entry, trailing pas vanaf +10% en daarna alleen omhoog', () => {
     const p = { entryPrice: 100, highWater: 100 };
     expect(m3StopLevel(p, crypto!)).toEqual({ level: 93, kind: 'hard' });

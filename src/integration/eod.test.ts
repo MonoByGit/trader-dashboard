@@ -52,9 +52,6 @@ async function load(qa: string, ready: boolean, closeFails: boolean) {
     hasDb: () => false,
     dbQuery: async () => [],
   }));
-  jest.unstable_mockModule('@/lib/momentum2/ownership', () => ({
-    foreignQtyForSymbol: async () => 0,
-  }));
   jest.unstable_mockModule('@/lib/etf-order-id', () => ({
     etfClientOrderId: () => 'test-eod-id',
   }));

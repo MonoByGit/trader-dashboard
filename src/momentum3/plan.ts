@@ -77,7 +77,7 @@ export const m3Hooks: StrategyHooks<M3Config> = {
     const dates = Object.values(i.barsBySymbol)
       .flatMap((b) => b.map(dateOf))
       .sort();
-    const calendarDates = dates.length ? [...new Set(dates)] : undefined;
+    const calendarDates = dates.length ? Array.from(new Set(dates)) : undefined;
     return { ...planM3({ ...i, calendarDates }), vetoes: [] };
   },
 };
