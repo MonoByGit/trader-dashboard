@@ -24,7 +24,27 @@
     "preset": "ts-jest/presets/default-esm",
     "extensionsToTreatAsEsm": [".ts"],
     "moduleNameMapper": {
-      "^(\\.{1,2}/.*)\\.js$": "$1"
+      "^(\\.{1,2}/.*)\\.js$": "$1",
+      "^@/(.*)$": "<rootDir>/web/$1"
+    },
+    "roots": ["<rootDir>/src", "<rootDir>/web"],
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": {
+            "target": "ES2022",
+            "module": "ESNext",
+            "moduleResolution": "bundler",
+            "isolatedModules": true,
+            "rootDir": ".",
+            "paths": {
+              "@/*": ["./web/*"]
+            }
+          }
+        }
+      ]
     }
   }
 }

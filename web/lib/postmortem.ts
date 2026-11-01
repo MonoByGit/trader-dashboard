@@ -1,3 +1,4 @@
+import { alpacaSymbolsEqual } from '../../src/alpaca/symbol-path';
 import { alpaca, AlpacaOrder } from './alpaca';
 import { agentText } from './ai';
 import { dbQuery, dbRun, hasDb, initDb } from './db';
@@ -126,7 +127,11 @@ export async function postMortemFromFilledSell(sellOrder: AlpacaOrder, closeReas
   const orders = await alpaca.orders(100);
   const symbol = sellOrder.symbol;
   const buys = orders.filter(
-    (o) => o.symbol === symbol && o.side === 'buy' && o.status === 'filled' && o.filled_at,
+    (o) =>
+      alpacaSymbolsEqual(o.symbol, symbol) &&
+      o.side === 'buy' &&
+      o.status === 'filled' &&
+      o.filled_at,
   );
   buys.sort((a, b) => (b.filled_at ?? '').localeCompare(a.filled_at ?? ''));
   const entryOrder = buys[0];
