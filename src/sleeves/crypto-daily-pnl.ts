@@ -77,8 +77,8 @@ export function sumCryptoRealizedPlTodayUsd(
     list.push({ filledAt: o.filled_at!, qtyRemaining: qty, buyPrice: price });
     lotsBySymbol.set(o.symbol, list);
   }
-  for (const list of lotsBySymbol.values()) {
-    list.sort((a, b) => a.filledAt.localeCompare(b.filledAt));
+  for (const list of Array.from(lotsBySymbol.values())) {
+    list.sort((a: BuyLot, b: BuyLot) => a.filledAt.localeCompare(b.filledAt));
   }
 
   let total = 0;
