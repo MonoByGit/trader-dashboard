@@ -21,7 +21,7 @@ const AMS = 'Europe/Amsterdam';
 const tijd = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString('nl-NL', { timeZone: AMS, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
 
-const STATUS_LABEL: Record<Status, string> = { echt: 'ECHT (PAPIER)', papier: 'PAPIER', schaduw: 'SCHADUW', uit: 'UIT', geblokkeerd: 'GEBLOKKEERD' };
+const STATUS_LABEL: Record<Status, string> = { echt: 'PAPIER', papier: 'PAPIER', schaduw: 'SCHADUW', uit: 'UIT', geblokkeerd: 'GEBLOKKEERD' };
 const STATUS_KIND: Record<Status, 'pos' | 'accent' | 'muted' | 'neg'> = { echt: 'pos', papier: 'pos', schaduw: 'accent', uit: 'muted', geblokkeerd: 'neg' };
 
 export function VandaagPage() {
