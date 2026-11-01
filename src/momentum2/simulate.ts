@@ -1,6 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
 import { rotationHooks, type StrategyHooks } from './hooks';
+import { armFreshUpAfterStop } from '../momentum5/signals';
 import { checkStopLevel, lossLimitBreached } from './risk';
 import type { Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
 
@@ -17,6 +18,8 @@ export interface SimOptions {
   veto?: VetoFn;
   /** Doorlopend boek (walk-forward / live); verliesgrens blijft t.o.v. startBudgetUsd. */
   initialBook?: VersionBook;
+  /** Orders van vorig venster die nog niet gevuld konden worden. */
+  initialPending?: OrderIntent[];
 }
 
 export interface SimResult {
@@ -24,6 +27,9 @@ export interface SimResult {
   trades: TradeLogRow[];
   equity: EquityLogRow[];
   vetoLog: Array<{ date: string; symbol: string; verdict: VetoVerdict }>;
+  /** Nog niet uitgevoerde orders (einde slice / ontbrekende bar). */
+  pendingOrders: OrderIntent[];
+  deferLog: Array<{ date: string; symbol: string; side: string; reason: string }>;
   book: VersionBook;
   metrics: {
     totalReturnPct: number;
@@ -34,6 +40,19 @@ export interface SimResult {
     halted: boolean;
     haltedDate: string | null;
   };
+}
+
+/** Eén pending order per symbool en kant (geen dubbele buy na carry + plan). */
+export function dedupeOrderIntents(orders: OrderIntent[]): OrderIntent[] {
+  const seen = new Set<string>();
+  const out: OrderIntent[] = [];
+  for (const o of orders) {
+    const key = `${o.symbol}:${o.side}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(o);
+  }
+  return out;
 }
 
 /** Zet bars op de kalender: ontbrekende dagen na de eerste bar krijgen een vlakke bar op het vorige slot. */
@@ -94,7 +113,8 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
   const trades: TradeLogRow[] = [];
   const equity: EquityLogRow[] = [];
   const vetoLog: SimResult['vetoLog'] = [];
-  let pending: OrderIntent[] = [];
+  const deferLog: SimResult['deferLog'] = [];
+  let pending: OrderIntent[] = opts.initialPending ? [...opts.initialPending] : [];
   let peakEq = book.peakEquity;
   let maxDd = 0;
   let haltedDate: string | null = book.halted ? book.haltReason?.match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? null : null;
@@ -124,9 +144,15 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     const date = dates[i]!;
 
     // 1. Uitvoeren van gisteren genomen orders op de open (verkopen eerst).
-    for (const o of pending) {
+    const stillPending: OrderIntent[] = [];
+    const execQueue = [...pending].sort((a, b) => (a.side === b.side ? 0 : a.side === 'sell' ? -1 : 1));
+    for (const o of execQueue) {
       const bar = barAt(o.symbol, date);
-      if (!bar) continue;
+      if (!bar) {
+        stillPending.push(o);
+        deferLog.push({ date, symbol: o.symbol, side: o.side, reason: 'geen bar: order meegenomen' });
+        continue;
+      }
       if (o.side === 'sell') {
         const t = applySell(book, o.symbol, o.qty ?? 0, bar.o * (1 - slip), date, o.reason);
         if (t) trades.push(t);
@@ -134,11 +160,11 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         const px = bar.o * (1 + slip);
         const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
         const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
-        const t = applyBuy(book, o.symbol, qty, px, date, o.reason);
+        const t = applyBuy(book, o.symbol, qty, px, date, o.reason, o.signalDate ? { signalDate: o.signalDate } : undefined);
         if (t) trades.push(t);
       }
     }
-    pending = [];
+    pending = stillPending;
 
     // 2. Stops (stand van vóór vandaag; nieuwe posities hebben hun harde stop vanaf de fill).
     for (const [sym, pos] of Object.entries(book.positions)) {
@@ -153,11 +179,18 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         continue;
       }
       gapMiss[sym] = { miss: 0, lastClose: bar.c };
-      const st = hooks.stopFor(pos, cfg, barsThroughYesterday(sym, date));
+      const st = hooks.stopFor(pos, cfg, barsThroughYesterday(sym, date), sym);
+      if (!Number.isFinite(st.level) || st.level <= 0) {
+        pos.highWater = Math.max(pos.highWater, bar.h);
+        continue;
+      }
       const r = checkStopLevel(st.level, st.kind, bar);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
+        if (cfg.orderTag === 'm5' && 'riskSymbol' in cfg && sym === (cfg as { riskSymbol: string }).riskSymbol) {
+          armFreshUpAfterStop(book);
+        }
       } else {
         pos.highWater = Math.max(pos.highWater, bar.h);
       }
@@ -180,7 +213,7 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     const due = book.lastRebalanceIndex === null || i - book.lastRebalanceIndex >= cfg.rebalanceEveryDays;
     if (book.halted || due) {
       const plan = await hooks.plan({ barsBySymbol: upTo(date), book, cfg, veto: opts.veto });
-      pending = plan.orders;
+      pending = dedupeOrderIntents([...pending, ...plan.orders]);
       for (const v of plan.vetoes) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
       if (!book.halted) book.lastRebalanceIndex = i;
     }
@@ -197,6 +230,8 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     trades,
     equity,
     vetoLog,
+    pendingOrders: pending,
+    deferLog,
     book,
     metrics: {
       totalReturnPct: ret,

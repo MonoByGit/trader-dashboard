@@ -31,6 +31,7 @@ export function applyBuy(
   price: number,
   date: string,
   reason: string,
+  opts?: { signalDate?: string },
 ): TradeLogRow | null {
   if (qty <= 0 || qty * price > book.cash + 1e-9) return null;
   book.cash -= qty * price;
@@ -41,7 +42,13 @@ export function applyBuy(
     cur.qty = total;
     cur.highWater = Math.max(cur.highWater, price);
   } else {
-    book.positions[symbol] = { qty, entryPrice: price, entryDate: date, highWater: price };
+    book.positions[symbol] = {
+      qty,
+      entryPrice: price,
+      entryDate: date,
+      highWater: price,
+      signalDate: opts?.signalDate ?? date,
+    };
   }
   return { date, symbol, side: 'buy', qty, price, reason };
 }

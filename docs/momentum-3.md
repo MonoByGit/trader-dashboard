@@ -21,4 +21,4 @@ Orders dragen een `m3-`/`m3s-` prefix en M1 (EOD-flatten) laat die staan (PR 42 
 Walk-forward draagt equity en verliesgrens door over testvensters (`initialBook`). Na verliesgrens blijft de versie uit (`haltPersists`, standaard aan). Crypto: `fillGaps` voor datagaten; symbolen met lage dekking vallen uit instap.
 
 ## Schaduwrun
-`POST /api/momentum3/run` `{"step":"decide"}` na de close en `{"step":"execute"}` na de open. Logs in `momentum2_log`, boeken in `settings` onder `m2:book:<id>`.
+`POST /api/momentum3/run` `{"step":"decide"}` na de close en `{"step":"execute"}` na de open. Logs in `momentum2_log`, boeken in `settings` onder `m:book:<id>` (legacy `m2:book:<id>` wordt nog gelezen). Order-prefix `m3-` (niet `m2-m3-`).

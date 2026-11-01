@@ -1,5 +1,6 @@
 import { dbQuery, hasDb } from '../db';
-import type { VersionBook } from '../../../src/momentum2/types';
+import { BOOK_KEY_SQL } from '../../../src/momentum2/book-keys';
+import { foreignQtyFromRealBooks, uniqueBooksFromSettings } from '../../../src/momentum2/book-aggregate';
 
 /**
  * Aantal aandelen van `symbol` dat andere strategieën (Momentum 2/3/4) echt bij de broker bezitten.
@@ -7,15 +8,6 @@ import type { VersionBook } from '../../../src/momentum2/types';
  */
 export async function foreignQtyForSymbol(symbol: string): Promise<number> {
   if (!hasDb()) return 0;
-  const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key LIKE 'm2:book:%'`);
-  let total = 0;
-  for (const r of rows) {
-    try {
-      const b = JSON.parse(r.value) as VersionBook;
-      if (b.real === true) total += b.positions?.[symbol]?.qty ?? 0;
-    } catch {
-      /* onleesbaar boek telt niet mee */
-    }
-  }
-  return total;
+  const rows = await dbQuery<{ key: string; value: string }>(`SELECT key, value FROM settings WHERE ${BOOK_KEY_SQL}`);
+  return foreignQtyFromRealBooks(uniqueBooksFromSettings(rows), symbol);
 }

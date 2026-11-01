@@ -2,7 +2,7 @@
  * Elke strategie beheert alleen haar eigen posities. Orders van andere strategieën dan Momentum 1
  * dragen een client_order_id met een van deze prefixen (m2s- = Momentum 2 stop, enz.).
  */
-export const FOREIGN_STRATEGY_PREFIXES = ['m2-', 'm2s-', 'm3-', 'm3s-', 'm4-', 'm4s-'] as const;
+export const FOREIGN_STRATEGY_PREFIXES = ['m2-', 'm2s-', 'm3-', 'm3s-', 'm4-', 'm4s-', 'm5-', 'm5s-', 'm6-', 'm6s-'] as const;
 
 export function isForeignStrategyOrder(clientOrderId: string | undefined | null): boolean {
   return !!clientOrderId && FOREIGN_STRATEGY_PREFIXES.some((p) => clientOrderId.startsWith(p));

@@ -46,6 +46,8 @@ export interface VersionConfig {
   feeBps?: number;
   /** Fractionele aantallen toegestaan (crypto). Anders hele aandelen. */
   fractional?: boolean;
+  /** Override voor client_order_id-prefix (bijv. m5, m6). */
+  orderTag?: string;
 }
 
 export interface Position {
@@ -54,6 +56,8 @@ export interface Position {
   entryDate: string;
   /** Hoogste koers sinds instap (intraday high). */
   highWater: number;
+  /** Signaal-datum (close); fill kan later zijn (M6 hold-teller). */
+  signalDate?: string;
 }
 
 export interface EquityLogRow {
@@ -95,6 +99,8 @@ export interface VersionBook {
   lastDecisionDate?: string;
   /** Laatste volledige uitstap per symbool (datum), voor afkoelperiodes. */
   lastExit?: Record<string, string>;
+  /** Strategie-specifieke staat (serialiseerbaar, geen lookahead). */
+  strategyState?: Record<string, unknown>;
 }
 
 export type OrderIntent = {
@@ -104,6 +110,8 @@ export type OrderIntent = {
   notionalUsd?: number;
   qty?: number;
   reason: string;
+  /** Close-datum van het instapsignaal (uitvoering volgende open). */
+  signalDate?: string;
 };
 
 export interface VetoVerdict {
