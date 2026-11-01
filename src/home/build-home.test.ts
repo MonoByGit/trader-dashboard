@@ -59,3 +59,17 @@ describe('buildHome', () => {
     expect(h.recent[0]!.reden).toBe('Geen reden vastgelegd');
   });
 });
+
+describe('buildHome laatste run', () => {
+  it('kiest de nieuwste op tijd, ook als de tekst een andere tijdzone heeft', () => {
+    const h = buildHome({
+      now: '2026-11-01T18:00:00Z', account: null, guards: null, env: {}, decisions: [], heartbeat: null,
+      runs: [
+        { routine: 'momentum6-run', status: 'skipped', trading_date: '2026-11-01', started_at: '2026-11-01 17:30:00+01', skip_reason: null },
+        { routine: 'momentum6-run', status: 'ok', trading_date: '2026-11-01', started_at: '2026-11-01 16:35:00+00', skip_reason: null },
+      ],
+    });
+    // 17:30+01 = 16:30Z, dus de ok-run van 16:35Z is de nieuwste (tekstsortering zou de verkeerde kiezen)
+    expect(h.strategieen.find((s) => s.id === 'momentum6')?.laatsteRun?.status).toBe('ok');
+  });
+});

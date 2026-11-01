@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
+import { readJson, runsFromResponse } from '@/lib/api-shapes';
 
 interface Run { id: string; routine: string; trading_date: string; started_at: string; finished_at: string | null; status: string; skip_reason: string | null; duration_ms: number | null; error_message: string | null; }
 
@@ -15,7 +16,7 @@ export function RoutinesPage() {
 
   useEffect(() => {
     fetch('/api/runs?limit=60', { cache: 'no-store' })
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`); setRuns(Array.isArray(j) ? j : []); })
+      .then(async (r) => setRuns(runsFromResponse<Run>(await readJson(r))))
       .catch((e) => setFout(String(e instanceof Error ? e.message : e)));
   }, []);
 
