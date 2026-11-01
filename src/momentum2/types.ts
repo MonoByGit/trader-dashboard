@@ -121,6 +121,11 @@ export type OrderIntent = {
   reason: string;
   /** Close-datum van het instapsignaal (uitvoering volgende open). */
   signalDate?: string;
+  /**
+   * Vastgezet als de order misschien al bij de broker staat (time-out, onbekende status): een nieuwe
+   * poging gebruikt dezelfde id, zodat de broker een dubbele weigert.
+   */
+  clientOrderId?: string;
 };
 
 export interface VetoVerdict {

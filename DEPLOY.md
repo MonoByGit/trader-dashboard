@@ -38,7 +38,12 @@ curl -X POST "$NEXT_PUBLIC_APP_URL/api/scheduler/tick" \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-Railway cron schema: `*/5 * * * 1-5` (ma–vr, elke 5 minuten UTC; de tick beslist zelf in ET).
+Railway cron schema in productie: `*/5 * * * *` (elke dag, elke 5 minuten UTC; de tick beslist zelf in ET). Elke dag is nodig voor
+Momentum 6 (BTC, ook in het weekend); de ETF-routines slaan zichzelf over als de markt dicht is.
+
+De tick draait ook de Momentum-stappen (`[momentum-tick] <routine> <dag> <status> <modus>`, modus = schaduw of papier) en,
+alleen bij papier, elke tick de stopwacht (`<strategie>-stopwacht`): een stop die een run niet terug kon zetten, staat
+uiterlijk een tick later weer. Wachten op Alpaca is per strategie-run begrensd (45 s), zodat een tick-request kort blijft.
 
 Handmatig blijft werken: `POST /api/cron` met body `{"routine":"premarket"}` en dezelfde Bearer.
 

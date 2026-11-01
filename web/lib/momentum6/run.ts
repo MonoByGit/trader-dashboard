@@ -2,7 +2,7 @@ import { barTradingDateUtc } from '../../../src/alpaca/daily-bars-partial';
 import { fetchCryptoBars } from '../alpaca-bars';
 import { tradingDateEt } from '@scheduler/decide';
 import { isDailyBarComplete } from '../../../src/momentum2/daily-bar-complete';
-import { decideDay, executeDay } from '../../../src/momentum2/live';
+import { decideDay, executeDay, hasMissingStops, repairMissingStops } from '../../../src/momentum2/live';
 import { resolveMomentumPaperMode } from '../../../src/momentum2/mode';
 import type { Bar } from '../../../src/momentum2/types';
 import { m6Config } from '../../../src/momentum6/config';
@@ -78,4 +78,24 @@ export async function runMomentum6(step: 'decide' | 'execute', nowMs = Date.now(
     ? undefined
     : await runReconcile({ date: todayEt, cfgs: [cfg], store, hooks: m6Hooks, barsBySymbol, broker });
   return { step, date: todayEt, shadow: mode.shadow, trades: r.trades.length, reconcile };
+}
+
+/**
+ * Stopwacht M6 (elke tick, alleen papier): zet een ontbrekende stop terug. Leest eerst alleen het boek;
+ * bars en broker pas als er echt iets ontbreekt.
+ */
+export async function runMomentum6StopGuard(nowMs = Date.now()): Promise<Record<string, unknown> | null> {
+  const mode = resolveMomentumPaperMode(process.env, 'MOMENTUM6');
+  if (!mode.run || mode.shadow) return null;
+  const cfg = m6Config();
+  const store = postgresStore();
+  if (!(await hasMissingStops([cfg], store))) return null;
+  const todayUtc = new Date(nowMs).toISOString().slice(0, 10);
+  const raw = await fetchCryptoBars({ symbols: cfg.universe, lookbackCalendarDays: 120 });
+  const barsBySymbol: Record<string, Bar[]> = {};
+  for (const [s, b] of Object.entries(raw)) barsBySymbol[s] = toBars(b).filter((x) => x.t.slice(0, 10) < todayUtc);
+  const broker = brokerForMode(mode, {});
+  return repairMissingStops({
+    date: tradingDateEt(nowMs), cfgs: [cfg], hooks: m6Hooks, barsBySymbol, broker, store, foreignQty: foreignQtyOtherSleeves,
+  });
 }

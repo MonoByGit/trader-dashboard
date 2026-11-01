@@ -2,9 +2,9 @@
  * Pure opbouw van /api/home (tab Vandaag). Geen IO: de route haalt de brondata op en geeft die hier door.
  * Vier blokken: portfolio, strategieën (status), laatste trades/signalen met reden, de motor.
  */
-import { resolveShadowMode } from '../momentum2/mode.js';
+import { resolveMomentumPaperMode, resolveShadowMode } from '../momentum2/mode.js';
 
-export type StrategyStatus = 'echt' | 'schaduw' | 'uit' | 'geblokkeerd';
+export type StrategyStatus = 'echt' | 'papier' | 'schaduw' | 'uit' | 'geblokkeerd';
 
 export interface HomeStrategy {
   id: string;
@@ -25,12 +25,26 @@ export interface HomeInput {
   heartbeat: { at?: string; due?: string[]; errors?: number } | null;
 }
 
-const SHADOW: Array<{ id: string; naam: string; flag: string; routinePrefix: string }> = [
+const SHADOW: Array<{ id: string; naam: string; flag: string; routinePrefix: string; paper?: true }> = [
   { id: 'momentum2', naam: 'Momentum 2 · ETF-rotatie', flag: 'MOMENTUM2', routinePrefix: 'momentum2' },
   { id: 'momentum3', naam: 'Momentum 3 · agressief', flag: 'MOMENTUM3', routinePrefix: 'momentum3' },
-  { id: 'momentum5', naam: 'Momentum 5 · Nasdaq-trend', flag: 'MOMENTUM5', routinePrefix: 'momentum5' },
-  { id: 'momentum6', naam: 'Momentum 6 · BTC-breakout', flag: 'MOMENTUM6', routinePrefix: 'momentum6' },
+  { id: 'momentum5', naam: 'Momentum 5 · Nasdaq-trend', flag: 'MOMENTUM5', routinePrefix: 'momentum5', paper: true },
+  { id: 'momentum6', naam: 'Momentum 6 · BTC-breakout', flag: 'MOMENTUM6', routinePrefix: 'momentum6', paper: true },
 ];
+
+/** Zelfde regels als de runners: M5/M6 mogen met DRY_RUN=0 naar Alpaca PAPER, M2/M3 nooit. */
+function strategyStatus(env: HomeInput['env'], s: (typeof SHADOW)[number]): { status: StrategyStatus; reden: string } {
+  if (s.paper) {
+    const m = resolveMomentumPaperMode(env, s.flag);
+    if (!m.run) return { status: 'uit', reden: m.reason };
+    return m.shadow
+      ? { status: 'schaduw', reden: 'Draait alleen in schaduw, geen orders' }
+      : { status: 'papier', reden: 'Papierorders bij Alpaca (oefengeld, geen echt geld)' };
+  }
+  const m = resolveShadowMode(env, s.flag);
+  if (m.run) return { status: 'schaduw', reden: 'Draait alleen in schaduw, geen orders' };
+  return { status: env[`${s.flag}_ENABLED`] === '1' ? 'geblokkeerd' : 'uit', reden: m.reason };
+}
 
 function lastRun(runs: HomeInput['runs'], prefix: string): HomeStrategy['laatsteRun'] {
   const r = runs
@@ -60,21 +74,12 @@ export function buildHome(i: HomeInput) {
       reden: m1Reden,
       laatsteRun: lastRun(i.runs, 'market-open') ?? lastRun(i.runs, 'crypto'),
     },
-    ...SHADOW.map((s): HomeStrategy => {
-      const mode = resolveShadowMode(i.env, s.flag);
-      const status: StrategyStatus = mode.run
-        ? 'schaduw'
-        : i.env[`${s.flag}_DRY_RUN`] === '0' && i.env[`${s.flag}_ENABLED`] === '1'
-          ? 'geblokkeerd'
-          : 'uit';
-      return {
-        id: s.id,
-        naam: s.naam,
-        status,
-        reden: mode.run ? 'Draait alleen in schaduw, geen orders' : mode.reason,
-        laatsteRun: lastRun(i.runs, s.routinePrefix),
-      };
-    }),
+    ...SHADOW.map((s): HomeStrategy => ({
+      id: s.id,
+      naam: s.naam,
+      ...strategyStatus(i.env, s),
+      laatsteRun: lastRun(i.runs, s.routinePrefix),
+    })),
   ];
 
   const hb = i.heartbeat;

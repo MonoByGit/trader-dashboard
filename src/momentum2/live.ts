@@ -23,6 +23,10 @@ export interface Fill {
   done?: boolean;
   /** Crypto-buy: wat er echt binnenkwam (fee gaat van de coin af), cumulatief zoals qty. */
   received?: number;
+  /** orderFill: een order met onbekende plaatsing is bij de broker niet te vinden. */
+  missing?: true;
+  /** Bij missing: de client_order_id waarmee het intent opnieuw mag (Alpaca weigert dan een dubbele). */
+  clientOrderId?: string;
 }
 
 /** @deprecated alias */
@@ -130,6 +134,63 @@ async function placeDisasterStop(input: {
     stopPrice: round2(st.level),
     stopClientPrefix: stopPx,
   });
+}
+
+/**
+ * Stopwacht: draait elke tick (niet één keer per dag) voor papierboeken met een gemarkeerde ontbrekende stop.
+ * Typisch geval: een stop-cancel hing langer in pending_cancel dan de run mocht wachten en ging daarna alsnog
+ * door. Dan staat de positie zonder stop tot hier; deze wacht zet hem terug, met dezelfde regels als executeDay.
+ */
+export async function repairMissingStops<C extends VersionConfig = VersionConfig>(input: {
+  date: string;
+  cfgs: C[];
+  hooks: StrategyHooks<C>;
+  barsBySymbol?: Record<string, Bar[]>;
+  broker: MomentumBroker;
+  store: Pick<Store, 'loadBook' | 'saveBook' | 'logDecision'>;
+  foreignQty?: ForeignQtyFn;
+}): Promise<{ repaired: string[]; failed: string[] }> {
+  const repaired: string[] = [];
+  const failed: string[] = [];
+  for (const cfg of input.cfgs) {
+    const book = await input.store.loadBook(cfg.id);
+    if (!book?.real || !book.stopMissing || !Object.keys(book.stopMissing).length) continue;
+    const stopPx = momentumStopClientPrefix(cfg);
+    for (const sym of Object.keys(book.stopMissing)) {
+      if (!book.positions[sym]) {
+        delete book.stopMissing[sym];
+        continue;
+      }
+      const sellOpen = Object.values(book.openOrders ?? {}).some((m) => m.symbol === sym && m.side === 'sell');
+      if (sellOpen) continue; // de lopende sell houdt de stukken vast; executeDay volgt hem
+      try {
+        await placeDisasterStop({
+          broker: input.broker, book, cfg, sym, hooks: input.hooks as StrategyHooks, stopPx,
+          bars: histBars(input.barsBySymbol, sym, input.date), foreignQty: input.foreignQty,
+        });
+        delete book.stopMissing[sym];
+        repaired.push(`${cfg.id}:${sym}`);
+        await input.store.logDecision({ date: input.date, versionId: cfg.id, kind: 'stop', symbol: sym, detail: 'stopwacht: stop hersteld' });
+      } catch (e) {
+        failed.push(`${cfg.id}:${sym}`);
+        await input.store.logDecision({
+          date: input.date, versionId: cfg.id, kind: 'stop', symbol: sym,
+          detail: `stopwacht: stop nog niet terug: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+    await input.store.saveBook(book);
+  }
+  return { repaired, failed };
+}
+
+/** Heeft een van deze papierboeken een gemarkeerde ontbrekende stop? Goedkoop: alleen boeken lezen. */
+export async function hasMissingStops(cfgs: VersionConfig[], store: Pick<Store, 'loadBook'>): Promise<boolean> {
+  for (const cfg of cfgs) {
+    const b = await store.loadBook(cfg.id);
+    if (b?.real && b.stopMissing && Object.keys(b.stopMissing).length) return true;
+  }
+  return false;
 }
 
 function bookKindMismatch(book: VersionBook | null, expectReal: boolean | undefined): string | null {
@@ -317,13 +378,6 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       else if (book.openOrders) delete book.openOrders[f.orderId];
     };
 
-    /** Een afgesloten sell met nog stukken over: de exit opnieuw in de rij. */
-    const requeued: OrderIntent[] = [];
-    const finishOpenOrder = (orderId: string, meta: OpenOrderMeta) => {
-      if (book.openOrders) delete book.openOrders[orderId];
-      const left = book.positions[meta.symbol];
-      if (meta.side === 'sell' && meta.requeue && left) requeued.push({ ...meta.requeue, qty: left.qty });
-    };
     /** Symbolen met een order waarvan de echte status (nog) onbekend is: niets nieuws plaatsen. */
     const unresolved = new Set<string>();
     /** Symbolen waarvan een eerdere buy nu pas als gevuld bekend werd: een buy-intent daarvoor is op een leeg boek gepland. */
@@ -348,8 +402,14 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       }
     };
 
-    // 1. Lopende (deels gevulde) market orders van eerdere runs.
-    if (broker.orderFill) {
+    /**
+     * Lopende market orders en orders met onbekende plaatsing. `final` = begin van de run: een order die
+     * dan nog steeds niet te vinden is, gaat terug in de rij met dezelfde client_order_id. Aan het eind van de
+     * run (final=false) kan Alpaca een net geplaatste order nog niet tonen; die blijft gevolgd.
+     */
+    const resolveOpenOrders = async (final: boolean): Promise<OrderIntent[]> => {
+      const back: OrderIntent[] = [];
+      if (!broker.orderFill) return back;
       for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
         let f: Fill | null;
         try {
@@ -362,11 +422,30 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
           });
           continue;
         }
+        if (f?.missing) {
+          if (!final) continue;
+          if (book.openOrders) delete book.openOrders[orderId];
+          if (meta.requeue) back.push({ ...meta.requeue, clientOrderId: f.clientOrderId ?? meta.requeue.clientOrderId });
+          await store.logDecision({
+            date, versionId: cfg.id, kind: 'skip', symbol: meta.symbol,
+            detail: `${meta.side} ${meta.symbol} niet gevonden bij de broker; opnieuw met dezelfde client_order_id`,
+          });
+          continue;
+        }
         if (f) await applyMarketFill(f, meta);
         if (f && f.qty > 0 && meta.side === 'buy') resolvedBuys.add(meta.symbol);
-        if (!f || f.done !== false) finishOpenOrder(orderId, meta);
+        if (!f || f.done !== false) {
+          if (book.openOrders) delete book.openOrders[orderId];
+          const left = book.positions[meta.symbol];
+          if (meta.side === 'sell' && meta.requeue && left) back.push({ ...withoutCid(meta.requeue), qty: left.qty });
+          if (meta.side === 'buy' && meta.requeue && !(f && f.qty > 0)) back.push(withoutCid(meta.requeue));
+        }
       }
-    }
+      return back;
+    };
+
+    // 1. Lopende (deels gevulde) market orders van eerdere runs.
+    const requeued = await resolveOpenOrders(true);
     for (const m of Object.values(book.openOrders ?? {})) unresolved.add(m.symbol);
 
     // 2. Stop-fills (ook partials, maar elk stuk maar één keer).
@@ -423,18 +502,16 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         }
 
         let fill: Fill | null = null;
+        const sellCid = o.clientOrderId ?? momentumClientOrderId(cfg, date, o.symbol, 's');
         try {
-          fill = await broker.marketOrder({
-            versionId: cfg.id, symbol: o.symbol, side: 'sell', qty,
-            clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 's'),
-          });
+          fill = await broker.marketOrder({ versionId: cfg.id, symbol: o.symbol, side: 'sell', qty, clientOrderId: sellCid });
         } catch (e) {
           await store.logDecision({
             date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
             detail: `exit mislukt: ${e instanceof Error ? e.message : String(e)}`,
           });
         }
-        if (fill) await applyMarketFill(fill, { symbol: o.symbol, side: 'sell', reason: o.reason, requeue: o });
+        if (fill) await applyMarketFill(fill, { symbol: o.symbol, side: 'sell', reason: o.reason, requeue: { ...o, clientOrderId: sellCid } });
         if (fill && fill.done === false) {
           await store.saveBook(book);
           continue; // rest volgt via openOrders; stukken zitten in de lopende sell
@@ -443,7 +520,9 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         if (left) {
           // geen of gedeeltelijke fill: stop terug op wat er nu echt is, exit blijft staan
           await ensureStop(o.symbol);
-          remaining.push(o.qty != null && fill ? { ...o, qty: Math.max(0, roundQty(o.qty - fill.qty)) || left.qty } : o);
+          // de order is terminaal of geweigerd: zijn client_order_id is verbruikt, een volgende poging krijgt een nieuwe
+          const next = withoutCid(o);
+          remaining.push(o.qty != null && fill ? { ...next, qty: Math.max(0, roundQty(o.qty - fill.qty)) || left.qty } : next);
         }
         await store.saveBook(book);
         continue;
@@ -460,11 +539,11 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
       if (qty <= 0) continue;
       let fill: Fill | null = null;
+      // Een intent dat al eens misschien geplaatst is, houdt zijn client_order_id: staat de order er toch, dan weigert
+      // Alpaca de dubbele (422) en volgen we de bestaande. Zo koopt een volgende dag nooit een tweede keer.
+      const buyCid = o.clientOrderId ?? momentumClientOrderId(cfg, date, o.symbol, 'b');
       try {
-        fill = await broker.marketOrder({
-          versionId: cfg.id, symbol: o.symbol, side: 'buy', qty,
-          clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 'b'),
-        });
+        fill = await broker.marketOrder({ versionId: cfg.id, symbol: o.symbol, side: 'buy', qty, clientOrderId: buyCid });
       } catch (e) {
         await store.logDecision({
           date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
@@ -472,16 +551,21 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         });
       }
       if (!fill) {
-        remaining.push(o);
+        remaining.push(withoutCid(o)); // zeker niet uitgevoerd: id verbruikt of nooit geplaatst
         continue;
       }
       // Een fill gaat nooit terug in pending: ook als de stop hierna mislukt (zie stopMissing).
-      await applyMarketFill(fill, { symbol: o.symbol, side: 'buy', reason: o.reason, signalDate: o.signalDate });
+      await applyMarketFill(fill, {
+        symbol: o.symbol, side: 'buy', reason: o.reason, signalDate: o.signalDate, requeue: { ...o, clientOrderId: buyCid },
+      });
       await store.saveBook(book);
       await ensureStop(o.symbol);
       await store.saveBook(book);
     }
 
+    // Orders van deze run die nog niet terminaal of nog niet zichtbaar waren: één keer navragen, zodat een fill
+    // nog deze run in het boek komt en een stop krijgt in plaats van pas bij de volgende run.
+    remaining.push(...(await resolveOpenOrders(false)));
     await store.savePending(cfg.id, remaining);
 
     // 4. Elke positie een stop op de juiste qty en het juiste niveau.
@@ -489,6 +573,13 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
     await store.saveBook(book);
   }
   return { trades };
+}
+
+/** Een intent zonder vastgezette client_order_id: de volgende poging krijgt een nieuwe. */
+function withoutCid(o: OrderIntent): OrderIntent {
+  if (o.clientOrderId == null) return o;
+  const { clientOrderId: _drop, ...rest } = o;
+  return rest;
 }
 
 function histBars(barsBySymbol: Record<string, Bar[]> | undefined, sym: string, date: string): Bar[] | undefined {

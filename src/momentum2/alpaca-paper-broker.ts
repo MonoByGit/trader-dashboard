@@ -101,6 +101,9 @@ function marketStateOf(cur: AlpacaOrderLike): Fill | null {
   return { orderId: cur.id, qty: 0, price: 0, done: false };
 }
 
+/** Standaard wachtbudget per broker (per strategie-run binnen een tick). */
+export const DEFAULT_WAIT_BUDGET_MS = 45_000;
+
 /** Marker voor een order waarvan we niet weten of hij geplaatst is: volg hem via zijn client_order_id. */
 const UNKNOWN_PREFIX = 'cid:';
 
@@ -132,10 +135,23 @@ export function makeAlpacaPaperBroker(
     cancelDelayMs?: number;
     /** Zo lang (pogingen x cancelDelayMs) wachten we op een bevestigde cancel; Alpaca kan tientallen seconden in pending_cancel blijven. */
     cancelAttempts?: number;
+    /**
+     * Totale wachttijd (ms) voor deze broker, over alle cancels en fill-polls samen. De run draait binnen
+     * één tick-request: is het budget op, dan geldt een cancel als 'timeout' (exit wacht, stop blijft)
+     * en een market order als 'loopt nog' (volgen via openOrders). Nooit een positie zonder stop.
+     */
+    waitBudgetMs?: number;
     log?: (line: string) => void;
   } = {},
 ): MomentumBroker {
-  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const rawSleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const budget = opts.waitBudgetMs ?? DEFAULT_WAIT_BUDGET_MS;
+  let waited = 0;
+  const budgetLeft = () => budget - waited;
+  const sleep = async (ms: number) => {
+    waited += ms;
+    await rawSleep(ms);
+  };
   const pollAttempts = opts.pollAttempts ?? 15;
   const log = opts.log ?? ((l: string) => console.warn(l));
 
@@ -149,13 +165,20 @@ export function makeAlpacaPaperBroker(
     }
   };
 
-  const cancelDeps = {
+  const cancelDelayMs = opts.cancelDelayMs ?? 500;
+  const cancelAttempts = opts.cancelAttempts ?? 120;
+  const baseCancelDeps = {
     getOrder: async (id: string) => (await getOrderSafe(id)) ?? { status: 'unknown' },
     cancelOrder: (id: string) => client.cancelOrder(id),
     sleep,
-    delayMs: opts.cancelDelayMs ?? 500,
-    attempts: opts.cancelAttempts ?? 120,
+    delayMs: cancelDelayMs,
   };
+  /** Pogingen begrensd door het resterende wachtbudget; minstens één GET, dus nooit blind 'canceled'. */
+  const awaitCancel = (id: string) =>
+    awaitStopOrderCanceled(id, {
+      ...baseCancelDeps,
+      attempts: Math.max(1, Math.min(cancelAttempts, Math.floor(Math.max(0, budgetLeft()) / cancelDelayMs) + 1)),
+    });
 
   const ownOrders = async (prefix: string, symbol: string, statuses: Set<string>) =>
     (await client.openOrders(200)).filter(
@@ -172,6 +195,7 @@ export function makeAlpacaPaperBroker(
     let cur: AlpacaOrderLike = order;
     for (let i = 0; i < pollAttempts; i++) {
       if (TERMINAL.has(cur.status)) return marketStateOf(cur);
+      if (budgetLeft() < 1000) break; // budget op: 'loopt nog', het boek volgt hem
       await sleep(1000);
       cur = (await getOrderSafe(cur.id)) ?? cur;
     }
@@ -193,13 +217,13 @@ export function makeAlpacaPaperBroker(
 
   async function cancelAll(orders: AlpacaOrderLike[]): Promise<CancelStopOutcome> {
     let out: CancelStopOutcome = 'none';
-    for (const x of orders) out = worse(out, await awaitStopOrderCanceled(x.id, cancelDeps));
+    for (const x of orders) out = worse(out, await awaitCancel(x.id));
     return out;
   }
 
   /** Stop vervangen door annuleren (bevestigd) en opnieuw plaatsen. Alleen als PATCH niet kan. */
   async function cancelAndPlace(cur: AlpacaOrderLike, symbol: string, qty: number, stopPx: number, prefix: string) {
-    const r = await awaitStopOrderCanceled(cur.id, cancelDeps);
+    const r = await awaitCancel(cur.id);
     if (r === 'filled') throw new Error(`stop ${symbol} vulde tijdens vervangen; boek eerst bijwerken`);
     if (r !== 'canceled') throw new Error(`stop ${symbol} niet bevestigd geannuleerd (${r}); oude stop blijft`);
     await placeStop(symbol, qty, stopPx, prefix);
@@ -265,8 +289,10 @@ export function makeAlpacaPaperBroker(
             return { orderId: `${UNKNOWN_PREFIX}${o.clientOrderId}`, qty: 0, price: 0, done: false };
           }
           if (!existing) {
-            if (st === 422) throw e; // geweigerd, niet dubbel
-            throw e; // tijdelijke fout en de order bestaat niet: niets geplaatst
+            // Een time-out of 5xx zegt niet dat er niets geplaatst is, en een 422 op client_order_id zegt dat hij
+            // er wel is: Alpaca toont een net geplaatste order niet altijd meteen. Volgen, nooit opnieuw plaatsen.
+            log(`[momentum-broker] ${o.symbol} ${o.side}: order (nog) niet zichtbaar na ${String(e)}; volgen via client_order_id`);
+            return { orderId: `${UNKNOWN_PREFIX}${o.clientOrderId}`, qty: 0, price: 0, done: false };
           }
           if (st === 422) log(`[momentum-broker] ${o.symbol} ${o.side}: 422 bij plaatsen, bestaande order gevolgd: ${String(e)}`);
           placed = existing;
@@ -287,8 +313,11 @@ export function makeAlpacaPaperBroker(
 
     async orderFill(o) {
       if (o.orderId.startsWith(UNKNOWN_PREFIX)) {
-        const cur = await client.getOrderByClientOrderId(o.orderId.slice(UNKNOWN_PREFIX.length));
-        return cur ? marketStateOf(cur) : null;
+        const cid = o.orderId.slice(UNKNOWN_PREFIX.length);
+        const cur = await client.getOrderByClientOrderId(cid);
+        // niet (meer) te vinden: het intent mag opnieuw, met dezelfde client_order_id (Alpaca weigert dan een dubbele)
+        if (!cur) return { orderId: o.orderId, qty: 0, price: 0, done: true, missing: true, clientOrderId: cid };
+        return marketStateOf(cur);
       }
       return marketStateOf(await client.getOrder(o.orderId));
     },
@@ -304,7 +333,7 @@ export function makeAlpacaPaperBroker(
       const all = await ownOrders(o.stopClientPrefix, o.symbol, new Set(Array.from(OPEN_STATUSES).concat('pending_cancel')));
       // een cancel die nog loopt eerst uitwachten: die stukken zitten nog vast
       for (const x of all.filter((y) => y.status === 'pending_cancel')) {
-        const r = await awaitStopOrderCanceled(x.id, cancelDeps);
+        const r = await awaitCancel(x.id);
         if (r === 'filled') throw new Error(`stop ${o.symbol} vulde tijdens annuleren; boek eerst bijwerken`);
         if (r !== 'canceled') throw new Error(`cancel van stop ${o.symbol} loopt nog (${r})`);
       }
@@ -360,7 +389,7 @@ export function makeAlpacaPaperBroker(
     },
 
     async cancelStop(o) {
-      if (o.orderId) return awaitStopOrderCanceled(o.orderId, cancelDeps);
+      if (o.orderId) return awaitCancel(o.orderId);
       const prefix = o.stopClientPrefix ?? `m2s-${o.versionId}-`;
       return cancelAll(await ownOrders(prefix, o.symbol, new Set(Array.from(OPEN_STATUSES).concat('pending_cancel'))));
     },

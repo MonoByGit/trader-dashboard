@@ -2,7 +2,7 @@ import { alpaca } from '../alpaca';
 import { fetchStockDailyBars } from '../alpaca-bars';
 import { tradingDateEt } from '@scheduler/decide';
 import { isDailyBarComplete } from '../../../src/momentum2/daily-bar-complete';
-import { decideDay, executeDay } from '../../../src/momentum2/live';
+import { decideDay, executeDay, hasMissingStops, repairMissingStops } from '../../../src/momentum2/live';
 import { resolveMomentumPaperMode } from '../../../src/momentum2/mode';
 import type { Bar } from '../../../src/momentum2/types';
 import { m5Versions } from '../../../src/momentum5/config';
@@ -86,4 +86,23 @@ export async function runMomentum5(step: 'decide' | 'execute', nowMs = Date.now(
   }
   const reconcile = mode.shadow ? undefined : await runReconcile({ date: today, cfgs, store, hooks: m5Hooks, barsBySymbol, broker });
   return { step, date: today, shadow: mode.shadow, trades, reconcile };
+}
+
+/**
+ * Stopwacht M5 (elke tick, alleen papier): zet een ontbrekende stop terug. Leest eerst alleen de boeken;
+ * bars en broker pas als er echt iets ontbreekt.
+ */
+export async function runMomentum5StopGuard(nowMs = Date.now()): Promise<Record<string, unknown> | null> {
+  const mode = resolveMomentumPaperMode(process.env, 'MOMENTUM5');
+  if (!mode.run || mode.shadow) return null;
+  const cfgs = m5Versions();
+  const store = postgresStore();
+  if (!(await hasMissingStops(cfgs, store))) return null;
+  const syms = Array.from(new Set(cfgs.flatMap((c) => [c.signalSymbol, c.riskSymbol, c.cashSymbol])));
+  const raw = await fetchStockDailyBars({ symbols: syms, lookbackCalendarDays: 420, adjustment: 'all' });
+  const barsBySymbol: Record<string, Bar[]> = {};
+  for (const [s, b] of Object.entries(raw)) barsBySymbol[s] = toBars(b);
+  const broker = brokerForMode(mode, {});
+  const date = tradingDateEt(nowMs);
+  return repairMissingStops({ date, cfgs, hooks: m5Hooks, barsBySymbol, broker, store, foreignQty: foreignQtyOtherSleeves });
 }
