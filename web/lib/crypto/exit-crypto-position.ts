@@ -124,11 +124,12 @@ export async function exitCryptoPosition(
 
     const positions = await alpaca.positions();
     const pos = positions.find((p) => alpacaSymbolsEqual(p.symbol, symbol));
-    const sellQty = pos ? positionQtyAvailable(pos) : 0;
-    if (!(sellQty > 0)) {
+    const positionQty = pos ? parseFloat(pos.qty) : 0;
+    if (!(positionQty > 0)) {
       await clearCryptoExitSettings(symbol);
       return { exited: false, skippedReason: 'no_qty' };
     }
+    const sellQty = positionQtyAvailable(pos!);
 
     if (mode === 'close_position') {
       const lockBlock = await abortIfLockLost(symbol, owner, reason);

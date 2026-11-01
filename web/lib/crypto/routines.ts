@@ -19,6 +19,7 @@ import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy, saveCryptoSt
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
 import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
+import { isOrderPostRetryableError } from '../../../src/alpaca/order-post-reconcile';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
 
@@ -214,6 +215,13 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         client_order_id: clientOrderId,
       });
     } catch (e) {
+      if (isOrderPostRetryableError(e)) {
+        await saveCryptoStop(c.symbol, stopPrice, qty);
+        await logGuardEvent('crypto_order_ambiguous', String(e), {
+          symbol: c.symbol,
+          clientOrderId,
+        });
+      }
       await logGuardEvent('crypto_order_fail', String(e), { symbol: c.symbol });
       await saveDecision({
         routine: 'crypto-scan',

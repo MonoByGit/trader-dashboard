@@ -1,6 +1,5 @@
-// REPRO D2: buy POST timeout after Alpaca accepted — reconcile via client_order_id and protect position.
+// REPRO D2: buy POST timeout with no reconciled order — must still save a tick stop (ambiguous).
 import { jest } from '@jest/globals';
-import { placeOrderWithReconcile } from '../../../src/alpaca/order-post-reconcile.js';
 
 const saveCryptoStop = jest.fn(async () => {});
 const protectCryptoPositionAfterBuy = jest.fn(async () => {
@@ -40,27 +39,9 @@ await jest.unstable_mockModule('@/lib/alpaca', () => ({
     account: jest.fn(async () => ({ equity: '100000', cash: '50000' })),
     positions: jest.fn(async () => []),
     cryptoBars: jest.fn(async () => ({ bars: { 'BTC/USD': [{ c: 90000, v: 1 }] } })),
-    placeOrder: jest.fn(async (o: { client_order_id?: string; symbol: string; qty?: number }) =>
-      placeOrderWithReconcile(o.client_order_id, {
-        submit: async () => {
-          throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
-        },
-        lookupByClientOrderId: async () => ({
-          id: 'buy-recovered',
-          symbol: o.symbol,
-          side: 'buy',
-          qty: String(o.qty ?? 0),
-          filled_qty: '0',
-          type: 'market',
-          status: 'new',
-          submitted_at: new Date().toISOString(),
-          filled_at: null,
-          filled_avg_price: null,
-          limit_price: null,
-          stop_price: null,
-        }),
-      }),
-    ),
+    placeOrder: jest.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }),
   },
 }));
 
@@ -101,8 +82,10 @@ describe('buy timeout', () => {
     const handler = registerRoutineHandler.mock.calls.find((c) => c[0] === 'crypto-scan')?.[1];
     await handler!();
     expect(saveCryptoStop).toHaveBeenCalled();
-    expect(saveDecision).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: 'BUY', orderId: 'buy-recovered' }),
+    expect(logGuardEvent).toHaveBeenCalledWith(
+      'crypto_order_ambiguous',
+      expect.any(String),
+      expect.objectContaining({ symbol: 'BTC/USD' }),
     );
   });
 });
