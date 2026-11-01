@@ -1,25 +1,34 @@
 import type { VersionConfig } from '../momentum2/types';
+import type { BasketWeightMode } from './basket';
+
+export type M4Variant = 'diff' | 'basket' | 'new-only';
 
 /** Momentum 4 'kopiëren': 5% van het paperkapitaal, verlieslimiet 15%, harde en trailing stop. */
 export interface M4Config extends VersionConfig {
-  /** Kopieer een toevoeging of opening alleen als het fonds de positie minstens zoveel procent vergroot. */
   minAddPct: number;
-  /** Sluit zodra het fonds in één filing minstens zoveel procent verkoopt (close = altijd). */
   exitReducePct: number;
-  /** Alleen kopiëren als het gewicht bij het fonds minstens zoveel procent is. */
   minWeightPct: number;
   positionPct: number;
+  /** diff = volg 13F-wijzigingen; basket = top holdings mandje; new-only = alleen opens, geen 13F-exits. */
+  variant: M4Variant;
+  maxNames: number;
+  basketWeight: BasketWeightMode;
 }
 
 export const M4_BUDGET_PCT = 0.05;
 
-export function m4Version(paperCapitalUsd = 100_000, universe: string[] = []): M4Config {
+export function m4Version(
+  paperCapitalUsd = 100_000,
+  universe: string[] = [],
+  overrides: Partial<M4Config> = {},
+): M4Config {
+  const maxNames = overrides.maxNames ?? 10;
   return {
     id: 'm4-copy',
     label: 'Momentum 4 kopiëren (13F)',
     budgetUsd: paperCapitalUsd * M4_BUDGET_PCT,
     universe,
-    topN: 10,
+    topN: maxNames,
     lookbackDays: 0,
     smaDays: 0,
     volDays: 10,
@@ -37,5 +46,9 @@ export function m4Version(paperCapitalUsd = 100_000, universe: string[] = []): M
     exitReducePct: 50,
     minWeightPct: 0.25,
     positionPct: 0.1,
+    variant: 'diff',
+    maxNames,
+    basketWeight: 'conviction',
+    ...overrides,
   };
 }

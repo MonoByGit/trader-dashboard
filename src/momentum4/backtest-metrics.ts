@@ -5,12 +5,23 @@ export interface BacktestSummary {
   spyReturnPct: number;
   excessPct: number;
   maxDrawdownPct: number;
+  spyMaxDrawdownPct: number;
   sharpe: number;
   trades: number;
   winRatePct: number;
   costUsd: number;
   periodStart: string;
   periodEnd: string;
+}
+
+function maxDrawdownFromSeries(values: number[], startBudget: number): number {
+  let peak = startBudget;
+  let maxDd = 0;
+  for (const v of values) {
+    peak = Math.max(peak, v);
+    maxDd = Math.max(maxDd, (peak - v) / peak);
+  }
+  return maxDd * 100;
 }
 
 /** Sharpe op dagelijkse versie-rendementen (annualized, rf=0). */
@@ -56,11 +67,13 @@ export function summarizeBacktest(input: {
   const slip = (input.slippageBps ?? 2) / 10000;
   const fee = (input.feeBps ?? 1) / 10000;
   const costUsd = trades.reduce((s, t) => s + t.qty * t.price * (slip + fee), 0);
+  const spySeries = equity.map((r) => r.spyEquity);
   return {
     returnPct: last ? (last.equity / budgetUsd - 1) * 100 : 0,
     spyReturnPct: last ? (last.spyEquity / budgetUsd - 1) * 100 : 0,
     excessPct: last ? ((last.equity - last.spyEquity) / budgetUsd) * 100 : 0,
     maxDrawdownPct: maxDd * 100,
+    spyMaxDrawdownPct: maxDrawdownFromSeries(spySeries, budgetUsd),
     sharpe: sharpeFromEquity(equity),
     trades: trades.length,
     winRatePct: winRatePct(trades),

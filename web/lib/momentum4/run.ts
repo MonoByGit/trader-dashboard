@@ -92,10 +92,11 @@ export async function runMomentum4(
     return { step, shadow: true, date: today, signals: allSignals.length, planned };
   }
 
+  const hooks = makeM4Hooks((d) => signalsByDate[d] ?? []);
   const { trades } = await executeDay({
     date: today,
     cfgs: [cfg],
-    hooks: makeM4Hooks(() => []),
+    hooks,
     lastPrice: Object.fromEntries(Object.entries(bars).map(([s, b]) => [s, b.at(-1)!.c])),
     broker: shadowBroker(Object.fromEntries(Object.entries(bars).map(([s, b]) => [s, b.at(-1)!.c]))),
     store,

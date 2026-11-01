@@ -1,6 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
 import { planRebalance } from './plan';
+import type { StrategyHooks } from './hooks';
 import { lossLimitBreached, stopLevel } from './risk';
 import type {
   Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict,
@@ -50,6 +51,7 @@ export async function decideDay(input: {
   benchmark: Bar[];
   store: Store;
   veto?: VetoFn;
+  hooks?: StrategyHooks;
 }): Promise<{ planned: Record<string, OrderIntent[]> }> {
   const { date, store } = input;
   const planned: Record<string, OrderIntent[]> = {};
@@ -89,8 +91,10 @@ export async function decideDay(input: {
       book.lastRebalanceIndex! += 1;
     }
     if (book.halted || due) {
-      const plan = await planRebalance({ barsBySymbol: input.barsBySymbol, book, cfg, veto: input.veto });
-      for (const v of plan.vetoes) {
+      const plan = input.hooks?.plan
+        ? await input.hooks.plan({ barsBySymbol: input.barsBySymbol, book, cfg })
+        : await planRebalance({ barsBySymbol: input.barsBySymbol, book, cfg, veto: input.veto });
+      for (const v of plan.vetoes ?? []) {
         await store.logDecision({
           date, versionId: cfg.id, kind: 'veto', symbol: v.symbol, veto: v.verdict,
           detail: `${v.verdict.veto ? 'VETO' : 'doorgelaten'}${v.verdict.failedOpen ? ' (check mislukt)' : ''}: ${v.verdict.reason}`,
@@ -119,6 +123,7 @@ export async function executeDay(input: {
   lastPrice: Record<string, number>;
   broker: Broker;
   store: Store;
+  hooks?: StrategyHooks;
 }): Promise<{ trades: TradeLogRow[] }> {
   const { date, broker, store } = input;
   const trades: TradeLogRow[] = [];
@@ -163,7 +168,8 @@ export async function executeDay(input: {
 
     // 3. Stops: harde stop bij entry, daarna meebewegend omhoog.
     for (const [sym, pos] of Object.entries(book.positions)) {
-      await broker.setStop({ versionId: cfg.id, symbol: sym, qty: pos.qty, stopPrice: round2(stopLevel(pos, cfg).level) });
+      const stop = input.hooks?.stopFor?.(pos, cfg) ?? stopLevel(pos, cfg);
+      await broker.setStop({ versionId: cfg.id, symbol: sym, qty: pos.qty, stopPrice: round2(stop.level) });
     }
     await store.saveBook(book);
   }

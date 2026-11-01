@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { makeBars } from '../momentum2/fixtures';
 import { newBook } from '../momentum2/book';
 import { simulateVersion } from '../momentum2/simulate';
@@ -7,6 +6,9 @@ import { sharpeFromEquity, summarizeBacktest } from './backtest-metrics';
 import { M4_BUDGET_PCT, m4Version } from './config';
 import { dedupe13FByReport, parse13FInfoTableXml, staticCusipResolver } from './edgar';
 import { diffHoldings, mergeFundSignals, signalsByFiledDate, type HoldingsSnapshot } from './holdings';
+import { buildBasketTargets, basketSignalsByFiledDate, filterNewPositionsOnly } from './basket';
+import { buildM4Signals } from './signals-build';
+import { alignSignalsToTradingDays } from './trading-days';
 import { makeM4Hooks, planM4 } from './plan';
 import { walkForwardM4 } from './walkforward';
 
@@ -67,6 +69,42 @@ describe('config', () => {
   });
 });
 
+describe('trading day align', () => {
+  it('schuift weekend-filedAt naar volgende sessie', () => {
+    const spy = ['2024-05-13', '2024-05-14', '2024-05-15'];
+    const out = alignSignalsToTradingDays(
+      { '2024-05-12': [{ symbol: 'X', kind: 'open', changePct: 100, weightPct: 5, sourceFund: '1' }] },
+      spy,
+    );
+    expect(out['2024-05-13']).toHaveLength(1);
+  });
+});
+
+describe('basket', () => {
+  const f1a = snap('2024-03-31', '2024-05-15', '1', [['AAPL', 100, 40], ['MSFT', 50, 20]]);
+  const f1b = snap('2024-06-30', '2024-08-14', '1', [['AAPL', 100, 40], ['MSFT', 50, 20]]);
+  const f2a = snap('2024-03-31', '2024-05-20', '2', [['AAPL', 80, 30], ['GOOG', 60, 25]]);
+  it('conviction top-N over fondsen', () => {
+    const t = buildBasketTargets([f1b, f2a], 2, 'conviction');
+    expect(t.map((x) => x.symbol)).toEqual(['AAPL', 'GOOG']);
+    expect(t[0]!.allocPct).toBeGreaterThan(t[1]!.allocPct);
+  });
+  it('equal weight onder top-N', () => {
+    const t = buildBasketTargets([f1b, f2a], 2, 'equal');
+    expect(t[0]!.allocPct).toBeCloseTo(0.5, 6);
+    expect(t[1]!.allocPct).toBeCloseTo(0.5, 6);
+  });
+  it('new-only filter', () => {
+    const merged = mergeFundSignals([[f1a, f1b], [f2a]]);
+    const n = filterNewPositionsOnly(merged);
+    for (const sigs of Object.values(n)) expect(sigs.every((s) => s.kind === 'open')).toBe(true);
+  });
+  it('mandje-signalen op filing-dagen', () => {
+    const sig = basketSignalsByFiledDate([[f1a, f1b], [f2a]], 3, 'equal');
+    expect(Object.keys(sig).length).toBeGreaterThan(0);
+  });
+});
+
 describe('plan', () => {
   const cfg = m4Version(100_000, ['TSLA', 'COIN', 'NEW']);
   const bars = { SPY: makeBars(10, 100, 0), TSLA: makeBars(10, 200, 0), COIN: makeBars(10, 100, 0), NEW: makeBars(10, 50, 0) };
@@ -83,6 +121,17 @@ describe('plan', () => {
       cfg,
     }).orders;
     expect(o.map((x) => x.symbol).sort()).toEqual(['NEW', 'TSLA']);
+  });
+  it('new-only: geen 13F-verkoop', () => {
+    const book = newBook({ ...cfg, variant: 'new-only' }, null, null);
+    book.positions.TSLA = { qty: 3, entryPrice: 200, entryDate: '2026-10-01', highWater: 200 };
+    const o = planM4({
+      signals: [{ symbol: 'TSLA', kind: 'close', changePct: -100, weightPct: 0, sourceFund: 'brk' }],
+      barsBySymbol: bars,
+      book,
+      cfg: { ...cfg, variant: 'new-only' },
+    }).orders;
+    expect(o).toHaveLength(0);
   });
   it('sluit bij close of grote reduce', () => {
     const book = newBook(cfg, null, null);
@@ -119,6 +168,7 @@ describe('simulate & walk-forward', () => {
     expect(wf.windows.length).toBeGreaterThan(0);
     expect(Number.isFinite(wf.oos.sharpe)).toBe(true);
     expect(wf.oos.periodEnd.length).toBeGreaterThan(0);
+    expect(wf.oos.trades).toBeGreaterThan(0);
   });
 });
 
