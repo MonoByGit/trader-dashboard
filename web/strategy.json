@@ -29,7 +29,7 @@
     "premarket": "08:30",
     "market_open": "09:35",
     "midday": "12:30",
-    "eod": "16:10"
+    "eod": "15:50"
   },
   "agent": {
     "name": "Momentum",

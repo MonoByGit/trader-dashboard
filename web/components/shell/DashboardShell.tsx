@@ -47,7 +47,7 @@ type PageId = typeof PAGES[number]['id'];
 type Decision = { id: string; symbol: string; decision: string; ts: string; agentNote?: string; rationale: string; criteria?: Record<string, string>; routine: string; orderId?: string; };
 type Position = { symbol: string; name: string; sector: string; qty: number; avgEntryPrice: number; currentPrice: number; highWatermark: number; entryAt: string; stopLoss: number; trailingStop: number; takeProfit: number; sma20: number; marketValue: number; costBasis: number; unrealizedPnl: number; unrealizedPnlPct: number; };
 type Routine = { id: string; name: string; time: string; lastRun: string; summary: string; status: string; nextRun: string; };
-type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; };
+type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; emergencyStop?: boolean; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; };
 type Portfolio = { totalEquity: number; cashBalance: number; dayStartEquity: number; dailyPnl: number; dailyPnlPct: number; tradingEnabled: boolean; circuitBreakerTripped: boolean; positions: Position[]; };
 
 const TWEAK_DEFAULTS = { theme: 'dark', mode: 'active', density: 'comfortable', agentPersona: true, accent: '#0d99ff' };
@@ -67,6 +67,7 @@ export function DashboardShell() {
   const [selectedDecision, setSelectedDecision] = useState<Decision | null>(null);
   const [confirmClose, setConfirmClose] = useState<Position | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
+  const [confirmEmergency, setConfirmEmergency] = useState(false);
   const [confirmRoutine, setConfirmRoutine] = useState<Routine | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // v2-sleutels: oude builds bewaarden trader-left/right=false op mobiel,
@@ -108,11 +109,22 @@ export function DashboardShell() {
   }, [tweaks]);
   useEffect(() => { setPortfolio(tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio); }, [tweaks.mode]);
 
-  // Load kill switch state from backend on mount
-  useEffect(() => {
+  const refreshGuards = () => {
     fetch('/api/guards').then(r => r.json()).then(d => {
-      setGuards(g => ({ ...g, tradingEnabled: d.tradingEnabled }));
+      setGuards(g => ({ ...g, ...d }));
+      setPortfolio(p => ({
+        ...p,
+        tradingEnabled: d.tradingEnabled,
+        circuitBreakerTripped: d.circuitBreakerTripped,
+      }));
     }).catch(() => null);
+  };
+
+  useEffect(() => {
+    refreshGuards();
+    const t = setInterval(refreshGuards, 60_000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -182,9 +194,52 @@ export function DashboardShell() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tradingEnabled: next }),
-    }).catch(() => null);
+    }).then(r => {
+      if (!r.ok) return r.json().then(e => { throw new Error(e.error); });
+    }).then(() => refreshGuards()).catch(e => showToastMsg(String(e.message ?? e)));
     showToastMsg(next ? 'Trading heractiveerd.' : 'Kill switch geactiveerd. Geen nieuwe orders meer.');
     setConfirmKill(false);
+  };
+
+  const doEmergencyStop = () => {
+    fetch('/api/guards/emergency-stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ who: 'Dusty (dashboard)' }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        refreshGuards();
+        showToastMsg(`Noodstop actief. Gesloten: ${(d.closed ?? []).join(', ') || 'geen'}.`);
+      })
+      .catch(e => showToastMsg(String(e.message ?? e)));
+    setConfirmEmergency(false);
+  };
+
+  const doEmergencyResume = () => {
+    fetch('/api/guards/emergency-resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ who: 'Dusty (dashboard)' }),
+    })
+      .then(() => { refreshGuards(); showToastMsg('Routines hervat. Zet trading handmatig aan indien gewenst.'); })
+      .catch(e => showToastMsg(String(e)));
+  };
+
+  const doResetBreaker = () => {
+    fetch('/api/guards/reset-breaker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ who: 'Dusty (dashboard)' }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        refreshGuards();
+        showToastMsg('Circuit breaker gereset.');
+      })
+      .catch(e => showToastMsg(String(e.message ?? e)));
   };
 
   const handleKickoffSelect = (opt: { symbol: string; thesis: string; rationale: string; confidence: number; entryZone: string; stopLevel: string }) => {
@@ -232,7 +287,15 @@ export function DashboardShell() {
       case 'decisions': return <DecisionLogPage mode={tweaks.mode} onOpenDecision={setSelectedDecision}/>;
       case 'conversations': return <ConversationsPage pendingThread={pendingKickoffThread} onKickoffHandled={() => setPendingKickoffThread(null)}/>;
       case 'routines': return <RoutinesPage onTrigger={r => setConfirmRoutine(r as Routine)}/>;
-      case 'risk': return <RiskPage guards={guards} onOpenKill={() => setConfirmKill(true)} onResetBreaker={() => showToastMsg('Geen breaker getript. Reset niet nodig.')}/>;
+      case 'risk': return (
+        <RiskPage
+          guards={guards}
+          onOpenKill={() => setConfirmKill(true)}
+          onResetBreaker={doResetBreaker}
+          onEmergencyStop={() => setConfirmEmergency(true)}
+          onEmergencyResume={doEmergencyResume}
+        />
+      );
       case 'strategy': return <StrategyPage/>;
       case 'lessons': return <LessonsPage/>;
       case 'reports': return <ReportsPage/>;
@@ -473,6 +536,15 @@ export function DashboardShell() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={confirmEmergency} onClose={() => setConfirmEmergency(false)}
+        title="Noodstop activeren?"
+        description="Annuleert alle open orders, sluit alle posities, zet de kill switch aan en blokkeert alle cron-routines tot je hervat."
+        footer={<><button className="btn ghost" onClick={() => setConfirmEmergency(false)}>Cancel</button><button className="btn danger" onClick={doEmergencyStop}>Noodstop</button></>}>
+        <div style={{padding:10,background:'var(--bg-app)',borderRadius:6,fontSize:11,color:'var(--neg)'}}>
+          Alleen gebruiken bij echte noodsituaties. Paper account — geen live geld, wel goede gewoonte.
+        </div>
       </Modal>
 
       <Modal open={confirmKill} onClose={() => setConfirmKill(false)}

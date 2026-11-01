@@ -54,7 +54,7 @@ export function MobileApp() {
 
   // Kill switch state + decisions uit backend (val terug op mock).
   useEffect(() => {
-    fetch('/api/guards').then(r => r.json()).then(d => setGuards(g => ({ ...g, tradingEnabled: d.tradingEnabled }))).catch(() => null);
+    fetch('/api/guards').then(r => r.json()).then(d => setGuards(g => ({ ...g, ...d }))).catch(() => null);
     fetch('/api/decisions').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setDecisions(d); }).catch(() => null);
   }, []);
 
@@ -101,7 +101,7 @@ export function MobileApp() {
     dailyPnl: live.data?.dayPnl ?? 0,
     dailyPnlPct: (live.data?.dayPnlPct ?? 0) * 100,
     allTimePnl: 0, allTimePnlPct: 0,
-    tradingEnabled: guards.tradingEnabled, circuitBreakerTripped: false,
+    tradingEnabled: guards.tradingEnabled, circuitBreakerTripped: guards.circuitBreakerTripped ?? false,
     positions: livePos,
   } as Portfolio);
 

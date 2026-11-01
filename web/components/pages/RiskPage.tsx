@@ -6,6 +6,7 @@ import { fmt } from '@/lib/format';
 
 interface Guards {
   tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string;
+  emergencyStop?: boolean;
   dailyDrawdownPct: number; peakDrawdownPct: number;
   dailyDrawdownLimit: number; peakDrawdownLimit: number;
   consecLosses: number; consecLossesLimit: number;
@@ -20,9 +21,11 @@ interface RiskPageProps {
   guards: Guards;
   onOpenKill: () => void;
   onResetBreaker: () => void;
+  onEmergencyStop: () => void;
+  onEmergencyResume: () => void;
 }
 
-export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProps) {
+export function RiskPage({ guards: g, onOpenKill, onResetBreaker, onEmergencyStop, onEmergencyResume }: RiskPageProps) {
   const barPct = (v: number, max: number) => Math.max(0, Math.min(100, (Math.abs(v) / Math.abs(max)) * 100));
 
   return (
@@ -30,6 +33,28 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker }: RiskPageProp
       <div className="page-head"><div><h1>Risk &amp; Guards</h1><div className="subtitle text-secondary">Deze regels draaien buiten de LLM. Ze kunnen niet worden overruled tijdens runtime.</div></div></div>
 
       <div className="grid-2">
+        <div className="card" style={{borderColor:g.emergencyStop?'var(--neg)':'var(--border-subtle)', gridColumn:'1 / -1'}}>
+          <div className="card-head">
+            <h3><Icon name="kill" size={12}/> Noodstop (Emergency)</h3>
+            <Pill kind={g.emergencyStop?'neg':'muted'} dot pulse={g.emergencyStop}>{g.emergencyStop?'ACTIEF':'Uit'}</Pill>
+          </div>
+          <div className="card-body">
+            <p className="text-secondary" style={{fontSize:11,margin:'0 0 14px',lineHeight:1.5}}>
+              {g.emergencyStop
+                ? 'Alle routines zijn gestopt. Posities zijn geflatten en orders geannuleerd. Hervat routines expliciet na review.'
+                : 'Annuleert alle open orders, sluit alle posities, zet kill switch aan en blokkeert elke cron-routine tot hervatten.'}
+            </p>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              <button className="btn danger" onClick={onEmergencyStop} disabled={!!g.emergencyStop} style={{flex:1,minWidth:160}}>
+                <Icon name="kill" size={12}/> Activeer noodstop
+              </button>
+              <button className="btn outline" onClick={onEmergencyResume} disabled={!g.emergencyStop} style={{flex:1,minWidth:160}}>
+                <Icon name="refresh" size={12}/> Hervat routines
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="card" style={{borderColor:g.tradingEnabled?'var(--border-subtle)':'var(--neg)'}}>
           <div className="card-head">
             <h3><Icon name={g.tradingEnabled?'unlock':'lock'} size={12}/> Kill Switch <InfoTip id="kill-switch"/></h3>

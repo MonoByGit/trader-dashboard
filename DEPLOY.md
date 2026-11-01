@@ -31,6 +31,11 @@ De 4 cron-services (premarket/market-open/midday/eod) zijn aparte Railway-servic
 losgekoppeld van `main`. `cron-weekly` ontbreekt nog (dashboard-handeling: schema
 `30 20 * * 5`, routine `weekly`).
 
+**EOD cron (UTC, Railway):** `50 20 * * 1-5` → 15:50 ET in EST (winter). In EDT (zomer)
+is dat 16:50 ET; pas het schema aan naar `50 19 * * 1-5` als je in zomertijd vlak vóór
+de bel wilt sluiten. De EOD-code gebruikt Alpaca `clock` en sluit niet onbeschermd als
+de markt al dicht is.
+
 ## Verifiëren vóór een push
 
 `tsc --noEmit` alleen is NIET genoeg: `next build` draait ook ESLint, en een
