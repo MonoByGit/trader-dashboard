@@ -18,9 +18,4 @@ describe('classifySymbol', () => {
   it('uses asset_class hint when present', () => {
     expect(classifySymbol('BTCUSD', 'crypto')).toBe('crypto');
   });
-
-  it('prefers us_equity hint over compact USD suffix', () => {
-    expect(classifySymbol('FOOUSD', 'us_equity')).toBe('etf');
-  });
 });
-

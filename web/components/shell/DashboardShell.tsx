@@ -142,13 +142,6 @@ export function DashboardShell() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: p.symbol }),
       });
-      if (res.status === 409) {
-        livePositions.refresh?.();
-        live.refresh?.();
-        setConfirmClose(null);
-        showToastMsg(`${p.symbol} was al gesloten.`);
-        return;
-      }
       if (!res.ok) {
         const err = await res.json();
         showToastMsg(`Fout bij sluiten: ${err.error ?? res.status}`);

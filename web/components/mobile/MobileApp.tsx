@@ -116,12 +116,6 @@ export function MobileApp() {
     setSelPos(null);
     try {
       const res = await fetch('/api/alpaca/positions', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol: p.symbol }) });
-      if (res.status === 409) {
-        livePositions.refresh?.();
-        live.refresh?.();
-        showToast(`${p.symbol} was al gesloten.`);
-        return;
-      }
       if (!res.ok) { showToast(`Fout bij sluiten van ${p.symbol}.`); return; }
       livePositions.refresh?.();
       live.refresh?.();
