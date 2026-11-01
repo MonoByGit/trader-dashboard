@@ -67,6 +67,13 @@ export async function GET() {
     errors.push('Geen database gekoppeld');
   }
 
-  const home = buildHome({ now, account, accountError, guards, env: process.env, runs, decisions, heartbeat });
+  const home = buildHome({ now, account, accountError, guards, env: momentumEnv(process.env), runs, decisions, heartbeat });
   return NextResponse.json({ ...home, bronfouten: errors });
+}
+
+/** Alleen de Momentum-vlaggen gaan naar buildHome; geen andere omgevingswaarden. */
+function momentumEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(env)) if (/^MOMENTUM\d+_(ENABLED|DRY_RUN)$/.test(k)) out[k] = v;
+  return out;
 }

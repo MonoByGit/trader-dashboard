@@ -32,10 +32,17 @@ const SHADOW: Array<{ id: string; naam: string; flag: string; routinePrefix: str
   { id: 'momentum6', naam: 'Momentum 6 · BTC-breakout', flag: 'MOMENTUM6', routinePrefix: 'momentum6' },
 ];
 
+/** Postgres-tekst ('2026-11-01 21:30:00.5+00') of ISO naar epoch; onleesbaar telt als oudst. */
+function epoch(t: string | null): number {
+  if (!t) return 0;
+  const ms = Date.parse(t.includes('T') ? t : t.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00'));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 function lastRun(runs: HomeInput['runs'], prefix: string): HomeStrategy['laatsteRun'] {
   const r = runs
     .filter((x) => x.routine.startsWith(prefix))
-    .sort((a, b) => String(b.started_at ?? '').localeCompare(String(a.started_at ?? '')))[0];
+    .sort((a, b) => epoch(b.started_at) - epoch(a.started_at))[0];
   return r ? { routine: r.routine, status: r.status, dag: r.trading_date, wanneer: r.started_at } : null;
 }
 
