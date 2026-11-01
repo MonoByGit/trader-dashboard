@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbQuery, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
-import { listRecentRuns, listRunsForTradingDate } from '@/lib/routine-runs';
+import { listRecentRuns, listRunsForTradingDate, normalizeRoutineRunRow } from '@/lib/routine-runs';
 import { tradingDateEt } from '@scheduler/decide';
 
 export async function GET(req: Request) {
@@ -24,7 +24,9 @@ export async function GET(req: Request) {
        FROM routine_runs${where} ORDER BY started_at DESC LIMIT $1`,
       params,
     );
-    return NextResponse.json(rows);
+    return NextResponse.json(
+      rows.map((r) => normalizeRoutineRunRow(r as unknown as Parameters<typeof normalizeRoutineRunRow>[0])),
+    );
   }
 
   if (date) {

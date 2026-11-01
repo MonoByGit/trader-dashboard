@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { aggregateAiCostsByDay, aggregateAiCostsByWeek } from '../../../../src/ai-cost/aggregate-by-period';
 import { dbQuery, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
 import { sumAiCostTodayEt } from '@/lib/ai-calls';
@@ -119,18 +120,8 @@ export async function GET(req: Request) {
      LIMIT 180`,
   );
 
-  const dayMap = new Map<string, { day: string; etf_usd: number; crypto_usd: number; cost_usd: number }>();
-  for (const r of byDayRaw) {
-    const key = r.day;
-    const entry = dayMap.get(key) ?? { day: key, etf_usd: 0, crypto_usd: 0, cost_usd: 0 };
-    if (r.asset_class === 'crypto') entry.crypto_usd += r.cost_usd;
-    else entry.etf_usd += r.cost_usd;
-    entry.cost_usd += r.cost_usd;
-    dayMap.set(key, entry);
-  }
-  const byDay = Array.from(dayMap.values()).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 90);
+  const byDay = aggregateAiCostsByDay(byDayRaw);
 
-  const weekMap = new Map<string, { week_start: string; etf_usd: number; crypto_usd: number; cost_usd: number }>();
   const byWeekRaw = await dbQuery<{ week_start: string; asset_class: string; cost_usd: number }>(
     `SELECT date_trunc('week', ts AT TIME ZONE 'America/New_York')::date AS week_start,
             COALESCE(asset_class, 'etf') AS asset_class,
@@ -140,15 +131,7 @@ export async function GET(req: Request) {
      ORDER BY week_start DESC
      LIMIT 104`,
   );
-  for (const r of byWeekRaw) {
-    const key = r.week_start;
-    const entry = weekMap.get(key) ?? { week_start: key, etf_usd: 0, crypto_usd: 0, cost_usd: 0 };
-    if (r.asset_class === 'crypto') entry.crypto_usd += r.cost_usd;
-    else entry.etf_usd += r.cost_usd;
-    entry.cost_usd += r.cost_usd;
-    weekMap.set(key, entry);
-  }
-  const byWeek = Array.from(weekMap.values()).sort((a, b) => b.week_start.localeCompare(a.week_start));
+  const byWeek = aggregateAiCostsByWeek(byWeekRaw);
 
   return NextResponse.json({
     todayUsd,

@@ -1,4 +1,5 @@
 import { alpacaSymbolsEqual } from '../../src/alpaca/symbol-path';
+import { pgDateToYmd, pgTimestampToHm, pgTimestampToIso } from '../../src/dates/pg';
 import { dbQuery, hasDb, initDb } from './db';
 import { ensureSchema } from './migrate';
 
@@ -83,8 +84,9 @@ async function enrichReportRow(r: {
   const sessionPnl = equityEnd - equityStart;
   const sessionPnlPct = equityStart ? (sessionPnl / equityStart) * 100 : 0;
 
-  const dayStart = `${r.date}T00:00:00.000Z`;
-  const dayEnd = `${r.date}T23:59:59.999Z`;
+  const reportDate = pgDateToYmd(r.date);
+  const dayStart = `${reportDate}T00:00:00.000Z`;
+  const dayEnd = `${reportDate}T23:59:59.999Z`;
 
   const decisions = await dbQuery<{
     id: string;
@@ -152,7 +154,7 @@ async function enrichReportRow(r: {
       pnl: t.realized_pnl,
       pnlPct: t.entry_price ? ((t.exit_price - t.entry_price) / t.entry_price) * 100 : 0,
       r: null as number | null,
-      time: t.closed_at,
+      time: pgTimestampToIso(t.closed_at) ?? '',
       status: 'closed',
       note: t.learn_note ?? t.close_reason,
     })),
@@ -168,24 +170,24 @@ async function enrichReportRow(r: {
         pnl: 0,
         pnlPct: 0,
         r: null,
-        time: b.ts,
+        time: pgTimestampToIso(b.ts) ?? '',
         status: 'open',
         note: b.rationale ?? undefined,
       })),
   ];
 
   const riskEvents = closes.map((c) => ({
-    time: c.ts.slice(11, 16),
+    time: pgTimestampToHm(c.ts),
     kind: 'info',
     text: `${c.symbol}: ${c.rationale ?? 'gesloten'}`,
   }));
 
   return {
     id: r.id,
-    date: r.date,
-    label: dateLabel(typeof r.date === 'string' ? r.date : String(r.date)),
+    date: reportDate,
+    label: dateLabel(reportDate),
     status: r.status ?? 'final',
-    generatedAt: r.generated_at,
+    generatedAt: pgTimestampToIso(r.generated_at) ?? '',
     kpis: {
       sessionPnl,
       sessionPnlPct,

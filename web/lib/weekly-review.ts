@@ -53,12 +53,17 @@ export async function runWeeklyReview() {
           .join('\n')
       : 'Geen gesloten trades deze week.';
 
-    const decs = await dbQuery<{ ts: string; symbol: string; decision: string; rationale: string | null }>(
+    const decs = await dbQuery<{ ts: string | Date; symbol: string; decision: string; rationale: string | null }>(
       `SELECT ts, symbol, decision, rationale FROM decisions WHERE ts >= $1 ORDER BY ts ASC LIMIT 80`,
       [weekAgoIso],
     );
     decisionsBlock = decs.length
-      ? decs.map((d) => `- ${d.ts.slice(0, 16)} ${d.symbol} ${d.decision}: ${d.rationale ?? ''}`).join('\n')
+      ? decs
+          .map((d) => {
+            const ts = (d.ts instanceof Date ? d.ts.toISOString() : String(d.ts ?? '')).slice(0, 16);
+            return `- ${ts} ${d.symbol} ${d.decision}: ${d.rationale ?? ''}`;
+          })
+          .join('\n')
       : 'Geen beslissingen deze week.';
 
     const reports = (await listReports(7)).filter((r) => r.generatedAt >= weekAgoIso);

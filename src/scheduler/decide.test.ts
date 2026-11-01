@@ -77,6 +77,21 @@ describe('scheduler decideDueRoutines', () => {
     expect(due).toContain('premarket');
   });
 
+  it('matches runs when trading_date is a Date object from pg', () => {
+    const nowMs = openMs - 30 * 60_000;
+    const tradingDate = tradingDateEt(nowMs);
+    const runs: RoutineRunRecord[] = [
+      {
+        routine: 'premarket',
+        trading_date: new Date(`${tradingDate}T00:00:00.000Z`) as unknown as string,
+        status: 'ok',
+        finished_at: new Date(nowMs),
+      },
+    ];
+    const due = decideDueRoutines({ nowMs, calendarToday: day, calendarThisWeek: [day], runs });
+    expect(due).not.toContain('premarket');
+  });
+
   it('dedupes using latest finished_at when values are Date objects (pg driver shape)', () => {
     const nowMs = openMs - 30 * 60_000;
     const tradingDate = tradingDateEt(nowMs);

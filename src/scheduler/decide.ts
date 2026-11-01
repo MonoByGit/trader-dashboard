@@ -1,3 +1,4 @@
+import { pgDateToYmd } from '../dates/pg.js';
 import { shouldScheduleRoutineRun } from './run-status.js';
 
 export type RoutineName = 'premarket' | 'market-open' | 'midday' | 'eod' | 'weekly';
@@ -100,7 +101,7 @@ function lastRunFor(
   tradingDate: string,
 ): RoutineRunRecord | undefined {
   return runs
-    .filter((r) => r.routine === routine && r.trading_date === tradingDate)
+    .filter((r) => r.routine === routine && pgDateToYmd(r.trading_date) === tradingDate)
     .sort(
       (a, b) =>
         new Date(b.finished_at ?? 0).getTime() - new Date(a.finished_at ?? 0).getTime(),

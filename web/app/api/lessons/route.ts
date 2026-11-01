@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { pgDateToYmd, pgTimestampToIso } from '../../../../src/dates/pg';
 import { dbQuery, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
 
@@ -31,8 +32,8 @@ export async function GET() {
       pnlImpact: l.pnl_impact ?? 0,
       pnlImpactSaved: (l.pnl_impact ?? 0) >= 0,
       confidence: l.confidence ?? 0.5,
-      createdAt: l.created_at,
-      lastAppliedAt: l.last_applied_at,
+      createdAt: pgTimestampToIso(l.created_at) ?? '',
+      lastAppliedAt: pgTimestampToIso(l.last_applied_at),
       trigger: {
         human: l.description || l.why || l.title,
         code: 'approved_lesson_gate',
@@ -44,7 +45,7 @@ export async function GET() {
         .map((a, i) => ({
           id: `lt-${i}`,
           symbol: a.symbol,
-          date: a.created_at.slice(0, 10),
+          date: pgDateToYmd(a.created_at),
           pnl: a.pnl_impact ?? 0,
         })),
     })),
