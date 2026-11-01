@@ -6,20 +6,37 @@ import {
   cryptoStopStorageKey,
   legacyCryptoStopStorageKeys,
 } from '../../../src/crypto/stop-storage-key';
+import {
+  cryptoTpLookupKeys,
+  cryptoTpStorageKey,
+  legacyCryptoTpStorageKeys,
+} from '../../../src/crypto/exit-storage-key';
 import { resolveCryptoPositionSellQty } from '../../../src/crypto/buy-fill-qty';
 import { brokerStopOrdersBlockSoftwareBackup } from '../../../src/crypto/stop-order-backup';
+import { runSoftwareTakeProfitExit } from '../../../src/crypto/software-take-profit';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
 import { exitCryptoPosition } from './exit-crypto-position';
 
 type StopPayload = { stopPrice: number; qty: number };
+type TpPayload = { takeProfitPrice: number; qty: number };
 
 async function readStopAtKey(key: string): Promise<StopPayload | null> {
   const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key=$1`, [key]);
   if (!rows.length) return null;
   try {
     return JSON.parse(rows[0].value) as StopPayload;
+  } catch {
+    return null;
+  }
+}
+
+async function readTpAtKey(key: string): Promise<TpPayload | null> {
+  const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key=$1`, [key]);
+  if (!rows.length) return null;
+  try {
+    return JSON.parse(rows[0].value) as TpPayload;
   } catch {
     return null;
   }
@@ -38,6 +55,48 @@ export async function saveCryptoStop(symbol: string, stopPrice: number, qty: num
   for (const legacyKey of legacyCryptoStopStorageKeys(symbol)) {
     await dbRun(`DELETE FROM settings WHERE key=$1`, [legacyKey]);
   }
+}
+
+export async function saveCryptoTakeProfit(
+  symbol: string,
+  takeProfitPrice: number,
+  qty: number,
+): Promise<void> {
+  if (!hasDb()) return;
+  await ensureSchema();
+  const key = cryptoTpStorageKey(symbol);
+  const payload = JSON.stringify({ takeProfitPrice, qty });
+  await dbRun(
+    `INSERT INTO settings (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()`,
+    [key, payload],
+  );
+  for (const legacyKey of legacyCryptoTpStorageKeys(symbol)) {
+    await dbRun(`DELETE FROM settings WHERE key=$1`, [legacyKey]);
+  }
+}
+
+export async function loadCryptoTakeProfit(
+  symbol: string,
+): Promise<TpPayload | null> {
+  if (!hasDb()) return null;
+  await ensureSchema();
+  const keys = cryptoTpLookupKeys(symbol);
+  const primary = keys[0];
+  for (const key of keys) {
+    const tp = await readTpAtKey(key);
+    if (!tp) continue;
+    if (key !== primary) {
+      await dbRun(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()`,
+        [primary, JSON.stringify(tp)],
+      );
+      await dbRun(`DELETE FROM settings WHERE key=$1`, [key]);
+    }
+    return tp;
+  }
+  return null;
 }
 
 export async function loadCryptoStop(symbol: string): Promise<StopPayload | null> {
@@ -61,7 +120,7 @@ export async function loadCryptoStop(symbol: string): Promise<StopPayload | null
   return null;
 }
 
-/** Place GTC stop-limit; Alpaca crypto has no brackets. */
+/** Place GTC stop-limit; Alpaca crypto has no brackets / OCO. */
 export async function placeCryptoStopLimit(
   symbol: string,
   qty: number,
@@ -105,6 +164,46 @@ export async function protectCryptoPositionAfterBuy(
     await logGuardEvent('crypto_stop_limit_fail', String(e), { symbol, buyOrderId, qty });
     throw e;
   }
+}
+
+function hasOpenStopLimitSell(
+  open: Awaited<ReturnType<typeof alpaca.openOrders>>,
+  symbol: string,
+): boolean {
+  return open.some(
+    (o) =>
+      openOrderMatchesSymbol(o, symbol) &&
+      o.side === 'sell' &&
+      (o.type === 'stop_limit' || o.type === 'stop'),
+  );
+}
+
+/** Software take-profit only — single exit via exitCryptoPosition (no broker TP sell). */
+export async function enforceSoftwareCryptoTakeProfit(
+  symbol: string,
+  lastPrice: number,
+): Promise<{ triggered: boolean; orderId?: string }> {
+  const tp = await loadCryptoTakeProfit(symbol);
+  if (!tp) return { triggered: false };
+
+  const open = await alpaca.openOrders();
+  const stopLimitOpen = hasOpenStopLimitSell(open, symbol);
+
+  const result = await runSoftwareTakeProfitExit({
+    symbol,
+    lastPrice,
+    takeProfitPrice: tp.takeProfitPrice,
+    openStopLimitSell: stopLimitOpen,
+    logEvent: async (reason) => {
+      await logGuardEvent('crypto_software_tp', reason, { symbol });
+    },
+    exit: async (sym, reason) => {
+      const r = await exitCryptoPosition(sym, 'take_profit');
+      void reason;
+      return { orderId: r.orderId };
+    },
+  });
+  return { triggered: result.triggered, orderId: result.orderId };
 }
 
 /** Tick backup if price breaches stored stop (runs even when kill switch / guards block new entries). */

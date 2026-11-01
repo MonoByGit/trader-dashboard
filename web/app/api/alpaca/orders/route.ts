@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { alpaca, AlpacaOrderRequest } from '@/lib/alpaca';
+import { alpaca } from '@/lib/alpaca';
+import {
+  MANUAL_ALPACA_ORDER_POST_ALLOWED,
+  manualAlpacaOrderPostBlockedReason,
+} from '../../../../../src/security/manual-orders';
 
 export async function GET() {
   try {
@@ -23,12 +27,9 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
-  try {
-    const body: AlpacaOrderRequest = await req.json();
-    const order = await alpaca.placeOrder(body);
-    return NextResponse.json(order);
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+export async function POST() {
+  if (!MANUAL_ALPACA_ORDER_POST_ALLOWED) {
+    return NextResponse.json({ error: manualAlpacaOrderPostBlockedReason() }, { status: 403 });
   }
+  return NextResponse.json({ error: 'Not implemented' }, { status: 501 });
 }

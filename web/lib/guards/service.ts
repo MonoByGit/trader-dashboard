@@ -11,6 +11,7 @@ import {
 import { isSoftStartEnabled } from '@/lib/strategy-versions';
 import { dbQuery, dbRun, hasDb, initDb } from '@/lib/db';
 import { nextConsecutiveLosses } from '../../../src/guards/consecutive-losses';
+import { equitySyncPersistPatch } from '../../../src/guards/guard-state-merge';
 
 export interface GuardRuntimeState {
   tradingEnabled: boolean;
@@ -188,7 +189,7 @@ export async function syncEquitySnapshots(equity: number): Promise<GuardRuntimeS
   }
 
   if (Object.keys(updates).length) {
-    await persistGuardState({ ...state, ...updates });
+    await persistGuardState(equitySyncPersistPatch(updates));
     return { ...state, ...updates };
   }
   return state;
@@ -260,7 +261,6 @@ export async function refreshCircuitBreaker(equity: number): Promise<GuardRuntim
   if (evalResult.tripped && !state.circuitBreakerTripped) {
     const at = new Date().toISOString();
     await persistGuardState({
-      ...state,
       circuitBreakerTripped: true,
       circuitBreakerReason: evalResult.reason,
       circuitBreakerTrippedAt: at,
