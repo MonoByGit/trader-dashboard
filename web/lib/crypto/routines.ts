@@ -15,9 +15,11 @@ import {
 import { syncRecentOrders } from '@/lib/orders-store';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
-import { enforceSoftwareCryptoStops, placeCryptoStopLimit, saveCryptoStop } from './stops';
+import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy, saveCryptoStop } from './stops';
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
+import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
+import { isOrderPostRetryableError } from '../../../src/alpaca/order-post-reconcile';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
 
@@ -36,12 +38,36 @@ function buildSnapshots(
     .filter(Boolean);
 }
 
+export async function runCryptoSoftwareStopsForPositions(
+  cryptoPositions: { symbol: string; current_price: string }[],
+  bars: Record<string, { c: number; v: number }[]>,
+  watchlistSymbols: string[],
+): Promise<void> {
+  for (const p of cryptoPositions) {
+    try {
+      const barKey = watchlistSymbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
+      const b = bars[barKey] ?? [];
+      const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
+      await enforceSoftwareCryptoStops(p.symbol, last);
+    } catch (e) {
+      await logGuardEvent('crypto_software_stop_tick_fail', String(e), { symbol: p.symbol });
+    }
+  }
+}
+
 async function runCryptoScan(): Promise<Record<string, unknown>> {
+  const [account, positions] = await Promise.all([alpaca.account(), alpaca.positions()]);
+  const symbols = getCryptoSymbols();
+  const barsData = await alpaca.cryptoBars(symbols, '1Day', 40);
+  const bars = barsData.bars ?? {};
+  const cryptoPositions = filterByAssetClass(positions, 'crypto');
+
+  await runCryptoSoftwareStopsForPositions(cryptoPositions, bars, symbols);
+
   if (!(await isCryptoModuleEnabled())) {
     return { skipped: true, reason: 'Crypto module disabled', asset_class: 'crypto' };
   }
 
-  const [account, positions] = await Promise.all([alpaca.account(), alpaca.positions()]);
   const equity = parseFloat(account.equity);
   const cash = parseFloat(account.cash);
   const guardState = await refreshCircuitBreaker(equity);
@@ -60,18 +86,6 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         ? 'Global circuit breaker'
         : 'Kill switch activated';
     return { skipped: true, reason, asset_class: 'crypto' };
-  }
-
-  const cryptoPositions = filterByAssetClass(positions, 'crypto');
-  const symbols = getCryptoSymbols();
-  const barsData = await alpaca.cryptoBars(symbols, '1Day', 40);
-  const bars = barsData.bars ?? {};
-
-  for (const p of cryptoPositions) {
-    const barKey = symbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
-    const b = bars[barKey] ?? [];
-    const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
-    await enforceSoftwareCryptoStops(p.symbol, last);
   }
 
   const sleeves = await sleevesFromAlpacaLive(equity, cash, positions);
@@ -115,6 +129,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   }
 
   const orders: { symbol: string; qty: number; orderId: string }[] = [];
+  const scanRunId = String(Date.now());
   for (const c of candidates) {
     if (
       c.action !== 'buy' ||
@@ -183,30 +198,30 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     }
 
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
+    let order;
+    const clientOrderId = buildAlpacaClientOrderId({
+      routine: 'crypto-scan',
+      runId: scanRunId,
+      symbol: c.symbol,
+      side: 'buy',
+    });
     try {
-      const order = await alpaca.placeOrder({
+      order = await alpaca.placeOrder({
         symbol: c.symbol,
         qty,
         side: 'buy',
         type: 'market',
         time_in_force: 'gtc',
-      });
-      await saveCryptoStop(c.symbol, stopPrice, qty);
-      await placeCryptoStopLimit(c.symbol, qty, stopPrice).catch((e) => {
-        console.error('[crypto stop-limit]', e);
-      });
-      orders.push({ symbol: c.symbol, qty, orderId: order.id });
-      await saveDecision({
-        routine: 'crypto-scan',
-        symbol: c.symbol,
-        decision: 'BUY',
-        rationale: c.reason || `Stop ${stopPrice}.`,
-        agentNote: 'Crypto sleeve; stop-limit GTC + tick backup. See docs/crypto-stops.md',
-        confidence: 0.75,
-        orderId: order.id,
-        asset_class: 'crypto',
+        client_order_id: clientOrderId,
       });
     } catch (e) {
+      if (isOrderPostRetryableError(e)) {
+        await saveCryptoStop(c.symbol, stopPrice, qty);
+        await logGuardEvent('crypto_order_ambiguous', String(e), {
+          symbol: c.symbol,
+          clientOrderId,
+        });
+      }
       await logGuardEvent('crypto_order_fail', String(e), { symbol: c.symbol });
       await saveDecision({
         routine: 'crypto-scan',
@@ -217,7 +232,42 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         confidence: 0,
         asset_class: 'crypto',
       });
+      continue;
     }
+
+    let reportQty = qty;
+    try {
+      const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
+      reportQty = protection.qty;
+    } catch (e) {
+      try {
+        await saveCryptoStop(c.symbol, stopPrice, qty);
+      } catch (stopErr) {
+        await logGuardEvent('crypto_buy_unprotected', `stop save failed: ${String(stopErr)}`, {
+          symbol: c.symbol,
+          orderId: order.id,
+        });
+      }
+      try {
+        await logGuardEvent('crypto_buy_unprotected', String(e), {
+          symbol: c.symbol,
+          orderId: order.id,
+        });
+      } catch {
+        /* guard log must not block BUY recording */
+      }
+    }
+    orders.push({ symbol: c.symbol, qty: reportQty, orderId: order.id });
+    await saveDecision({
+      routine: 'crypto-scan',
+      symbol: c.symbol,
+      decision: 'BUY',
+      rationale: c.reason || `Stop ${stopPrice}.`,
+      agentNote: 'Crypto sleeve; stop-limit GTC + tick backup. See docs/crypto-stops.md',
+      confidence: 0.75,
+      orderId: order.id,
+      asset_class: 'crypto',
+    });
   }
 
   await syncRecentOrders().catch(() => {});

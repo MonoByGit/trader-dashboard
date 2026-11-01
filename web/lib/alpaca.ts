@@ -9,11 +9,22 @@ import {
 } from '../../src/alpaca/paper-host';
 import { logAlpacaModeAtStartup } from './alpaca-startup';
 import { alpacaPositionCloseUrl } from '../../src/alpaca/symbol-path';
+import { AlpacaHttpError } from '../../src/alpaca/alpaca-http-error';
+import { alpacaHttpStatusFromError } from '../../src/alpaca/parse-http-error';
+import { placeOrderWithReconcile } from '../../src/alpaca/order-post-reconcile';
 
 logAlpacaModeAtStartup();
 
 const BASE = alpacaTradingBaseUrl();
 const DATA = 'https://data.alpaca.markets';
+const FETCH_TIMEOUT_MS = 15_000;
+
+function fetchInit(init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  };
+}
 
 function headers() {
   return {
@@ -23,24 +34,51 @@ function headers() {
   };
 }
 
+async function parseJsonBody<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: headers(), cache: 'no-store' });
-  if (!res.ok) throw new Error(`Alpaca ${url}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const res = await fetch(url, fetchInit({ headers: headers(), cache: 'no-store' }));
+  if (!res.ok) throw new AlpacaHttpError('GET', url, res.status, await res.text());
+  return parseJsonBody<T>(res);
 }
 
 async function post<T>(url: string, body: unknown, options?: { trading?: boolean }): Promise<T> {
   if (options?.trading) assertAlpacaPaperTrading(BASE);
-  const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Alpaca POST ${url}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const res = await fetch(
+    url,
+    fetchInit({ method: 'POST', headers: headers(), body: JSON.stringify(body) }),
+  );
+  if (!res.ok) throw new AlpacaHttpError('POST', url, res.status, await res.text());
+  return parseJsonBody<T>(res);
 }
 
 async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> {
   if (options?.trading) assertAlpacaPaperTrading(BASE);
-  const res = await fetch(url, { method: 'DELETE', headers: headers() });
-  if (!res.ok) throw new Error(`Alpaca DELETE ${url}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const res = await fetch(url, fetchInit({ method: 'DELETE', headers: headers() }));
+  if (!res.ok) throw new AlpacaHttpError('DELETE', url, res.status, await res.text());
+  return parseJsonBody<T>(res);
+}
+
+async function getOrderByClientOrderId(clientOrderId: string): Promise<AlpacaOrder | null> {
+  try {
+    return await get<AlpacaOrder>(
+      `${BASE}/v2/orders:by_client_order_id?client_order_id=${encodeURIComponent(clientOrderId)}`,
+    );
+  } catch (e) {
+    if (alpacaHttpStatusFromError(e) === 404) return null;
+    throw e;
+  }
+}
+
+async function placeOrderRequest(o: AlpacaOrderRequest): Promise<AlpacaOrder> {
+  assertAlpacaPaperTrading(BASE);
+  return placeOrderWithReconcile<AlpacaOrder>(o.client_order_id, {
+    submit: () => post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
+    lookupByClientOrderId: (id) => getOrderByClientOrderId(id),
+  });
 }
 
 export const alpaca = {
@@ -52,8 +90,11 @@ export const alpaca = {
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
   openOrders: (limit = 100) =>
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
-  placeOrder: (o: AlpacaOrderRequest) =>
-    post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
+  getOrder: (orderId: string) => get<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`),
+  cancelOrder: (orderId: string) =>
+    del<unknown>(`${BASE}/v2/orders/${orderId}`, { trading: true }),
+  placeOrder: (o: AlpacaOrderRequest) => placeOrderRequest(o),
+  getOrderByClientOrderId,
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
   bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {
     const bars = await fetchStockDailyBars({
@@ -108,6 +149,7 @@ export interface AlpacaAccount {
 export interface AlpacaPosition {
   symbol: string;
   qty: string;
+  qty_available?: string;
   avg_entry_price: string;
   current_price: string;
   market_value: string;
@@ -121,8 +163,10 @@ export interface AlpacaPosition {
 
 export interface AlpacaOrder {
   id: string;
+  client_order_id?: string;
   symbol: string;
   side: string;
+  asset_class?: string;
   qty: string;
   filled_qty: string;
   type: string;
@@ -147,6 +191,7 @@ export interface AlpacaOrderRequest {
   order_class?: 'simple' | 'bracket' | 'oco' | 'oto';
   stop_loss?: { stop_price: number };
   take_profit?: { limit_price: number };
+  client_order_id?: string;
 }
 
 export interface AlpacaClock {

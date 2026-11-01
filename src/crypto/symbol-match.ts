@@ -1,4 +1,4 @@
-import { alpacaSymbolsEqual } from '../alpaca/symbol-path';
+import { alpacaSymbolsEqual } from '../alpaca/symbol-path.js';
 
 export function cryptoSymbolExposureUsd(
   positions: { symbol: string; market_value: string }[],

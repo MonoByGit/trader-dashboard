@@ -1,3 +1,4 @@
+import { alpacaSymbolsEqual } from '../../src/alpaca/symbol-path';
 import { dbQuery, hasDb, initDb } from './db';
 import { ensureSchema } from './migrate';
 
@@ -156,7 +157,7 @@ async function enrichReportRow(r: {
       note: t.learn_note ?? t.close_reason,
     })),
     ...buys
-      .filter((b) => !postMortems.some((p) => p.symbol === b.symbol))
+      .filter((b) => !postMortems.some((p) => alpacaSymbolsEqual(p.symbol, b.symbol)))
       .map((b) => ({
         id: b.id,
         symbol: b.symbol,
