@@ -20,7 +20,7 @@ Tweede strategieversie naast Momentum Breakout. Alleen papiergeld. De code staat
 - Backtest: `npx tsx scripts/run-momentum2.ts --start=2023-01-02` (ALPACA-sleutels, alleen marktdata).
 - Live: `POST /api/momentum2/run` met `Authorization: Bearer $CRON_SECRET` en `{"step":"decide"}` na de close (±16:20 ET) en `{"step":"execute"}` kort na de open (±09:35 ET).
 - **Uit tenzij `MOMENTUM2_ENABLED=1`.** Daarna draait het uitsluitend in schaduwmodus (virtueel boek, geen enkele order naar Alpaca). `MOMENTUM2_DRY_RUN=0` wordt geweigerd: er bestaat in deze versie geen pad naar echte orders (`src/momentum2/mode.ts`, getest). De Alpaca-broker (`web/lib/momentum2/broker.ts`) hangt niet aan de route.
-- Logs: tabel `momentum2_log` (kinds `equity`, `trade`, `decision:*`), boeken in `settings` onder `m2:book:<id>`.
+- Logs: tabel `momentum2_log` (kinds `equity`, `trade`, `decision:*`), boeken in `settings` onder `m:book:<id>` (legacy `m2:book:<id>` wordt nog gelezen bij load).
 
 ## Checklist voor echte papier-orders (aparte PR, na Dave's review van 84a8b55)
 1. `setStop` faalt: pending wissen en boek opslaan pas ná een gelukte stop; mislukte stop = positie meteen sluiten of retry, nooit zonder stop laten staan.
