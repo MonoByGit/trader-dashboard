@@ -16,19 +16,19 @@ export async function middleware(req: NextRequest) {
 
   if (isPublicAsset(pathname)) return NextResponse.next();
 
-  // Cron/scheduler blijft alleen Bearer CRON_SECRET (geen app-cookie).
-  if (pathname.startsWith('/api/cron')) return NextResponse.next();
-  if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
-  if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
-
-  if (pathname.startsWith('/api/auth/')) return NextResponse.next();
-
   if (shouldBlockMisconfiguredProduction(pathname)) {
     return NextResponse.json(
       { error: 'Service misconfigured: set APP_PASSWORD or APP_PASSWORD_SHA256' },
       { status: 503 },
     );
   }
+
+  // Cron/scheduler: Bearer CRON_SECRET (geen app-cookie).
+  if (pathname.startsWith('/api/cron')) return NextResponse.next();
+  if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
+  if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
+
+  if (pathname.startsWith('/api/auth/')) return NextResponse.next();
 
   if (!authEnabled()) return NextResponse.next();
 
