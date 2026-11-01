@@ -25,3 +25,17 @@ describe('momentum2 modus', () => {
     expect(src).toMatch(/resolveMomentum2Mode/);
   });
 });
+
+import { resolveShadowMode } from './mode';
+describe('resolveShadowMode (M3/M4)', () => {
+  it('uit tenzij ENABLED=1, en DRY_RUN=0 wordt geweigerd', () => {
+    expect(resolveShadowMode({}, 'MOMENTUM3')).toMatchObject({ run: false });
+    expect(resolveShadowMode({ MOMENTUM3_ENABLED: '1' }, 'MOMENTUM3')).toEqual({ run: true, shadow: true });
+    expect(resolveShadowMode({ MOMENTUM3_ENABLED: '1', MOMENTUM3_DRY_RUN: '0' }, 'MOMENTUM3')).toMatchObject({ run: false });
+  });
+  it('M3-route raakt geen echte orders', () => {
+    const src = readFileSync(new URL('../../web/lib/momentum3/run.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/alpacaPaperBroker|placeOrder|cancelOrder/);
+    expect(src).toMatch(/shadowBroker/);
+  });
+});

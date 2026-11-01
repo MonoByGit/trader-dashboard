@@ -31,3 +31,17 @@ export function dailyVol(closes: number[], n: number): number | null {
 
 export const closesOf = (bars: Bar[]): number[] => bars.map((b) => b.c);
 export const dateOf = (b: Bar): string => b.t.slice(0, 10);
+
+/** Wilder ATR over de laatste n volledige dagen (true range op OHLC). */
+export function atrWilder(bars: Bar[], n = 14): number | null {
+  if (bars.length < n + 1) return null;
+  let prevClose = bars[bars.length - n - 1]!.c;
+  const trs: number[] = [];
+  for (let i = bars.length - n; i < bars.length; i++) {
+    const b = bars[i]!;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - prevClose), Math.abs(b.l - prevClose));
+    trs.push(tr);
+    prevClose = b.c;
+  }
+  return trs.reduce((a, x) => a + x, 0) / trs.length;
+}

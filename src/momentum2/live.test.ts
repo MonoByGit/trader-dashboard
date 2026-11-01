@@ -90,3 +90,20 @@ describe('live idempotentie', () => {
     expect(s.eq.length).toBe(rows);
   });
 });
+
+describe('live schaduwstops', () => {
+  it('emuleert de harde stop op de dagbar voor schaduwboeken', async () => {
+    const s = fakeStore();
+    const b = bars.map((x) => ({ ...x }));
+    const entry = b[118]!.c;
+    s.books[cfg.id] = {
+      versionId: cfg.id, startDate: null, startBudgetUsd: 5000, startSpyPrice: 100, cash: 0,
+      positions: { AAA: { qty: 10, entryPrice: entry * 1.5, entryDate: '2024-01-01', highWater: entry * 1.5 } },
+      peakEquity: 5000, halted: false, haltReason: null, lastRebalanceIndex: 1,
+    };
+    await decideDay({ date, cfgs: [cfg], barsBySymbol: { AAA: b, SPY: spy }, benchmark: spy, store: s.store });
+    expect(s.tr[0]).toMatchObject({ side: 'sell' });
+    expect(s.tr[0]!.reason).toMatch(/stop \(schaduw\)/);
+    expect(Object.keys(s.books[cfg.id]!.positions)).toHaveLength(0);
+  });
+});

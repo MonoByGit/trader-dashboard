@@ -60,7 +60,10 @@ export function applySell(
   book.cash += q * price;
   const pnl = (price - cur.entryPrice) * q;
   cur.qty -= q;
-  if (cur.qty <= 1e-9) delete book.positions[symbol];
+  if (cur.qty <= 1e-9) {
+    delete book.positions[symbol];
+    (book.lastExit ??= {})[symbol] = date;
+  }
   return { date, symbol, side: 'sell', qty: q, price, reason, pnl };
 }
 

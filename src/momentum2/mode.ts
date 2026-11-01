@@ -14,3 +14,12 @@ export function resolveMomentum2Mode(env: Record<string, string | undefined>): M
   }
   return { run: true, shadow: true };
 }
+
+/** Zelfde regel voor andere strategieën (Momentum 3, 4): vlag `<NAAM>_ENABLED=1`, nooit een pad naar echte orders. */
+export function resolveShadowMode(env: Record<string, string | undefined>, name: string): Momentum2Mode {
+  if (env[`${name}_ENABLED`] !== '1') return { run: false, reason: `${name}_ENABLED staat niet aan` };
+  if (env[`${name}_DRY_RUN`] === '0') {
+    return { run: false, reason: `echte orders zijn in deze versie geblokkeerd (${name}_DRY_RUN=0 wordt geweigerd)` };
+  }
+  return { run: true, shadow: true };
+}
