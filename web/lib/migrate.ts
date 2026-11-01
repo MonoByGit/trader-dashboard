@@ -11,6 +11,33 @@ async function migrate(): Promise<void> {
 
   // Basis-tabellen (mochten ze nog niet bestaan op een verse database).
   await dbRun(`
+    CREATE TABLE IF NOT EXISTS decisions (
+      id TEXT PRIMARY KEY,
+      ts TIMESTAMPTZ NOT NULL,
+      routine TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      criteria JSONB,
+      rationale TEXT,
+      agent_note TEXT,
+      confidence FLOAT,
+      order_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS agent_reports (
+      id TEXT PRIMARY KEY,
+      date DATE NOT NULL,
+      generated_at TIMESTAMPTZ NOT NULL,
+      kpis JSONB,
+      narrative TEXT,
+      status TEXT DEFAULT 'final',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS threads (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -82,6 +109,38 @@ async function migrate(): Promise<void> {
   await dbRun(`
     CREATE INDEX IF NOT EXISTS idx_threads_status_turn ON threads (status, turn);
     CREATE INDEX IF NOT EXISTS idx_threads_anchor ON threads (anchor_type, anchor_id);
+  `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS lesson_applications (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL,
+      decision_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      action TEXT NOT NULL,
+      trade_post_mortem_id TEXT,
+      pnl_impact FLOAT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_lesson_apps_decision ON lesson_applications (decision_id);
+    CREATE INDEX IF NOT EXISTS idx_lesson_apps_lesson ON lesson_applications (lesson_id);
+
+    CREATE TABLE IF NOT EXISTS trade_post_mortems (
+      id TEXT PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      qty FLOAT NOT NULL,
+      entry_price FLOAT NOT NULL,
+      exit_price FLOAT NOT NULL,
+      realized_pnl FLOAT NOT NULL,
+      close_reason TEXT NOT NULL,
+      entry_decision_id TEXT,
+      entry_rationale TEXT,
+      learn_note TEXT,
+      exit_order_id TEXT,
+      closed_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_post_mortems_closed ON trade_post_mortems (closed_at DESC);
   `);
 }
 

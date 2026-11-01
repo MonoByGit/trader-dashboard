@@ -11,15 +11,20 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const jbMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jbmono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Trader Agent · Paper Trading Dashboard",
-  description: "Momentum Breakout — Paper Trading Dashboard v0.1",
+  title: "Momentum · Paper Trading",
+  description: "Momentum Breakout — Paper Trading Dashboard",
+  applicationName: "Momentum",
   appleWebApp: {
     capable: true,
     title: "Momentum",
     statusBarStyle: "black-translucent",
   },
   icons: {
-    apple: "/icons/apple-touch-icon.png",
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

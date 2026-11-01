@@ -7,31 +7,40 @@ import { Icon } from '@/components/ui/Icon';
 
 export function MobileOverview({
   cash, buyingPower, deployedPct, openCount, dayPnl, dayPnlPct,
-  intraday, positions, agentNote, marketOpen, onOpenPosition, onGoPositions,
+  intraday, positions, agentNote, marketOpen, accountLoading, onOpenPosition, onGoPositions,
 }: {
   cash: number; buyingPower: number; deployedPct: number; openCount: number;
   dayPnl: number; dayPnlPct: number; intraday: number[]; positions: Position[];
-  agentNote: string; marketOpen: boolean | null;
+  agentNote: string; marketOpen: boolean | null; accountLoading?: boolean;
   onOpenPosition: (p: Position) => void; onGoPositions: () => void;
 }) {
   const dayPos = dayPnl >= 0;
+  const kpisReady = !accountLoading;
   return (
     <>
       <div className="m-kpi-grid">
-        <div className="m-kpi"><div className="k">Cash</div><div className="v">{fmt.usd(cash, 0)}</div></div>
-        <div className="m-kpi"><div className="k">Koopkracht</div><div className="v">{fmt.usd(buyingPower, 0)}</div></div>
-        <div className="m-kpi"><div className="k">Ingezet</div><div className="v">{deployedPct.toFixed(1)}%</div></div>
-        <div className="m-kpi"><div className="k">Posities</div><div className="v">{openCount} / 3</div></div>
+        <div className="m-kpi"><div className="k">Cash</div><div className="v">{kpisReady ? fmt.usd(cash, 0) : '…'}</div></div>
+        <div className="m-kpi"><div className="k">Koopkracht</div><div className="v">{kpisReady ? fmt.usd(buyingPower, 0) : '…'}</div></div>
+        <div className="m-kpi"><div className="k">Ingezet</div><div className="v">{kpisReady ? `${deployedPct.toFixed(1)}%` : '…'}</div></div>
+        <div className="m-kpi"><div className="k">Posities</div><div className="v">{kpisReady ? `${openCount} / 3` : '…'}</div></div>
       </div>
 
       <div className="m-card">
         <div className="m-card-title">
           <span>Equity · vandaag</span>
-          <span className={dayPos ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            {fmt.signedUsd(dayPnl)} · {fmt.pct(dayPnlPct)}
-          </span>
+          {kpisReady && intraday.length >= 2 && (
+            <span className={dayPos ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+              {fmt.signedUsd(dayPnl)} · {fmt.pct(dayPnlPct)}
+            </span>
+          )}
         </div>
-        <Sparkline values={intraday} positive={dayPos} height={64} />
+        {accountLoading ? (
+          <div className="m-empty" style={{ padding: '20px 0' }}>Rekening laden…</div>
+        ) : intraday.length >= 2 ? (
+          <Sparkline values={intraday} positive={dayPos} height={64} />
+        ) : (
+          <div className="m-empty" style={{ padding: '20px 0' }}>Nog geen data voor vandaag.</div>
+        )}
       </div>
 
       <div className="m-section-title">

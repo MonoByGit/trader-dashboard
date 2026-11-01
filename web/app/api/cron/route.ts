@@ -6,6 +6,15 @@ import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib
 import { captureEvent } from '@/lib/openbrain';
 import { computePositionSize } from '@/lib/sizing';
 import { openOrAppendThread } from '@/lib/threads';
+import {
+  checkLessonsForBuy,
+  getActiveLessons,
+  marketOpenLessonsSystemSuffix,
+  recordLessonInfluence,
+} from '@/lib/lessons';
+import { postMortemFromEodClose, postMortemFromFilledSell } from '@/lib/postmortem';
+import { cancelOpenStopTakeProfitForSymbol, isStopFill, isTakeProfitFill } from '@/lib/alpaca-orders';
+import { runWeeklyReview } from '@/lib/weekly-review';
 import strategy from '@/strategy.json';
 
 const WATCHLIST = strategy.symbols;
@@ -42,13 +51,15 @@ async function notifyStopFills() {
     for (const o of orders) {
       if (o.side !== 'sell' || o.status !== 'filled' || !o.filled_at) continue;
       if (!o.filled_at.startsWith(today)) continue;
-      const isStop = o.type === 'stop' || o.type === 'stop_limit' || !!o.stop_price;
-      if (!isStop) continue;
+      const isStop = isStopFill(o);
+      const isTp = isTakeProfitFill(o);
+      if (!isStop && !isTp) continue;
       const key = `notified:${o.id}`;
       const seen = await dbQuery(`SELECT 1 FROM settings WHERE key=$1`, [key]);
       if (seen.length) continue;
       const exit = parseFloat(o.filled_avg_price ?? o.stop_price ?? '0');
-      await sendMessage(stopHitMessage(o.symbol, exit));
+      if (isStop) await sendMessage(stopHitMessage(o.symbol, exit));
+      await postMortemFromFilledSell(o, isStop ? 'stop' : 'take_profit').catch((e) => console.error('[postMortem]', e));
       await dbRun(`INSERT INTO settings (key, value) VALUES ($1, '1') ON CONFLICT (key) DO NOTHING`, [key]);
     }
   } catch (e) {
@@ -145,9 +156,12 @@ async function runMarketOpen() {
     if (b.length > 0) lastPrices[s] = b[b.length - 1].c;
   }
 
+  const activeLessons = await getActiveLessons();
+  const lessonSuffix = marketOpenLessonsSystemSuffix(activeLessons);
+
   const candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
     MODELS.sonnet,
-    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.`,
+    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.${lessonSuffix}`,
     `Bars data:\n${JSON.stringify(Object.fromEntries(WATCHLIST.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
     1024
   );
@@ -180,6 +194,25 @@ async function runMarketOpen() {
     }
     c.qty = sizing.shares;
 
+    const gate = await checkLessonsForBuy(c.symbol, c.reason, activeLessons);
+    if (gate.veto) {
+      const decId = await saveDecision({
+        routine: 'market-open',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: gate.reason || 'Geblokkeerd door goedgekeurde les.',
+        agentNote: `Lesson gate veto${gate.lessonId ? ` (${gate.lessonId})` : ''}.`,
+        confidence: 0.9,
+      });
+      const vetoIds = gate.influencedLessonIds.length
+        ? gate.influencedLessonIds
+        : gate.lessonId
+          ? [gate.lessonId]
+          : [];
+      await recordLessonInfluence(vetoIds, decId, c.symbol, 'veto');
+      continue;
+    }
+
     // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.
     // These fire at Alpaca even if no cron runs — the hard stop is never bypassable.
     const stopPrice = +(lastPrice * (1 - strategy.rules.hard_stop_pct)).toFixed(2);
@@ -196,9 +229,19 @@ async function runMarketOpen() {
       orders.push({ symbol: c.symbol, qty: c.qty, orderId: order.id, stop: stopPrice, takeProfit: takeProfitPrice });
       const decId = await saveDecision({
         routine: 'market-open', symbol: c.symbol, decision: 'BUY', rationale: c.reason,
-        agentNote: `${sizing.note} Bracket: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${c.reason}`,
+        agentNote: `${sizing.note} Bracket: hard stop $${stopPrice}, take profit $${takeProfitPrice}. ${gate.reason ? `Lessons: ${gate.reason}. ` : ''}${c.reason}`,
         confidence: 0.8, orderId: order.id,
       });
+      if (gate.influencedLessonIds.length) {
+        await recordLessonInfluence(gate.influencedLessonIds, decId, c.symbol, 'passed_check');
+      } else if (activeLessons.length) {
+        await recordLessonInfluence(
+          activeLessons.map((l) => l.id),
+          decId,
+          c.symbol,
+          'prompt',
+        );
+      }
       await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice, takeProfitPrice));
       // Verankering: open een draad bij elke nieuwe positie (beurt -> Dusty).
       await openOrAppendThread({
@@ -245,9 +288,14 @@ async function runEod() {
   const closed = [];
   for (const p of positions) {
     try {
+      await cancelOpenStopTakeProfitForSymbol(p.symbol);
+      const qty = parseFloat(p.qty);
+      const entry = parseFloat(p.avg_entry_price);
+      const exitPx = parseFloat(p.current_price);
       await alpaca.closePosition(p.symbol);
       closed.push(p.symbol);
       await saveDecision({ routine: 'eod', symbol: p.symbol, decision: 'CLOSE', rationale: 'EOD — geen overnight holding per strategie.', agentNote: `Gesloten op $${p.current_price}`, confidence: 1 });
+      await postMortemFromEodClose(p.symbol, qty, entry, exitPx).catch((e) => console.error('[postMortem eod]', e));
     } catch { /* position may already be closed */ }
   }
   const account = await alpaca.account();
@@ -302,12 +350,7 @@ export async function POST(req: Request) {
       case 'market-open':  result = await runMarketOpen(); break;
       case 'midday':       result = await runMidday(); break;
       case 'eod':          result = await runEod(); break;
-      case 'weekly': {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-        const r = await fetch(`${appUrl}/api/agent/review`, { method: 'POST' });
-        result = await r.json();
-        break;
-      }
+      case 'weekly': result = await runWeeklyReview(); break;
       default: return NextResponse.json({ error: 'Unknown routine' }, { status: 400 });
     }
     return NextResponse.json(result);

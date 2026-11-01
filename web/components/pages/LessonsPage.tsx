@@ -1,9 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Toggle } from '@/components/ui/Toggle';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
 
 interface RelatedTrade { id: string; symbol: string; date: string; pnl: number; }
 interface Lesson {
@@ -33,7 +32,7 @@ const CATEGORIES = [
 function relTime(iso: string) {
   if (!iso) return 'nog niet';
   const d = new Date(iso);
-  const now = MOCK.now;
+  const now = new Date();
   const diff = Math.round((now.getTime() - d.getTime()) / 1000);
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.round(diff/60)}m ago`;
@@ -42,13 +41,47 @@ function relTime(iso: string) {
 }
 
 export function LessonsPage() {
-  const [lessons, setLessons] = useState<Lesson[]>(MOCK.lessons as Lesson[]);
-  const [proposals, setProposals] = useState<Proposal[]>(MOCK.lessonProposals as Proposal[]);
-  const [selectedId, setSelectedId] = useState<string>((MOCK.lessons[0] as Lesson).id);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [selectedProposal, setSelectedProposal] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [toast, setToast] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      fetch('/api/lessons').then(r => r.json()),
+      fetch('/api/lessons/proposals').then(r => r.json()),
+    ])
+      .then(([ld, pd]) => {
+        const ls = Array.isArray(ld.lessons) ? (ld.lessons as Lesson[]) : [];
+        const ps = Array.isArray(pd.proposals)
+          ? (pd.proposals as Record<string, unknown>[]).map(p => ({
+              id: String(p.id),
+              title: String(p.title),
+              description: String(p.description ?? ''),
+              category: String(p.category ?? 'algemeen'),
+              confidence: Number(p.confidence ?? 0.5),
+              proposedAt: String(p.proposedAt ?? p.proposed_at ?? ''),
+              relatedTrades: Array.isArray(p.relatedTrades) ? p.relatedTrades as RelatedTrade[] : [],
+              suggestedTrigger: {
+                human: String(p.description ?? p.title),
+                code: 'proposed_lesson',
+              },
+            }))
+          : [];
+        setLessons(ls);
+        setProposals(ps);
+        setSelectedId(prev => prev || ls[0]?.id || '');
+      })
+      .catch(() => { setLessons([]); setProposals([]); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2400); };
 
@@ -61,25 +94,27 @@ export function LessonsPage() {
   const selected = !selectedProposal ? lessons.find(L => L.id === selectedId) || null : null;
   const selectedProp = selectedProposal ? proposals.find(p => p.id === selectedProposal) || null : null;
 
-  const toggleLesson = (id: string) => setLessons(ls => ls.map(L => L.id === id ? { ...L, status: L.status==='active'?'paused':'active' } : L));
-
-  const approveProposal = (p: Proposal) => {
-    const newLesson: Lesson = {
-      id: 'L-' + String(lessons.length + 13).padStart(3, '0'),
-      title: p.title, description: p.description, category: p.category,
-      status: 'active', source: 'agent', confidence: p.confidence,
-      createdAt: new Date().toISOString(), lastAppliedAt: null,
-      hits: 0, pnlImpact: 0, pnlImpactSaved: true,
-      trigger: { ...p.suggestedTrigger, gateLabel: p.title.split(' ').slice(0,2).join(' ') },
-      relatedTrades: p.relatedTrades,
-    };
-    setLessons(ls => [newLesson, ...ls]);
-    setProposals(ps => ps.filter(x => x.id !== p.id));
-    setSelectedProposal(null);
-    setSelectedId(newLesson.id);
-    showToast(`Les "${p.title.slice(0,40)}..." goedgekeurd en actief.`);
+  const toggleLesson = async (id: string) => {
+    const L = lessons.find(x => x.id === id);
+    if (!L) return;
+    const next = L.status === 'active' ? 'paused' : 'active';
+    await fetch(`/api/lessons/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next }) }).catch(() => null);
+    setLessons(ls => ls.map(x => x.id === id ? { ...x, status: next } : x));
   };
-  const rejectProposal = (p: Proposal) => { setProposals(ps => ps.filter(x => x.id !== p.id)); setSelectedProposal(null); showToast('Voorstel afgewezen.'); };
+
+  const approveProposal = async (p: Proposal) => {
+    const res = await fetch(`/api/lessons/proposals/${p.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve' }) });
+    if (!res.ok) { showToast('Goedkeuren mislukt.'); return; }
+    setSelectedProposal(null);
+    showToast(`Les "${p.title.slice(0, 40)}..." goedgekeurd.`);
+    loadData();
+  };
+  const rejectProposal = async (p: Proposal) => {
+    await fetch(`/api/lessons/proposals/${p.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reject' }) }).catch(() => null);
+    setSelectedProposal(null);
+    showToast('Voorstel afgewezen.');
+    loadData();
+  };
 
   const counts = {
     active: lessons.filter(L => L.status==='active').length,
@@ -137,8 +172,9 @@ export function LessonsPage() {
             </div>
           </div>
           <div className="lessons-list">
-            {filtered.length === 0
-              ? <div style={{padding:32,textAlign:'center',color:'var(--text-tertiary)',fontSize:11}}>Geen lessen gevonden.</div>
+            {loading && <div style={{padding:32,textAlign:'center',color:'var(--text-tertiary)',fontSize:11}}>Laden…</div>}
+            {!loading && filtered.length === 0
+              ? <div style={{padding:32,textAlign:'center',color:'var(--text-tertiary)',fontSize:11}}>{lessons.length === 0 ? 'Nog geen data. Lessen komen na goedgekeurde voorstellen uit de weekreview.' : 'Geen lessen gevonden.'}</div>
               : filtered.map(L => {
                 const s = CAT_STYLE[L.category];
                 const isSel = !selectedProposal && selectedId === L.id;
@@ -165,7 +201,9 @@ export function LessonsPage() {
             ? <ProposalDetail p={selectedProp} onApprove={() => approveProposal(selectedProp)} onReject={() => rejectProposal(selectedProp)}/>
             : selected
               ? <LessonDetail L={selected} onToggle={() => toggleLesson(selected.id)} relTime={relTime}/>
-              : <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Selecteer een les.</div>}
+              : !loading && lessons.length === 0 && proposals.length === 0
+                ? <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Nog geen lessen.</div>
+                : <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Selecteer een les.</div>}
         </div>
       </div>
 

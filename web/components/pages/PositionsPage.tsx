@@ -13,8 +13,7 @@ interface Position {
 }
 
 interface PositionsPageProps {
-  portfolio: { positions: Position[] };
-  mode: string;
+  portfolio: { positions: Position[]; cashBalance: number };
   onClose: (p: Position) => void;
 }
 
@@ -28,7 +27,7 @@ export function PositionsPage({ portfolio, onClose }: PositionsPageProps) {
         <div className="page-head"><div><h1>Positions</h1><div className="subtitle text-secondary">Geen open posities. De market-open routine evalueert straks de watchlist.</div></div></div>
         <div className="card"><div className="card-body" style={{padding:48,textAlign:'center',color:'var(--text-tertiary)'}}>
           <Icon name="positions" size={40}/>
-          <div style={{marginTop:12,fontSize:12}}>Flat. $100,000 cash, trading enabled.</div>
+          <div style={{marginTop:12,fontSize:12}}>Flat · {fmt.usd(portfolio.cashBalance)} cash</div>
         </div></div>
       </>
     );

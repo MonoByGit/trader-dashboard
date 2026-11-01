@@ -2,42 +2,54 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ============================================================================
-// AI-laag — provider-agnostisch. Het "brein" van Momentum is configureerbaar.
-// Standaard draait alles op Google Gemini. Zet AGENT_PROVIDER=claude (of
-// 'anthropic') om zonder codewijziging naar Claude te schakelen. Modellen per
-// tier zijn los te overrulen via env, zodat upgraden geen deploy van code vergt.
+// AI-laag — provider-agnostisch. Standaard: Gemini. AGENT_PROVIDER=claude|
+// anthropic|deepseek. Modellen per tier via env overrulen.
 // ============================================================================
 
-export type Provider = 'gemini' | 'claude';
+export type Provider = 'gemini' | 'claude' | 'deepseek';
 export type Tier = 'fast' | 'smart';
 export type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
 export function activeProvider(): Provider {
   const p = (process.env.AGENT_PROVIDER ?? 'gemini').toLowerCase();
-  return p === 'claude' || p === 'anthropic' ? 'claude' : 'gemini';
+  if (p === 'claude' || p === 'anthropic') return 'claude';
+  if (p === 'deepseek') return 'deepseek';
+  return 'gemini';
 }
 
 const MODEL_TIERS: Record<Provider, Record<Tier, string>> = {
   gemini: {
-    fast: process.env.GEMINI_FAST_MODEL ?? 'gemini-2.0-flash',
-    smart: process.env.GEMINI_SMART_MODEL ?? 'gemini-2.0-flash',
+    fast: process.env.GEMINI_FAST_MODEL ?? 'gemini-2.5-flash',
+    smart: process.env.GEMINI_SMART_MODEL ?? 'gemini-2.5-flash',
   },
   claude: {
     fast: process.env.CLAUDE_FAST_MODEL ?? 'claude-sonnet-4-6',
     smart: process.env.CLAUDE_SMART_MODEL ?? 'claude-opus-4-5',
   },
+  deepseek: {
+    fast: process.env.DEEPSEEK_FAST_MODEL ?? 'deepseek-flash',
+    smart: process.env.DEEPSEEK_SMART_MODEL ?? 'deepseek-flash',
+  },
 };
 
-export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const DEEPSEEK_BASE = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
+
+let anthropicClient: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!anthropicClient) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ontbreekt (AGENT_PROVIDER=claude)');
+    anthropicClient = new Anthropic({ apiKey });
+  }
+  return anthropicClient;
+}
+
 const genai = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
 
-// Behouden voor backward-compat: bestaande callsites geven nog een model-string
-// mee. Daaruit leiden we de tier af; de ACTIEVE provider bepaalt welk model echt
-// draait (dus 'MODELS.sonnet' betekent simpelweg "snelle tier").
 export const MODELS = {
   sonnet: 'claude-sonnet-4-6',
   opus: 'claude-opus-4-5',
-  flash: 'gemini-2.0-flash',
+  flash: 'gemini-2.5-flash',
   pro: 'gemini-2.5-pro-preview-05-06',
 } as const;
 
@@ -45,9 +57,13 @@ function tierFromLegacyModel(model: string): Tier {
   return /opus|pro/i.test(model) ? 'smart' : 'fast';
 }
 
+function modelForTier(tier: Tier): string {
+  return MODEL_TIERS[activeProvider()][tier];
+}
+
 // ---- Claude ----------------------------------------------------------------
 async function claudeChat(model: string, system: string, messages: ChatMsg[], maxTokens: number): Promise<string> {
-  const resp = await anthropic.messages.create({
+  const resp = await getAnthropic().messages.create({
     model,
     max_tokens: maxTokens,
     system,
@@ -56,8 +72,6 @@ async function claudeChat(model: string, system: string, messages: ChatMsg[], ma
   return resp.content.filter((b) => b.type === 'text').map((b) => (b.type === 'text' ? b.text : '')).join('');
 }
 
-// Claude vereist dat de conversatie met 'user' begint en rollen alterneren.
-// We droppen leidende assistant-berichten en voegen opeenvolgende gelijke rollen samen.
 function normalizeAlternating(messages: ChatMsg[]): ChatMsg[] {
   const out: ChatMsg[] = [];
   for (const m of messages) {
@@ -81,28 +95,81 @@ async function geminiGenerate(model: string, system: string, prompt: string, max
   return result.response.text();
 }
 
-// Multi-turn naar een enkele transcript-prompt; provider-onafhankelijk robuust
-// (geen strikte alternatie-eisen, werkt ook voor agent-geïnitieerde draden).
+// ---- DeepSeek (OpenAI-compatible chat completions) -----------------------
+async function deepseekChat(
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  json = false,
+): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY ontbreekt (AGENT_PROVIDER=deepseek)');
+
+  const messages: { role: string; content: string }[] = [];
+  if (system) messages.push({ role: 'system', content: system });
+  messages.push({ role: 'user', content: user });
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    max_tokens: maxTokens,
+  };
+  if (json) body.response_format = { type: 'json_object' };
+
+  const res = await fetch(`${DEEPSEEK_BASE}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`DeepSeek ${res.status}: ${await res.text()}`);
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
 function transcript(messages: ChatMsg[]): string {
   return messages.map((m) => `${m.role === 'user' ? 'Dusty' : 'Momentum'}: ${m.content}`).join('\n\n') + '\n\nMomentum:';
 }
 
-// ---- Provider-agnostische API (gebruik dit voor nieuw werk) ----------------
+async function generateText(system: string, user: string, maxTokens: number, tier: Tier): Promise<string> {
+  const provider = activeProvider();
+  const model = modelForTier(tier);
+  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, false);
+  return geminiGenerate(model, system, user, maxTokens);
+}
+
+async function generateJson(system: string, user: string, maxTokens: number, tier: Tier): Promise<string> {
+  const provider = activeProvider();
+  const model = modelForTier(tier);
+  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
+  return geminiGenerate(model, system, user, maxTokens, true);
+}
+
 export async function agentText(system: string, user: string, maxTokens = 2048, tier: Tier = 'fast'): Promise<string> {
-  if (activeProvider() === 'claude') return claudeChat(MODEL_TIERS.claude[tier], system, [{ role: 'user', content: user }], maxTokens);
-  return geminiGenerate(MODEL_TIERS.gemini[tier], system, user, maxTokens);
+  return generateText(system, user, maxTokens, tier);
 }
 
 export async function agentJson<T>(system: string, user: string, maxTokens = 2048, tier: Tier = 'fast'): Promise<T> {
-  const raw = activeProvider() === 'claude'
-    ? await claudeChat(MODEL_TIERS.claude[tier], system, [{ role: 'user', content: user }], maxTokens)
-    : await geminiGenerate(MODEL_TIERS.gemini[tier], system, user, maxTokens, true);
+  const raw = await generateJson(system, user, maxTokens, tier);
   return parseJson<T>(raw);
 }
 
 export async function agentChat(system: string, messages: ChatMsg[], maxTokens = 1024, tier: Tier = 'fast'): Promise<string> {
-  if (activeProvider() === 'claude') return claudeChat(MODEL_TIERS.claude[tier], system, messages, maxTokens);
-  return geminiGenerate(MODEL_TIERS.gemini[tier], system, transcript(messages), maxTokens);
+  const provider = activeProvider();
+  const model = modelForTier(tier);
+  if (provider === 'claude') return claudeChat(model, system, messages, maxTokens);
+  const user = transcript(messages);
+  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, false);
+  return geminiGenerate(model, system, user, maxTokens);
 }
 
 function parseJson<T>(text: string): T {
@@ -110,7 +177,6 @@ function parseJson<T>(text: string): T {
   return JSON.parse(match ? match[1] || match[0] : text);
 }
 
-// ---- Backward-compat wrappers (model-arg => tier; actieve provider beslist) -
 export function claudeJson<T>(model: string, system: string, user: string, maxTokens = 2048): Promise<T> {
   return agentJson<T>(system, user, maxTokens, tierFromLegacyModel(model));
 }
