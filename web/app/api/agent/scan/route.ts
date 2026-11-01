@@ -113,7 +113,7 @@ If ${openSymbols.length} >= 3 positions open, output HOLD for all — no new ent
     const userPrompt = `Market data:\n${marketData}\n\nNews context:\n${JSON.stringify(parsedNews, null, 2)}\n\nEvaluate all ${WATCHLIST.length} symbols. Return JSON array:
 [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{"trend_above_sma20":"pass"|"fail","momentum_rsi":"pass"|"fail","volume_above_avg":"pass"|"fail","vix_below_limit":"pass"|"fail","no_earnings_risk":"pass"|"fail","news_sentiment":"pass"|"fail"},"rationale":"<2 sentences>","agentNote":"<1 short sentence for display>","confidence":0.0-1.0}]`;
 
-    const decisions = await claudeJson<ScanDecision[]>(MODELS.sonnet, system, userPrompt, 2048);
+    const decisions = await claudeJson<ScanDecision[]>(MODELS.sonnet, system, userPrompt);
 
     return NextResponse.json({
       decisions,

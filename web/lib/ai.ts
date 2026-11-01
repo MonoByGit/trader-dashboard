@@ -1,6 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AsyncLocalStorage } from 'async_hooks';
+import {
+  AiJsonParseError,
+  completeJsonWithRetries,
+  jsonMaxTokensFromEnv,
+  type JsonCompletion,
+} from '@ai/json-response';
+
+export { AiJsonParseError };
 
 // ============================================================================
 // AI-laag — provider-agnostisch. Standaard: Gemini. AGENT_PROVIDER=claude|
@@ -10,6 +18,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 export type Provider = 'gemini' | 'claude' | 'deepseek';
 export type Tier = 'fast' | 'smart';
 export type ChatMsg = { role: 'user' | 'assistant'; content: string };
+
+type UsageMeta = { input?: number; output?: number; finishReason?: string | null };
 
 const aiRoutineContext = new AsyncLocalStorage<{ routine?: string; decisionId?: string }>();
 
@@ -22,7 +32,7 @@ async function logAiUsage(
   system: string,
   user: string,
   response: string,
-  usage?: { input?: number; output?: number },
+  usage?: UsageMeta,
 ): Promise<void> {
   const ctx = aiRoutineContext.getStore();
   try {
@@ -34,6 +44,7 @@ async function logAiUsage(
       model,
       inputTokens: tokens.inputTokens,
       outputTokens: tokens.outputTokens,
+      finishReason: usage?.finishReason ?? null,
       decisionId: ctx?.decisionId,
     });
   } catch {
@@ -92,8 +103,18 @@ function modelForTier(tier: Tier): string {
   return MODEL_TIERS[activeProvider()][tier];
 }
 
+function resolveJsonMaxTokens(explicit?: number): number {
+  if (explicit != null && explicit > 0) return explicit;
+  return jsonMaxTokensFromEnv();
+}
+
 // ---- Claude ----------------------------------------------------------------
-async function claudeChat(model: string, system: string, messages: ChatMsg[], maxTokens: number): Promise<string> {
+async function claudeChat(
+  model: string,
+  system: string,
+  messages: ChatMsg[],
+  maxTokens: number,
+): Promise<JsonCompletion> {
   const resp = await getAnthropic().messages.create({
     model,
     max_tokens: maxTokens,
@@ -102,11 +123,13 @@ async function claudeChat(model: string, system: string, messages: ChatMsg[], ma
   });
   const text = resp.content.filter((b) => b.type === 'text').map((b) => (b.type === 'text' ? b.text : '')).join('');
   const user = messages.map((m) => m.content).join('\n\n');
+  const finishReason = resp.stop_reason ?? null;
   await logAiUsage(model, system, user, text, {
     input: resp.usage?.input_tokens,
     output: resp.usage?.output_tokens,
+    finishReason,
   });
-  return text;
+  return { text, finishReason };
 }
 
 function normalizeAlternating(messages: ChatMsg[]): ChatMsg[] {
@@ -122,7 +145,13 @@ function normalizeAlternating(messages: ChatMsg[]): ChatMsg[] {
 }
 
 // ---- Gemini ----------------------------------------------------------------
-async function geminiGenerate(model: string, system: string, prompt: string, maxTokens: number, json = false): Promise<string> {
+async function geminiGenerate(
+  model: string,
+  system: string,
+  prompt: string,
+  maxTokens: number,
+  json = false,
+): Promise<JsonCompletion> {
   const m = genai.getGenerativeModel({
     model,
     ...(system ? { systemInstruction: system } : {}),
@@ -131,11 +160,13 @@ async function geminiGenerate(model: string, system: string, prompt: string, max
   const result = await m.generateContent(prompt);
   const text = result.response.text();
   const meta = result.response.usageMetadata;
+  const finishReason = result.response.candidates?.[0]?.finishReason ?? null;
   await logAiUsage(model, system, prompt, text, {
     input: meta?.promptTokenCount,
     output: meta?.candidatesTokenCount,
+    finishReason,
   });
-  return text;
+  return { text, finishReason };
 }
 
 // ---- DeepSeek (OpenAI-compatible chat completions) -----------------------
@@ -145,7 +176,7 @@ async function deepseekChat(
   user: string,
   maxTokens: number,
   json = false,
-): Promise<string> {
+): Promise<JsonCompletion> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('DEEPSEEK_API_KEY ontbreekt (AGENT_PROVIDER=deepseek)');
 
@@ -158,7 +189,11 @@ async function deepseekChat(
     messages,
     max_tokens: maxTokens,
   };
-  if (json) body.response_format = { type: 'json_object' };
+  if (json) {
+    body.response_format = { type: 'json_object' };
+    body.thinking = { type: 'disabled' };
+    body.reasoning_effort = 'none';
+  }
 
   const res = await fetch(`${DEEPSEEK_BASE}/v1/chat/completions`, {
     method: 'POST',
@@ -172,15 +207,18 @@ async function deepseekChat(
     throw new Error(`DeepSeek ${res.status}: ${await res.text()}`);
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string | null }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  const text = data.choices?.[0]?.message?.content ?? '';
+  const choice = data.choices?.[0];
+  const text = choice?.message?.content ?? '';
+  const finishReason = choice?.finish_reason ?? null;
   await logAiUsage(model, system, user, text, {
     input: data.usage?.prompt_tokens,
     output: data.usage?.completion_tokens,
+    finishReason,
   });
-  return text;
+  return { text, finishReason };
 }
 
 function transcript(messages: ChatMsg[]): string {
@@ -190,12 +228,17 @@ function transcript(messages: ChatMsg[]): string {
 async function generateText(system: string, user: string, maxTokens: number, tier: Tier): Promise<string> {
   const provider = activeProvider();
   const model = modelForTier(tier);
-  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
-  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, false);
-  return geminiGenerate(model, system, user, maxTokens);
+  if (provider === 'claude') return (await claudeChat(model, system, [{ role: 'user', content: user }], maxTokens)).text;
+  if (provider === 'deepseek') return (await deepseekChat(model, system, user, maxTokens, false)).text;
+  return (await geminiGenerate(model, system, user, maxTokens)).text;
 }
 
-async function generateJson(system: string, user: string, maxTokens: number, tier: Tier): Promise<string> {
+async function generateJsonCompletion(
+  system: string,
+  user: string,
+  maxTokens: number,
+  tier: Tier,
+): Promise<JsonCompletion> {
   const provider = activeProvider();
   const model = modelForTier(tier);
   if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
@@ -207,26 +250,51 @@ export async function agentText(system: string, user: string, maxTokens = 2048, 
   return generateText(system, user, maxTokens, tier);
 }
 
-export async function agentJson<T>(system: string, user: string, maxTokens = 2048, tier: Tier = 'fast'): Promise<T> {
-  const raw = await generateJson(system, user, maxTokens, tier);
-  return parseJson<T>(raw);
+export async function agentJson<T>(
+  system: string,
+  user: string,
+  maxTokens?: number,
+  tier: Tier = 'fast',
+  validate?: (parsed: unknown) => parsed is T,
+): Promise<T> {
+  const tokenBudget = resolveJsonMaxTokens(maxTokens);
+  const jsonSystem = system.includes('JSON')
+    ? system
+    : `${system}\n\nAntwoord uitsluitend met geldig JSON (geen markdown of uitleg erbuiten).`;
+
+  const { value } = await completeJsonWithRetries<T>(
+    (_attempt, tokens) => generateJsonCompletion(jsonSystem, user, tokens, tier),
+    {
+      maxTokens: tokenBudget,
+      maxRetries: 2,
+      validate: validate
+        ? (parsed) => validate(parsed)
+        : undefined,
+      onAttempt: (info) => {
+        if (info.error) {
+          console.warn('[agentJson] retry', {
+            provider: activeProvider(),
+            attempt: info.attempt,
+            finishReason: info.finishReason,
+            error: info.error,
+          });
+        }
+      },
+    },
+  );
+  return value;
 }
 
 export async function agentChat(system: string, messages: ChatMsg[], maxTokens = 1024, tier: Tier = 'fast'): Promise<string> {
   const provider = activeProvider();
   const model = modelForTier(tier);
-  if (provider === 'claude') return claudeChat(model, system, messages, maxTokens);
+  if (provider === 'claude') return (await claudeChat(model, system, messages, maxTokens)).text;
   const user = transcript(messages);
-  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, false);
-  return geminiGenerate(model, system, user, maxTokens);
+  if (provider === 'deepseek') return (await deepseekChat(model, system, user, maxTokens, false)).text;
+  return (await geminiGenerate(model, system, user, maxTokens)).text;
 }
 
-function parseJson<T>(text: string): T {
-  const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-  return JSON.parse(match ? match[1] || match[0] : text);
-}
-
-export function claudeJson<T>(model: string, system: string, user: string, maxTokens = 2048): Promise<T> {
+export function claudeJson<T>(model: string, system: string, user: string, maxTokens?: number): Promise<T> {
   return agentJson<T>(system, user, maxTokens, tierFromLegacyModel(model));
 }
 

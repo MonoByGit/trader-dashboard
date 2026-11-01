@@ -191,6 +191,8 @@ async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_ai_calls_ts ON ai_calls (ts DESC);
     CREATE INDEX IF NOT EXISTS idx_ai_calls_routine ON ai_calls (routine, ts DESC);
 
+    ALTER TABLE ai_calls ADD COLUMN IF NOT EXISTS finish_reason TEXT;
+
     CREATE TABLE IF NOT EXISTS alpaca_orders (
       id TEXT PRIMARY KEY,
       symbol TEXT NOT NULL,
