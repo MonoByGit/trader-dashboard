@@ -79,6 +79,11 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     opts.initialBook != null
       ? structuredClone(opts.initialBook)
       : newBook(cfg, dates[startI] ?? null, data.benchmark[startI]?.c ?? null);
+  // Walk-forward vensters hebben een eigen dag-index; absolute lastRebalanceIndex uit het vorige venster blokkeert plannen.
+  if (opts.initialBook != null) {
+    book.lastRebalanceIndex = null;
+    delete book.lastDecisionDate;
+  }
   const trades: TradeLogRow[] = [];
   const equity: EquityLogRow[] = [];
   const vetoLog: SimResult['vetoLog'] = [];
