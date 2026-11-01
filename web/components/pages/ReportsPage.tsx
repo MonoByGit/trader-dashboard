@@ -1,9 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
 
 interface ReportTrade { id: string; symbol: string; side: string; qty: number; entry: number; exit: number | null; pnl: number; r: number; note: string; }
 interface Report {
@@ -18,12 +17,26 @@ interface Report {
 }
 
 export function ReportsPage() {
-  const [selectedId, setSelectedId] = useState((MOCK.reports[0] as unknown as Report).id);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/reports')
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d.reports) ? (d.reports as Report[]) : [];
+        setReports(list);
+        if (list[0]) setSelectedId(list[0].id);
+      })
+      .catch(() => setReports([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2400); };
-  const R = (MOCK.reports as unknown as Report[]).find(r => r.id === selectedId);
+  const R = reports.find(r => r.id === selectedId);
 
   const handleExport = (format: string) => {
     if (!R) return;
@@ -53,10 +66,16 @@ export function ReportsPage() {
         <div className="reports-sidebar">
           <div className="reports-sidebar-head">
             <span style={{fontSize:10,color:'var(--text-tertiary)',textTransform:'uppercase',letterSpacing:0.06}}>Archief</span>
-            <span className="text-tertiary mono" style={{fontSize:10}}>{MOCK.reports.length} rapporten</span>
+            <span className="text-tertiary mono" style={{fontSize:10}}>{reports.length} rapporten</span>
           </div>
           <div className="reports-archive">
-            {(MOCK.reports as unknown as Report[]).map(r => {
+            {loading && <div className="text-tertiary" style={{padding:18,fontSize:11,textAlign:'center'}}>Laden…</div>}
+            {!loading && reports.length === 0 && (
+              <div className="text-tertiary" style={{padding:24,fontSize:12,textAlign:'center',lineHeight:1.5}}>
+                Nog geen data. Het eerste rapport verschijnt na de EOD-routine.
+              </div>
+            )}
+            {reports.map(r => {
               const pos = r.kpis.sessionPnl >= 0;
               return (
                 <div key={r.id} className={`report-entry${selectedId===r.id?' selected':''}`} onClick={() => setSelectedId(r.id)}>
@@ -81,7 +100,9 @@ export function ReportsPage() {
         </div>
 
         <div className="report-detail">
-          {R ? <ReportDetail R={R}/> : <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Selecteer een rapport.</div>}
+          {R ? <ReportDetail R={R}/> : !loading && reports.length === 0
+            ? <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Nog geen rapporten.</div>
+            : <div style={{padding:40,textAlign:'center',color:'var(--text-tertiary)'}}>Selecteer een rapport.</div>}
         </div>
       </div>
 

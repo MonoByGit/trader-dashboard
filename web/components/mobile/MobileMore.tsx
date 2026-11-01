@@ -65,7 +65,7 @@ export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy, positio
           </div>
           <div className="m-scroll" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
             {view === 'positions' && <MobilePositions positions={positions} onOpenPosition={onOpenPosition} />}
-            {view === 'reports' && <MobileReports reports={MOCK.reports} />}
+            {view === 'reports' && <ReportsView />}
             {view === 'risk' && <RiskView guards={guards} onToggleKill={onToggleKill} />}
             {view === 'routines' && <RoutinesView />}
             {view === 'strategy' && <StrategyView />}
@@ -175,12 +175,32 @@ function StrategyView() {
 
 type LiveLesson = { id: string; title: string; description: string; category: string; status: string; hits: number; pnlImpact: number };
 
-function LessonsView() {
-  const [lessons, setLessons] = useState<LiveLesson[]>(MOCK.lessons as unknown as LiveLesson[]);
+function ReportsView() {
+  const [reports, setReports] = useState<Parameters<typeof MobileReports>[0]['reports']>([]);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    fetch('/api/lessons').then(r => r.json()).then(d => { if (Array.isArray(d.lessons)) setLessons(d.lessons); }).catch(() => {});
+    fetch('/api/reports')
+      .then(r => r.json())
+      .then(d => setReports(Array.isArray(d.reports) ? d.reports : []))
+      .catch(() => setReports([]))
+      .finally(() => setLoading(false));
   }, []);
-  if (lessons.length === 0) return <div className="m-empty">Nog geen lessen. Voorstellen verschijnen op het Samen-bord.</div>;
+  if (loading) return <div className="m-empty">Laden…</div>;
+  return <MobileReports reports={reports} />;
+}
+
+function LessonsView() {
+  const [lessons, setLessons] = useState<LiveLesson[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/lessons')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.lessons)) setLessons(d.lessons); else setLessons([]); })
+      .catch(() => setLessons([]))
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) return <div className="m-empty">Laden…</div>;
+  if (lessons.length === 0) return <div className="m-empty">Nog geen data. Lessen komen na goedgekeurde voorstellen uit de weekreview.</div>;
   return (
     <>
       {lessons.map(l => (
@@ -201,9 +221,22 @@ function LessonsView() {
 }
 
 function HistoryView() {
-  // Afgeleid uit gesloten trades in de sessierapporten (geen aparte history-bron).
-  const closed = MOCK.reports.flatMap(r => r.trades.filter(t => t.status === 'closed').map(t => ({ ...t, date: r.date })));
-  if (closed.length === 0) return <div className="m-empty">Nog geen gesloten posities.</div>;
+  const [closed, setClosed] = useState<{ id: string; symbol: string; qty: number; pnl: number; pnlPct?: number; entry?: number; exit?: number | null; r?: number | null; date: string; note?: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/reports')
+      .then(r => r.json())
+      .then(d => {
+        const reps = Array.isArray(d.reports) ? d.reports : [];
+        setClosed(reps.flatMap((r: { date: string; trades: { id: string; symbol: string; qty: number; pnl: number; status: string; note?: string }[] }) =>
+          r.trades.filter(t => t.status === 'closed').map(t => ({ ...t, date: r.date })),
+        ));
+      })
+      .catch(() => setClosed([]))
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) return <div className="m-empty">Laden…</div>;
+  if (closed.length === 0) return <div className="m-empty">Nog geen data. Gesloten trades verschijnen na post-mortems.</div>;
   return (
     <>
       {closed.map(t => {
@@ -217,7 +250,7 @@ function HistoryView() {
               </div>
               <div className="m-row-end">
                 <span className={`big ${pos ? 'pos' : 'neg'}`}>{fmt.signedUsd(t.pnl)}</span>
-                <span className={`small ${pos ? 'pos' : 'neg'}`}>{fmt.pct(t.pnlPct)}</span>
+                <span className={`small ${pos ? 'pos' : 'neg'}`}>{t.pnlPct != null ? fmt.pct(t.pnlPct) : '—'}</span>
               </div>
             </div>
             <div className="m-statline" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
