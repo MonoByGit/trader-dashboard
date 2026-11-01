@@ -9,6 +9,7 @@ import {
   checkOrderAgainstLimits,
   countDailyTrades,
   getEffectiveCryptoGuardConfig,
+  getEffectiveGuardConfig,
   logGuardEvent,
   refreshCircuitBreaker,
 } from '@/lib/guards/service';
@@ -22,6 +23,8 @@ import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
 import { isOrderPostRetryableError } from '../../../src/alpaca/order-post-reconcile';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
+import { sumCryptoChangeTodayUsd } from '../../../src/sleeves/crypto-daily-pnl';
+import { nextDailyTradeCount } from '../../../src/guards/daily-trades';
 
 const RULES = cryptoStrategy.rules as {
   max_positions: number;
@@ -93,6 +96,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   const cryptoCfg = await getEffectiveCryptoGuardConfig();
   const newToday = await countCryptoBuysTodayUtc();
 
+  const cryptoDailyPnlUsd = sumCryptoChangeTodayUsd(cryptoPositions);
   const cryptoLimitsBlock = evaluateCryptoLimits(
     {
       totalEquityUsd: equity,
@@ -102,6 +106,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
       newPositionsOpenedToday: newToday,
       cryptoDayStartEquityUsd: cryptoDayStart,
       cryptoSleeveEquityUsd: sleeves.crypto.equityUsd,
+      cryptoDailyPnlUsd,
     },
     cryptoCfg,
   );
@@ -124,10 +129,11 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
-    console.error('[crypto-scan] AI JSON mislukt — geen orders geplaatst:', msg);
-    return { skipped: true, reason: 'AI JSON response invalid or truncated', asset_class: 'crypto' };
+    console.error('[crypto-scan] AI call failed — marking run failed for retry:', msg);
+    throw new Error(`[crypto-scan] ${msg}`);
   }
 
+  let dailyTrades = await countDailyTrades();
   const orders: { symbol: string; qty: number; orderId: string }[] = [];
   const scanRunId = String(Date.now());
   for (const c of candidates) {
@@ -157,6 +163,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         newPositionsOpenedToday: newToday + orders.length,
         cryptoDayStartEquityUsd: cryptoDayStart,
         cryptoSleeveEquityUsd: sleeves.crypto.equityUsd,
+        cryptoDailyPnlUsd,
       },
       cryptoCfg,
     );
@@ -175,11 +182,26 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
 
     const etfOnlyPositions = filterByAssetClass(positions, 'etf');
     const etfExposure = etfOnlyPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+    const globalCfg = await getEffectiveGuardConfig();
+    const globalTradeSlot = nextDailyTradeCount(dailyTrades, globalCfg.maxDailyTrades);
+    if (!globalTradeSlot.allowed) {
+      await saveDecision({
+        routine: 'crypto-scan',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: `Max daily trades (${globalCfg.maxDailyTrades}) reached`,
+        agentNote: 'Global portfolio guard',
+        confidence: 0,
+        asset_class: 'crypto',
+      });
+      break;
+    }
+
     const globalLimits = await checkOrderAgainstLimits({
       equity,
       cash,
       openPositionCount: etfOnlyPositions.length + cryptoPositions.length + orders.length,
-      dailyTrades: await countDailyTrades(),
+      dailyTrades,
       proposedOrderValueUsd: notional,
       currentSymbolExposureUsd: symbolExposure,
       totalExposureUsd: etfExposure + sleeves.crypto.exposureUsd,

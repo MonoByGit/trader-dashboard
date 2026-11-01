@@ -1,9 +1,12 @@
 export type CryptoRoutineName = 'crypto-scan';
 
+import { RUNNING_STALE_MS } from './run-status.js';
+
 export interface CryptoRunRecord {
   routine: string;
   status: string;
   finished_at?: string | null;
+  started_at?: string | null;
 }
 
 export interface CryptoSchedulerConfig {
@@ -37,17 +40,22 @@ function shouldRunCrypto(
 ): boolean {
   const last = lastRun(runs);
   if (!last) return true;
+  if (last.status === 'running') {
+    if (!last.started_at) return false;
+    const age = nowMs - new Date(last.started_at).getTime();
+    return age >= RUNNING_STALE_MS;
+  }
   if (last.status === 'failed' && last.finished_at) {
     const finishedMs = new Date(last.finished_at).getTime();
-    if (nowMs - finishedMs <= cfg.retryWindowMinutes * 60_000) return true;
-    return true;
+    return nowMs - finishedMs <= cfg.retryWindowMinutes * 60_000;
   }
+  if (last.status === 'failed' && !last.finished_at) return false;
   if (last.status === 'ok' && last.finished_at) {
     const elapsed = nowMs - new Date(last.finished_at).getTime();
     return elapsed >= cfg.tickIntervalHours * MS_PER_HOUR;
   }
-  if (last.status === 'running') return false;
-  return true;
+  if (last.status === 'skipped') return true;
+  return false;
 }
 
 /** 24/7 UTC grid: every N hours on the hour (no US market calendar). */

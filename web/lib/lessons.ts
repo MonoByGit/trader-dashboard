@@ -1,6 +1,7 @@
 import { dbQuery, dbRun, hasDb, initDb } from './db';
 import { agentJson } from './ai';
 import { ensureSchema } from './migrate';
+import { lessonAllowsBuy } from '../../src/lessons/gate';
 
 export type ActiveLesson = {
   id: string;
@@ -64,7 +65,7 @@ export async function checkLessonsForBuy(
       'fast',
     );
     const applied = (verdict.appliedLessonIds ?? []).filter((id) => lessons.some((l) => l.id === id));
-    if (!verdict.allow) {
+    if (!lessonAllowsBuy(verdict)) {
       return {
         veto: true,
         lessonId: verdict.vetoLessonId && lessons.some((l) => l.id === verdict.vetoLessonId) ? verdict.vetoLessonId! : applied[0] ?? lessons[0]?.id ?? null,
@@ -78,8 +79,13 @@ export async function checkLessonsForBuy(
       reason: verdict.rationale || '',
       influencedLessonIds: applied,
     };
-  } catch {
-    return { veto: false, lessonId: null, reason: 'Lesson-check mislukt; geen veto.', influencedLessonIds: [] };
+  } catch (e) {
+    return {
+      veto: true,
+      lessonId: lessons[0]?.id ?? null,
+      reason: `Lesson-check mislukt; buy geblokkeerd (fail closed): ${e instanceof Error ? e.message : String(e)}`,
+      influencedLessonIds: lessons.map((l) => l.id),
+    };
   }
 }
 

@@ -1,6 +1,6 @@
 import { canRunRoutine } from '@guards/index';
 import { loadGuardState } from '@/lib/guards/service';
-import { finishRoutineRun, startRoutineRun } from '@/lib/routine-runs';
+import { finishRoutineRun, tryBeginRoutineRun } from '@/lib/routine-runs';
 import { withAiRoutine } from '@/lib/ai';
 import { tradingDateEt } from '@scheduler/decide';
 
@@ -20,8 +20,11 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     tradingEnabled: state.tradingEnabled,
     circuitBreakerTripped: state.circuitBreakerTripped,
   });
+  const tradingDate = tradingDateEt(Date.now());
+
   if (!gate.allowed) {
-    const runId = await startRoutineRun(routine);
+    const begun = await tryBeginRoutineRun(routine, tradingDate);
+    const runId = 'blocked' in begun ? null : begun.runId;
     const started = Date.now();
     await finishRoutineRun(runId, 'skipped', { skipReason: gate.reason, startedMs: started });
     return { skipped: true, reason: gate.reason };
@@ -32,8 +35,11 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
     return { error: 'Unknown routine' };
   }
 
-  const tradingDate = tradingDateEt(Date.now());
-  const runId = await startRoutineRun(routine, tradingDate);
+  const begun = await tryBeginRoutineRun(routine, tradingDate);
+  if ('blocked' in begun) {
+    return { skipped: true, reason: begun.reason };
+  }
+  const runId = begun.runId;
   const startedMs = Date.now();
 
   try {

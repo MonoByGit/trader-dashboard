@@ -108,3 +108,24 @@ export async function initDb(): Promise<void> {
 export function hasDb(): boolean {
   return !!process.env.DATABASE_URL;
 }
+
+export async function dbTransaction<T>(fn: (query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }>) => Promise<T>): Promise<T> {
+  const pool = getPool();
+  if (!pool) throw new Error('DATABASE_URL not configured');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const query = async (sql: string, params?: unknown[]) => {
+      const result = await client.query(sql, params);
+      return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+    };
+    const out = await fn(query);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}

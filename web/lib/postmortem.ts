@@ -3,6 +3,7 @@ import { alpaca, AlpacaOrder } from './alpaca';
 import { agentText } from './ai';
 import { dbQuery, dbRun, hasDb, initDb } from './db';
 import { ensureSchema } from './migrate';
+import { recordClosedTradePnl } from './guards/service';
 
 export type CloseReason = 'stop' | 'take_profit' | 'eod' | 'manual' | 'unknown';
 
@@ -88,6 +89,8 @@ export async function createTradePostMortem(input: PostMortemInput): Promise<str
     ],
   );
   await dbRun(`INSERT INTO settings (key, value) VALUES ($1, '1') ON CONFLICT (key) DO NOTHING`, [dedupeKey]);
+
+  await recordClosedTradePnl(input.realizedPnl).catch((e) => console.error('[consecutiveLosses]', e));
 
   if (entryDec?.id) {
     const apps = await dbQuery<{ lesson_id: string }>(
