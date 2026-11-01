@@ -32,20 +32,30 @@ function memStore(initial?: VersionBook) {
 
 function trackingBroker(lastPrice: Record<string, number>) {
   const stops: OpenStopOrder[] = [];
+  const positions: Record<string, number> = {};
   const broker: Broker & { listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]>; stops: OpenStopOrder[] } = {
     stops,
-    marketOrder: async (o) => ({ orderId: o.clientOrderId, qty: o.qty, price: lastPrice[o.symbol] ?? 100 }),
+    marketOrder: async (o) => {
+      if (o.side === 'buy') positions[o.symbol] = (positions[o.symbol] ?? 0) + o.qty;
+      else positions[o.symbol] = Math.max(0, (positions[o.symbol] ?? 0) - o.qty);
+      return { orderId: o.clientOrderId, qty: o.qty, price: lastPrice[o.symbol] ?? 100 };
+    },
     setStop: async (o) => {
       const cid = `${o.stopClientPrefix}${o.symbol}-${Math.round(o.stopPrice * 100)}`;
       broker.stops = broker.stops.filter((s) => !s.clientOrderId.startsWith(o.stopClientPrefix) || s.symbol !== o.symbol);
       broker.stops.push({ symbol: o.symbol, qty: o.qty, stopPrice: o.stopPrice, clientOrderId: cid });
     },
     cancelStop: async (o) => {
+      if (o.orderId) {
+        broker.stops = broker.stops.filter((s) => s.orderId !== o.orderId);
+        return;
+      }
       const p = o.stopClientPrefix ?? '';
       broker.stops = broker.stops.filter((s) => !(s.clientOrderId.startsWith(p) && s.symbol === o.symbol));
     },
     stopFill: async () => null,
     listOpenStops: async (o) => broker.stops.filter((s) => s.clientOrderId.startsWith(o.stopClientPrefix)),
+    positionQty: async ({ symbol }) => positions[symbol] ?? 0,
   };
   return broker;
 }

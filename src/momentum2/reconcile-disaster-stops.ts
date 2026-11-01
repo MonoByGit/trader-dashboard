@@ -2,21 +2,13 @@ import { isCryptoSymbol } from '../asset-classes/classify';
 import { alpacaSymbolsEqual } from '../alpaca/symbol-path';
 import type { StrategyHooks } from './hooks';
 import { dateOf } from './indicators';
-import type { Broker } from './live';
+import type { MomentumBroker, OpenStopOrder } from './broker-types';
 import { momentumStopClientPrefix } from './order-tag';
 import type { Bar, VersionBook, VersionConfig } from './types';
 
-export type OpenStopOrder = {
-  symbol: string;
-  qty: number;
-  stopPrice: number;
-  clientOrderId: string;
-  orderId?: string;
-};
+export type { OpenStopOrder };
 
-export type BrokerWithStops = Broker & {
-  listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]>;
-};
+export type BrokerWithStops = MomentumBroker;
 
 function symMatch(a: string, b: string): boolean {
   return a === b || alpacaSymbolsEqual(a, b);
@@ -50,7 +42,11 @@ export async function reconcileDisasterStops<C extends VersionConfig>(input: {
       if (matches.length > 1) {
         matches.sort((a, b) => b.stopPrice - a.stopPrice);
         for (const extra of matches.slice(1)) {
-          await input.broker.cancelStop({ versionId: cfg.id, symbol: extra.symbol, stopClientPrefix: prefix });
+          if (extra.orderId) {
+            await input.broker.cancelStop({ versionId: cfg.id, symbol: extra.symbol, orderId: extra.orderId });
+          } else {
+            await input.broker.cancelStop({ versionId: cfg.id, symbol: extra.symbol, stopClientPrefix: prefix });
+          }
           deduped.push(`${cfg.id}:${sym}:${extra.clientOrderId}`);
         }
         open = open.filter((o) => !matches.slice(1).some((x) => x.clientOrderId === o.clientOrderId));

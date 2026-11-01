@@ -10,6 +10,10 @@ export function brokerForMode(mode: MomentumPaperMode, lastPrice: Record<string,
   return shadowBroker(lastPrice);
 }
 
+/**
+ * Papierboek: nooit een schaduwboek omzetten (phantom posities).
+ * Bestaand echt boek hergebruiken; anders leeg starten met startbudget.
+ */
 export async function loadOrInitRealBook(
   store: Store,
   cfg: VersionConfig,
@@ -17,16 +21,13 @@ export async function loadOrInitRealBook(
   startDate: string,
 ): Promise<VersionBook> {
   const existing = await store.loadBook(cfg.id);
-  if (existing) {
-    if (!existing.real) {
-      existing.real = true;
-      await store.saveBook(existing);
-    }
-    return existing;
-  }
+  if (existing?.real) return existing;
+
   const { newBook } = await import('../../../src/momentum2/book');
   const book = newBook(cfg, startDate, startSpy);
   book.real = true;
+  book.positions = {};
+  book.cash = cfg.budgetUsd;
   await store.saveBook(book);
   return book;
 }

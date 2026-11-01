@@ -43,7 +43,6 @@
     },
     "roots": ["<rootDir>/src", "<rootDir>/web"],
     "testMatch": ["<rootDir>/{src,web}/**/*.test.ts"],
-    "forceExit": true,
     "transform": {
       "^.+\\.tsx?$": [
         "ts-jest",

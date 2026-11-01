@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 /** Production security: fail closed when required secrets are missing. */
 
 export function listMissingProductionAuthEnv(): string[] {
@@ -30,5 +32,8 @@ export function verifyCronBearer(authHeader: string | null): boolean {
   if (!secret) {
     return process.env.NODE_ENV !== 'production';
   }
-  return (authHeader ?? '') === `Bearer ${secret}`;
+  const expected = `Bearer ${secret}`;
+  const got = authHeader ?? '';
+  if (got.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
 }

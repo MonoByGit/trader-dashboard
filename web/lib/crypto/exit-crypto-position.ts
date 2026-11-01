@@ -8,6 +8,8 @@ import { positionQtyAvailable } from '../../../src/crypto/buy-fill-qty';
 import { alpacaPositionSymbol, alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
+import { foreignQtyForSymbol } from '@/lib/momentum2/ownership';
+import { isForeignStrategyOrder, m1CloseQty } from '../../../src/trading/strategy-tags';
 import { acquireExitLock, releaseExitLock, verifyExitLockOwner } from './exit-lock';
 
 export type CryptoExitReason = 'software_stop' | 'take_profit' | 'manual_close' | 'emergency_flatten' | (string & {});
@@ -71,7 +73,10 @@ async function abortIfLockLost(
 async function cancelOpenSellOrders(symbol: string, reason: CryptoExitReason): Promise<ExitCryptoPositionResult | null> {
   const open = await alpaca.openOrders(200);
   const sellOrders = open.filter(
-    (o) => o.side === 'sell' && alpacaSymbolsEqual(o.symbol, symbol),
+    (o) =>
+      o.side === 'sell' &&
+      alpacaSymbolsEqual(o.symbol, symbol) &&
+      !isForeignStrategyOrder(o.client_order_id),
   );
 
   for (const o of sellOrders) {
@@ -129,9 +134,15 @@ export async function exitCryptoPosition(
       await clearCryptoExitSettings(symbol);
       return { exited: false, skippedReason: 'no_qty' };
     }
-    const sellQty = positionQtyAvailable(pos!);
+    const foreign = await foreignQtyForSymbol(symbol);
+    const m1Qty = m1CloseQty(positionQty, foreign);
+    const sellQty = Math.min(positionQtyAvailable(pos!), m1Qty);
+    if (!(sellQty > 0)) {
+      await clearCryptoExitSettings(symbol);
+      return { exited: false, skippedReason: 'no_qty' };
+    }
 
-    if (mode === 'close_position') {
+    if (mode === 'close_position' && sellQty >= positionQty - 1e-9) {
       const lockBlock = await abortIfLockLost(symbol, owner, reason);
       if (lockBlock) return lockBlock;
       await logExitReason(symbol, reason, `Close position ${sellQty} (${reason})`);

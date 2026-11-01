@@ -14,6 +14,7 @@ import { syncRecentOrders } from '@/lib/orders-store';
 import { writeDailySnapshot } from '@/lib/snapshots';
 import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib/telegram';
 import { captureEvent } from '@/lib/openbrain';
+import { m1EtfOpenSymbols } from '@/lib/momentum2/m1-etf-slots';
 import { computePositionSize } from '@/lib/sizing';
 import { openOrAppendThread } from '@/lib/threads';
 import {
@@ -219,12 +220,12 @@ export async function runMarketOpen() {
   }
 
   const etfPositions = filterByAssetClass(positions, 'etf');
-  const openSymbols = etfPositions.map(p => p.symbol);
+  const { count: m1OpenCount, symbols: openSymbols } = await m1EtfOpenSymbols(positions);
   const totalExposure = etfPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
   let dailyTrades = await countDailyTrades();
   const config = await getEffectiveGuardConfig();
 
-  if (openSymbols.length >= config.maxPositions) {
+  if (m1OpenCount >= config.maxPositions) {
     return { skipped: true, reason: 'Max ETF positions reached' };
   }
 
@@ -316,7 +317,7 @@ export async function runMarketOpen() {
       });
       continue;
     }
-    if (openSymbols.length + orders.length >= config.maxPositions) break;
+    if (m1OpenCount + orders.length >= config.maxPositions) break;
 
     const tradeSlot = nextDailyTradeCount(dailyTrades, config.maxDailyTrades);
     if (!tradeSlot.allowed) {

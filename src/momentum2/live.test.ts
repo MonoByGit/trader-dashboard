@@ -29,6 +29,8 @@ function fakeBroker() {
     setStop: async (o) => { stops[`${o.versionId}:${o.symbol}`] = o.stopPrice; },
     cancelStop: async (o) => { delete stops[`${o.versionId}:${o.symbol}`]; },
     stopFill: async (o) => stopFills[`${o.versionId}:${o.symbol}`] ?? null,
+    listOpenStops: async () => [],
+    positionQty: async () => null,
   };
   return { broker, stops, orders, stopFills };
 }

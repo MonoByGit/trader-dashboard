@@ -25,6 +25,7 @@ describe('middleware health bypass', () => {
     const src = await import('fs/promises').then((fs) =>
       fs.readFile(new URL('../../web/middleware.ts', import.meta.url), 'utf8'),
     );
-    expect(src).toMatch(/pathname\.startsWith\('\/api\/momentum'\)/);
+    expect(src).toMatch(/\/api\/momentum5\/run/);
+    expect(src).not.toMatch(/pathname\.startsWith\('\/api\/momentum'\)/);
   });
 });
