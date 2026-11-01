@@ -54,6 +54,15 @@ import {
 } from '../../src/strategy/premarket-decisions';
 import { loadVolStressSnapshot } from '@/lib/vol-stress';
 import { isSoftStartEnabled } from '@/lib/strategy-versions';
+import {
+  dailyBarsExcludingTodayPartial,
+  lastCompletedSessionClose,
+} from '../../src/alpaca/daily-bars-partial';
+import {
+  bracketPricesFromEntry,
+  breakoutChaseBlocked,
+  entryPriceFromQuote,
+} from '../../src/strategy/market-open-entry';
 
 async function liveStrategy(): Promise<StrategyContent> {
   try {
@@ -228,7 +237,7 @@ export async function runMarketOpen() {
   const rsiMaxOpen = strat.rules.rsi_max ?? 75;
   const rsiBySymbol: Record<string, number> = {};
   for (const s of watchlist) {
-    const b = bars[s] ?? [];
+    const b = dailyBarsExcludingTodayPartial(bars[s] ?? [], tradingDate);
     if (b.length >= 15) {
       const snap = snapshotFromDailyBars(s, b);
       if (snap?.rsi != null) rsiBySymbol[s] = snap.rsi;
@@ -253,11 +262,25 @@ export async function runMarketOpen() {
     };
   }
 
-  // Last known prices for server-side position sizing guard
+  let quoteBySymbol: Record<string, { ap: number; bp: number }> = {};
+  try {
+    const q = await alpaca.latestQuotes(watchlist);
+    quoteBySymbol = q.quotes ?? {};
+  } catch {
+    quoteBySymbol = {};
+  }
+
+  const snapshotBars: Record<string, { c: number; v: number; t?: string }[]> = {};
+  const lastBarClose: Record<string, number> = {};
   const lastPrices: Record<string, number> = {};
   for (const s of watchlist) {
-    const b = bars[s] ?? [];
-    if (b.length > 0) lastPrices[s] = b[b.length - 1].c;
+    const raw = bars[s] ?? [];
+    snapshotBars[s] = dailyBarsExcludingTodayPartial(raw, tradingDate);
+    const priorClose = lastCompletedSessionClose(raw, tradingDate);
+    if (priorClose != null) lastBarClose[s] = priorClose;
+    const quoteEntry = entryPriceFromQuote(quoteBySymbol[s]);
+    if ('price' in quoteEntry) lastPrices[s] = quoteEntry.price;
+    else if (priorClose != null) lastPrices[s] = priorClose;
   }
 
   const activeLessons = await getActiveLessons();
@@ -268,7 +291,7 @@ export async function runMarketOpen() {
     candidates = await claudeJsonArray<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }>(
       MODELS.sonnet,
       `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strat.rules.max_positions} posities. Position size: ${(strat.rules.position_size_pct ?? 0.25) * 100}% equity. Cash floor: ${(strat.rules.cash_floor_pct ?? 0.1) * 100}%.${lessonSuffix}`,
-      `Bars data:\n${JSON.stringify(Object.fromEntries(watchlist.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON-object: {"candidates":[{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]}`,
+      `Bars data:\n${JSON.stringify(Object.fromEntries(watchlist.map(s => [s, (snapshotBars[s] ?? []).slice(-5)])))}\nGeef JSON-object: {"candidates":[{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]}`,
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
@@ -325,14 +348,42 @@ export async function runMarketOpen() {
     // de basis-cap, een fractionele Kelly-limiet en de cash-bodem als grenzen.
     // (Kelly-historie volgt zodra er genoeg gesloten trades zijn; tot dan
     // sized het op vol-target of de basis-cap.)
+    const quoteEntry = entryPriceFromQuote(quoteBySymbol[c.symbol]);
+    if ('error' in quoteEntry && quoteEntry.error === 'no_quote' && lastPrices[c.symbol] == null) {
+      await saveDecision({
+        routine: 'market-open',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: 'Geen live quote of prijsdata.',
+        agentNote: 'Sizing overgeslagen.',
+        confidence: 0,
+      });
+      continue;
+    }
     const lastPrice = lastPrices[c.symbol];
     if (!lastPrice) {
       await saveDecision({ routine: 'market-open', symbol: c.symbol, decision: 'NO_GO', rationale: 'Geen prijsdata beschikbaar.', agentNote: 'Sizing overgeslagen, geen laatste prijs.', confidence: 0 });
       continue;
     }
+    const barClose = lastBarClose[c.symbol];
+    const chaseLimit = strat.rules.breakout_chase_limit_pct ?? 0.03;
+    if (barClose != null) {
+      const chaseReason = breakoutChaseBlocked(barClose, lastPrice, chaseLimit);
+      if (chaseReason) {
+        await saveDecision({
+          routine: 'market-open',
+          symbol: c.symbol,
+          decision: 'NO_GO',
+          rationale: chaseReason,
+          agentNote: 'Breakout chase limit',
+          confidence: 0,
+        });
+        continue;
+      }
+    }
     const sizing = computePositionSize({
       symbol: c.symbol,
-      closes: (bars[c.symbol] ?? []).map((b: { c: number }) => b.c),
+      closes: (snapshotBars[c.symbol] ?? []).map((b: { c: number }) => b.c),
       price: lastPrice,
       equity,
       availableCash,
@@ -412,8 +463,11 @@ export async function runMarketOpen() {
 
     // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.
     // These fire at Alpaca even if no cron runs — the hard stop is never bypassable.
-    const stopPrice = +(lastPrice * (1 - strat.rules.hard_stop_pct)).toFixed(2);
-    const takeProfitPrice = +(lastPrice * (1 + strat.rules.take_profit_pct)).toFixed(2);
+    const { stopPrice, takeProfitPrice } = bracketPricesFromEntry(
+      lastPrice,
+      strat.rules.hard_stop_pct,
+      strat.rules.take_profit_pct,
+    );
 
     try {
       const order = await alpaca.placeOrder({

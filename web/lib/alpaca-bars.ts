@@ -1,5 +1,6 @@
 import type { AlpacaBar } from './alpaca-types';
 import { fetchCryptoBars as fetchCryptoBarsImpl } from '../../src/alpaca/fetch-crypto-bars';
+import { alpacaStockDailyEndExclusiveUtc } from '../../src/alpaca/stock-bars-range';
 import { tradingDateEt } from '@scheduler/decide';
 
 export const DEFAULT_DAILY_BAR_LOOKBACK_DAYS = 120;
@@ -27,8 +28,9 @@ export function defaultBarDateRange(lookbackCalendarDays = DEFAULT_DAILY_BAR_LOO
   start: string;
   end: string;
 } {
-  const end = tradingDateEt(Date.now());
-  const start = addCalendarDaysYmd(end, -lookbackCalendarDays);
+  const endEt = tradingDateEt(Date.now());
+  const end = alpacaStockDailyEndExclusiveUtc(endEt);
+  const start = addCalendarDaysYmd(endEt, -lookbackCalendarDays);
   return { start, end };
 }
 

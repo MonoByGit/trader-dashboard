@@ -19,7 +19,14 @@ import {
 import { syncRecentOrders } from '@/lib/orders-store';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
-import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy, saveCryptoStop } from './stops';
+import { passesCryptoEntryCriteria } from '../../../src/crypto/entry-criteria';
+import {
+  enforceSoftwareCryptoStops,
+  enforceSoftwareCryptoTakeProfit,
+  protectCryptoPositionAfterBuy,
+  saveCryptoStop,
+  saveCryptoTakeProfit,
+} from './stops';
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
 import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
@@ -31,7 +38,11 @@ import { nextDailyTradeCount } from '../../../src/guards/daily-trades';
 const RULES = cryptoStrategy.rules as {
   max_positions: number;
   hard_stop_pct: number;
+  take_profit_pct: number;
   position_size_pct: number;
+  rsi_min: number;
+  rsi_max: number;
+  volume_ratio_min: number;
 };
 
 function buildSnapshots(
@@ -54,8 +65,9 @@ export async function runCryptoSoftwareStopsForPositions(
       const b = bars[barKey] ?? [];
       const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
       await enforceSoftwareCryptoStops(p.symbol, last);
+      await enforceSoftwareCryptoTakeProfit(p.symbol, last);
     } catch (e) {
-      await logGuardEvent('crypto_software_stop_tick_fail', String(e), { symbol: p.symbol });
+      await logGuardEvent('crypto_enforce_fail', String(e), { symbol: p.symbol });
     }
   }
 }
@@ -153,6 +165,29 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     }
     if (openSymbols.length + orders.length >= RULES.max_positions) break;
 
+    const snap = snapshots.find((s) => s && alpacaSymbolsEqual(s.symbol, c.symbol));
+    if (!snap) continue;
+    const criteria = passesCryptoEntryCriteria(
+      { rsi: snap.rsi, volumeRatio: snap.volumeRatio },
+      {
+        rsi_min: RULES.rsi_min,
+        rsi_max: RULES.rsi_max,
+        volume_ratio_min: RULES.volume_ratio_min,
+      },
+    );
+    if (!criteria.ok) {
+      await saveDecision({
+        routine: 'crypto-scan',
+        symbol: c.symbol,
+        decision: 'NO_GO',
+        rationale: criteria.reason,
+        agentNote: 'Crypto entry criteria (strategy.json)',
+        confidence: 0,
+        asset_class: 'crypto',
+      });
+      continue;
+    }
+
     const b = bars[c.symbol] ?? [];
     if (!b.length) continue;
     const lastPrice = b[b.length - 1].c;
@@ -247,6 +282,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     }
 
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
+    const takeProfitPrice = +(lastPrice * (1 + RULES.take_profit_pct)).toFixed(2);
     let order;
     const clientOrderId = buildAlpacaClientOrderId({
       routine: 'crypto-scan',
@@ -288,6 +324,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     try {
       const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
       reportQty = protection.qty;
+      await saveCryptoTakeProfit(c.symbol, takeProfitPrice, protection.qty);
     } catch (e) {
       try {
         await saveCryptoStop(c.symbol, stopPrice, qty);
