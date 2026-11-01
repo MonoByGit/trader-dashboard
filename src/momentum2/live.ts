@@ -62,6 +62,10 @@ export async function decideDay(input: {
       continue;
     }
     const book = (await store.loadBook(cfg.id)) ?? newBook(cfg, date, spy.c);
+    if (book.lastDecisionDate === date) {
+      await store.logDecision({ date, versionId: cfg.id, kind: 'skip', detail: 'vandaag al beslist' });
+      continue;
+    }
     const prices: Record<string, number> = {};
     for (const [sym, pos] of Object.entries(book.positions)) {
       const last = input.barsBySymbol[sym]?.[input.barsBySymbol[sym]!.length - 1];
@@ -102,6 +106,7 @@ export async function decideDay(input: {
     } else {
       await store.savePending(cfg.id, []);
     }
+    book.lastDecisionDate = date;
     await store.saveBook(book);
   }
   return { planned };

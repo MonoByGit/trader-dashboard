@@ -1,7 +1,8 @@
 import { makeVeto } from '../../../src/momentum2/veto';
 import type { VetoFn } from '../../../src/momentum2/types';
 
-const BASE = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
+// Vaste host: de sleutel gaat nooit naar een via env opgegeven andere server.
+const BASE = 'https://api.deepseek.com';
 
 /**
  * DeepSeek als veto-poort. Het model dat het antwoord gaf (uit de API-respons) gaat mee in de

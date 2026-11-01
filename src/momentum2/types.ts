@@ -85,6 +85,10 @@ export interface VersionBook {
   halted: boolean;
   haltReason: string | null;
   lastRebalanceIndex: number | null;
+  /** true alleen als dit boek echte broker-posities beheert. Schaduwboeken zijn nooit echt. */
+  real?: boolean;
+  /** Laatste datum waarvoor decideDay draaide (idempotent per dag). */
+  lastDecisionDate?: string;
 }
 
 export type OrderIntent = {

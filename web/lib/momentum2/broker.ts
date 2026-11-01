@@ -6,6 +6,7 @@ const stopPrefix = (versionId: string, symbol: string) => `m2s-${versionId}-${sy
 const OPEN = new Set(['new', 'accepted', 'held', 'pending_new', 'partially_filled']);
 
 /**
+ * NIET AANSLUITEN op de route voordat de checklist in docs/momentum-2.md (echte orders) is afgewerkt.
  * Alpaca PAPER-broker. alpaca.ts weigert elke niet-paper host (assertAlpacaPaperTrading).
  * Elke versie heeft per symbool een eigen GTC-stop; een stop gaat alleen omhoog.
  */
