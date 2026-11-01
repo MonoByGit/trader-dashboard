@@ -4,30 +4,32 @@
    Alles scoped onder .m-app zodat de desktop-shell volledig ongemoeid blijft.
    ========================================================================== */
 
+html:has(.m-app) {
+  --m-safe-top: env(safe-area-inset-top, 0px);
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-tabbar-content-h: 49px;
+}
+
 html:has(.m-app),
 html:has(.m-app) body {
   margin: 0;
   overflow: hidden;
   width: 100%;
   height: 100%;
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
-  min-height: 100dvh;
   background: var(--bg-app);
   background-color: #1e1e1e;
 }
 
 .m-app {
+  /* inset:0 fills the visual viewport once (viewport-fit=cover). Avoid stacking
+     min-height:100dvh on top — on iOS PWA that often leaves a band above the
+     home indicator AND env(safe-area-inset-bottom) on the tab bar (double gap). */
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg-app);
+  background-color: #1e1e1e;
   color: var(--text-primary);
   font-family: var(--font-ui);
   overflow: hidden;
@@ -38,8 +40,8 @@ html:has(.m-app) body {
 .m-hero {
   flex: 0 0 auto;
   position: relative;
-  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
-  background: var(--bg-app);
+  padding: calc(var(--m-safe-top) + 12px) 16px 12px;
+  background: #1e1e1e;
   border-bottom: 1px solid var(--border-subtle);
   z-index: 50; /* boven de equity-drawer, zodat die er netjes onder vandaan zakt */
 }
@@ -129,7 +131,7 @@ html:has(.m-app) body {
 /* Toast — bovenin, onder de notch */
 .m-toast {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 12px);
+  top: calc(var(--m-safe-top) + 12px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -153,6 +155,7 @@ html:has(.m-app) body {
   min-height: 0; /* cruciaal: laat de flex-child krimpen i.p.v. de container uit te groeien */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* Flex reserves tab-bar space; only end padding for scroll comfort (no second safe-area). */
   padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
@@ -354,22 +357,23 @@ html:has(.m-app) body {
 .m-crit-row .label { font-family: var(--font-mono); color: var(--text-secondary); font-size: 11px; }
 .m-crit-row .state { font-weight: 600; }
 
-/* ---- Bottom tab bar (flex-footer; fixed nav causes iOS PWA gap below) ---- */
+/* ---- Bottom tab bar (flex-footer; one safe-area inset on content row only) ---- */
 .m-tabbar {
   flex: 0 0 auto;
   width: 100%;
   margin-top: auto;
-  background: var(--bg-app);
+  background: #1e1e1e;
   border-top: 1px solid var(--border-subtle);
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 30;
   box-sizing: border-box;
 }
 .m-tabbar-inner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  min-height: 49px;
+  grid-template-rows: var(--m-tabbar-content-h);
+  align-items: stretch;
+  padding-bottom: var(--m-safe-bottom);
+  box-sizing: border-box;
 }
 .m-tab {
   display: flex;
@@ -377,7 +381,8 @@ html:has(.m-app) body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 9px 0 8px;
+  padding: 0;
+  min-height: 0;
   color: var(--text-tertiary);
   font-size: 10.5px;
   font-weight: 500;
@@ -414,7 +419,7 @@ html:has(.m-app) body {
   border-top: 1px solid var(--border-strong);
   box-shadow: var(--shadow-float);
   animation: m-slide-up 220ms cubic-bezier(0.2, 0, 0, 1);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--m-safe-bottom);
 }
 .m-sheet-grip {
   width: 36px;
@@ -519,7 +524,7 @@ html:has(.m-app) body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: calc(env(safe-area-inset-top) + 12px) 12px 12px;
+  padding: calc(var(--m-safe-top) + 12px) 12px 12px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-app);
 }
@@ -656,7 +661,7 @@ html:has(.m-app) body {
 
 .m-composer-wrap {
   flex: 0 0 auto; border-top: 1px solid var(--border-subtle);
-  background: var(--bg-app); padding: 10px 14px calc(env(safe-area-inset-bottom) + 10px);
+  background: #1e1e1e; padding: 10px 14px calc(var(--m-safe-bottom) + 10px);
   display: flex; flex-direction: column; gap: 8px;
 }
 .m-action-row { display: flex; gap: 8px; }

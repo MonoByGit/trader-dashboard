@@ -64,7 +64,7 @@ export function MobileMore({ guards, onToggleKill, positions, onOpenPosition }: 
             <button className="m-back" onClick={() => setView(null)}><span style={{ display: 'flex', transform: 'rotate(180deg)' }}><Icon name="chevR" size={14} /></span> Meer</button>
             <span className="m-subtitle">{title}</span>
           </div>
-          <div className="m-scroll" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
+          <div className="m-scroll" style={{ paddingBottom: 24 }}>
             {view === 'positions' && <MobilePositions positions={positions} onOpenPosition={onOpenPosition} />}
             {view === 'reports' && <ReportsView />}
             {view === 'risk' && <RiskView guards={guards} onToggleKill={onToggleKill} />}
