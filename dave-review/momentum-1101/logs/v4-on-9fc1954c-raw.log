@@ -1,0 +1,44 @@
+
+> trader-agent@0.1.0 test
+> node --experimental-vm-modules node_modules/.bin/jest web/lib/momentum2/__dave
+
+  console.log
+    P5 {"day1":{"pos":20,"book":null,"pending":[{"symbol":"QLD","side":"buy","notionalUsd":1000,"reason":"in"}],"openOrders":null},"day2":{"pos":40,"book":20,"stopQty":20,"buys":["m5-m5-nasdaq-trend-2024-06-03-QLD-b","m5-m5-nasdaq-trend-2024-06-04-QLD-b"]}}
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-v4.test.ts:121:13)
+
+(node:992401) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  console.log
+    P6 {"endOfRun":{"pos":20,"orders":[["stop","sell","20","canceled"],["stop","sell","20","new"]],"stopMissing":null,"pending":1},"afterSettle":{"pos":20,"stopQty":20}}
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-v4.test.ts:135:13)
+
+FAIL web/lib/momentum2/__dave/dave-pr47-v4.test.ts
+  PR47 v4 (op 9fc1954c)
+    ✕ P5 (B2 rest) buy-POST time-out of 504, order staat wel bij Alpaca maar is bij het opzoeken nog niet zichtbaar: volgende dag geen tweede buy (19 ms)
+    ✓ P6 (B1 rest) exit terwijl de stop-cancel langer dan het wachtvenster (120 x 500 ms) in pending_cancel blijft: na de cancel staat er geen positie zonder stop (804 ms)
+
+  ● PR47 v4 (op 9fc1954c) › P5 (B2 rest) buy-POST time-out of 504, order staat wel bij Alpaca maar is bij het opzoeken nog niet zichtbaar: volgende dag geen tweede buy
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 20
+    Received: 40
+
+      120 |     await executeDay({ date: '2024-06-04', cfgs: [m5!], hooks: m5Hooks, lastPrice: { QLD: 50 }, barsBySymbol: qldBars, broker: makeAlpacaPaperBroker(fa, noSleep), store: mem.store, expectReal: true }).catch(() => {});
+      121 |     console.log('P5', JSON.stringify({ day1, day2: { pos: fa.pos.QLD, book: mem.book().positions.QLD?.qty ?? null, stopQty: fa.stopQty('QLD'), buys: fa.o.filter((x) => x.type === 'market').map((x) => x.client_order_id) } }));
+    > 122 |     expect(fa.pos.QLD).toBe(20);
+          |                        ^
+      123 |     expect(mem.book().positions.QLD?.qty ?? 0).toBe(20);
+      124 |     expect(fa.stopQty('QLD')).toBe(20);
+      125 |   });
+
+      at Object.<anonymous> (web/lib/momentum2/__dave/dave-pr47-v4.test.ts:122:24)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 passed, 2 total
+Snapshots:   0 total
+Time:        1.271 s
+Ran all test suites matching /web\/lib\/momentum2\/__dave/i.
+exit 1
