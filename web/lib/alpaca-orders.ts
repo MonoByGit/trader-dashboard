@@ -1,6 +1,7 @@
 import { assertAlpacaPaperTrading, alpacaTradingBaseUrl } from '../../src/alpaca/paper-host';
 import { flattenReadyAfterCancels, openSellLegsStillActive } from '../../src/trading/eod-flatten';
 import { alpaca, AlpacaOrder } from './alpaca';
+import { isForeignStrategyOrder } from '../../src/trading/strategy-tags';
 
 const BASE = alpacaTradingBaseUrl();
 
@@ -18,6 +19,7 @@ export async function cancelOpenStopTakeProfitForSymbol(symbol: string): Promise
   let cancelled = 0;
   for (const o of orders) {
     if (o.symbol !== symbol) continue;
+    if (isForeignStrategyOrder(o.client_order_id)) continue; // stops van andere strategieën blijven staan
     const open = o.status === 'new' || o.status === 'accepted' || o.status === 'held' || o.status === 'partially_filled';
     if (!open || o.side !== 'sell') continue;
     const isLeg = o.type === 'stop' || o.type === 'stop_limit' || o.type === 'limit';
@@ -51,6 +53,7 @@ async function openSellLegsForSymbol(symbol: string): Promise<Array<{ id: string
     .filter(
       (o) =>
         o.symbol === symbol &&
+        !isForeignStrategyOrder(o.client_order_id) &&
         o.side === 'sell' &&
         openStatuses.has(o.status) &&
         (o.type === 'stop' || o.type === 'stop_limit' || o.type === 'limit'),

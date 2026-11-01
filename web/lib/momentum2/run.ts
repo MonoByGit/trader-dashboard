@@ -1,19 +1,15 @@
 import { alpaca } from '../alpaca';
 import { fetchStockDailyBars } from '../alpaca-bars';
-import { loadGuardState } from '@/lib/guards/service';
 import { tradingDateEt } from '@scheduler/decide';
 import { DEFAULT_VERSIONS } from '../../../src/momentum2/config';
 import { decideDay, executeDay } from '../../../src/momentum2/live';
 import type { Bar } from '../../../src/momentum2/types';
-import { alpacaPaperBroker, shadowBroker } from './broker';
+import { resolveMomentum2Mode } from '../../../src/momentum2/mode';
+import { shadowBroker } from './broker';
 import { deepseekVeto } from './deepseek-veto';
 import { postgresStore } from './store';
 
 export type Momentum2Step = 'decide' | 'execute';
-
-/** Uit tenzij MOMENTUM2_ENABLED=1. Echte papierorders alleen met MOMENTUM2_DRY_RUN=0; anders schaduwboek. */
-export const momentum2Enabled = () => process.env.MOMENTUM2_ENABLED === '1';
-export const momentum2Shadow = () => process.env.MOMENTUM2_DRY_RUN !== '0';
 
 async function loadBars(symbols: string[]) {
   const raw = await fetchStockDailyBars({ symbols, lookbackCalendarDays: 420, adjustment: 'split' });
@@ -23,12 +19,10 @@ async function loadBars(symbols: string[]) {
 }
 
 export async function runMomentum2(step: Momentum2Step, nowMs = Date.now()): Promise<Record<string, unknown>> {
-  if (!momentum2Enabled()) return { skipped: true, reason: 'MOMENTUM2_ENABLED staat niet aan' };
-  const shadow = momentum2Shadow();
-  if (!shadow) {
-    const g = await loadGuardState();
-    if (g.emergencyStop || !g.tradingEnabled) return { skipped: true, reason: 'noodstop of handel uit' };
-  }
+  // Alleen schaduwmodus: er bestaat in deze versie geen pad naar echte orders (zie mode.ts).
+  const mode = resolveMomentum2Mode(process.env);
+  if (!mode.run) return { skipped: true, reason: mode.reason };
+  const shadow = true;
   const cfgs = DEFAULT_VERSIONS;
   const symbols = Array.from(new Set(['SPY', ...cfgs.flatMap((c) => c.universe)]));
   const store = postgresStore();
@@ -52,7 +46,7 @@ export async function runMomentum2(step: Momentum2Step, nowMs = Date.now()): Pro
     const px = (q.ap && q.bp ? (q.ap + q.bp) / 2 : q.ap || q.bp) || 0;
     if (px > 0) lastPrice[s] = px;
   }
-  const broker = shadow ? shadowBroker(lastPrice) : alpacaPaperBroker();
+  const broker = shadowBroker(lastPrice);
   const { trades } = await executeDay({ date: today, cfgs, lastPrice, broker, store });
   return { step, shadow, date: today, trades: trades.length };
 }

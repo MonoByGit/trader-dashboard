@@ -4,6 +4,8 @@ import { logGuardEvent } from '@/lib/guards/service';
 import { retryAsync } from '../../src/trading/eod-close-retry';
 import strategy from '@/strategy.json';
 import { etfClientOrderId } from '@/lib/etf-order-id';
+import { m1CloseQty } from '../../src/trading/strategy-tags';
+import { foreignQtyForSymbol } from '@/lib/momentum2/ownership';
 
 export type EodFlattenResult =
   | { ok: true; symbol: string }
@@ -77,6 +79,27 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
   }
 
   try {
+    // Posities van andere strategieën (Momentum 2/3/4) blijven staan: sluit alleen het M1-deel.
+    const foreign = await foreignQtyForSymbol(symbol);
+    if (foreign > 0) {
+      const pos = await getEtfPosition(symbol);
+      const qty = m1CloseQty(pos ? parseFloat(pos.qty) : 0, foreign);
+      if (qty > 0) {
+        await retryAsync(
+          () =>
+            alpaca.placeOrder({
+              symbol,
+              qty,
+              side: 'sell',
+              type: 'market',
+              time_in_force: 'day',
+              client_order_id: etfClientOrderId({ routine: 'eod', symbol, side: 'sell', tag: 'partial' }),
+            }),
+          { attempts: 3, delayMs: 400, backoff: 1.5 },
+        );
+      }
+      return { ok: true, symbol };
+    }
     await retryAsync(() => alpaca.closePosition(symbol), {
       attempts: 3,
       delayMs: 400,
