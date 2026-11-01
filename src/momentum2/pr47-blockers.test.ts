@@ -944,3 +944,96 @@ describe('PR 47 ronde 4, extra randgevallen', () => {
     expect(clock).toBeLessThanOrEqual(60_000); // budget plus hooguit één lopende call
   });
 });
+
+describe('PR 47 ronde 5 (review Dave op 2651b41): B6 stopwacht volgt ook open sells', () => {
+  const guard = (cfg: VersionConfig, fake: FakeAlpaca, mem: ReturnType<typeof memStore>, date = '2024-06-03') =>
+    repairMissingStops({
+      date, cfgs: [cfg], hooks: fixedStop(m5Hooks, { v: 40 }),
+      broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store,
+    });
+  const stopQty = (fake: FakeAlpaca) => fake.openStops('QLD').reduce((s, o) => s + Number(o.qty), 0);
+  const marketSells = (fake: FakeAlpaca) => fake.orders_.filter((o) => o.type === 'market' && o.side === 'sell');
+
+  async function partialSell() {
+    const x = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    x.fake.seedPosition('QLD', 20);
+    x.fake.prices.QLD = 48;
+    await x.broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: x.prefix });
+    x.fake.marketFillRatio = 0.25; // vult 5 van 20, rest blijft open
+    x.mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 48 },
+      broker: x.broker, store: x.mem.store, expectReal: true,
+    });
+    return x;
+  }
+
+  it('V4: sell vult 5 van 20 en expiret: de wacht boekt 5, haalt de sell uit openOrders en zet direct een stop op 15', async () => {
+    const { fake, mem } = await partialSell();
+    expect(mem.book().positions.QLD!.qty).toBe(15);
+    expect(stopQty(fake)).toBe(0); // zonder stop: de sell hield de stukken vast
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(true); // open sell = werk voor de wacht
+    for (const o of fake.orders_) if (o.type === 'market' && o.status === 'partially_filled') o.status = 'expired';
+
+    const r = await guard(m5Cfg!, fake, mem);
+    expect(r.failed).toEqual([]);
+    expect(fake.pos.QLD).toBe(15);
+    expect(mem.book().positions.QLD!.qty).toBe(15);
+    expect(stopQty(fake)).toBe(15);
+    expect(fake.openStops('QLD')).toHaveLength(1);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(0);
+    expect(mem.book().stopMissing?.QLD).toBeUndefined();
+    expect(marketSells(fake)).toHaveLength(1); // de wacht verkoopt nooit zelf
+    expect(mem.pending()).toEqual([expect.objectContaining({ symbol: 'QLD', side: 'sell', qty: 15 })]); // exit blijft staan
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(false);
+  });
+
+  it('V4: idempotent bij herhaalde en parallelle wachten, en de volgende executeDay verkoopt de rest één keer', async () => {
+    const { fake, broker, mem } = await partialSell();
+    for (const o of fake.orders_) if (o.type === 'market' && o.status === 'partially_filled') o.status = 'expired';
+    await guard(m5Cfg!, fake, mem);
+    await guard(m5Cfg!, fake, mem);
+    expect(mem.pending()).toHaveLength(1);
+    expect(mem.book().positions.QLD!.qty).toBe(15);
+    expect(fake.openStops('QLD')).toHaveLength(1);
+    fake.marketFillRatio = 1;
+    await executeDay({
+      date: '2024-06-04', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 48 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(fake.pos.QLD ?? 0).toBe(0);
+    expect(mem.book().positions.QLD).toBeUndefined();
+    expect(marketSells(fake)).toHaveLength(2);
+    expect(fake.openStops('QLD')).toHaveLength(0);
+  });
+
+  it('sell loopt nog (deels gevuld): deel geboekt, niets geplaatst en niets verkocht, sell blijft gevolgd', async () => {
+    const { fake, mem } = await partialSell();
+    const calls = fake.calls.filter((c) => c.startsWith('place')).length;
+    await guard(m5Cfg!, fake, mem);
+    expect(fake.calls.filter((c) => c.startsWith('place')).length).toBe(calls);
+    expect(mem.book().positions.QLD!.qty).toBe(15);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+    expect(mem.pending()).toHaveLength(0);
+  });
+
+  it('sell verloopt zonder fill: positie houdt zijn volle stop, exit blijft staan', async () => {
+    const x = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    x.fake.seedPosition('QLD', 20);
+    x.fake.prices.QLD = 48;
+    await x.broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: x.prefix });
+    x.fake.marketFillRatio = 0;
+    x.mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 48 },
+      broker: x.broker, store: x.mem.store, expectReal: true,
+    });
+    for (const o of x.fake.orders_) if (o.type === 'market' && o.status !== 'filled') o.status = 'expired';
+    await guard(m5Cfg!, x.fake, x.mem);
+    expect(x.mem.book().positions.QLD!.qty).toBe(20);
+    expect(stopQty(x.fake)).toBe(20);
+    expect(marketSells(x.fake)).toHaveLength(1);
+    expect(x.mem.pending()).toHaveLength(1);
+  });
+});

@@ -176,7 +176,7 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
   hooks: StrategyHooks<C>;
   barsBySymbol?: Record<string, Bar[]>;
   broker: MomentumBroker;
-  store: Pick<Store, 'loadBook' | 'saveBook' | 'logDecision' | 'logTrade'>;
+  store: Pick<Store, 'loadBook' | 'saveBook' | 'logDecision' | 'logTrade' | 'loadPending' | 'savePending'>;
   foreignQty?: ForeignQtyFn;
 }): Promise<{ repaired: string[]; failed: string[] }> {
   const repaired: string[] = [];
@@ -193,30 +193,55 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
       const record = async (t: TradeLogRow | null) => {
         if (t) await input.store.logTrade(cfg.id, t);
       };
+      const requeue: OrderIntent[] = [];
       for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
-        if (meta.side !== 'buy') continue;
         let f: Fill | null;
         try {
           f = await input.broker.orderFill({ orderId });
         } catch {
           continue; // status onbekend: volgende tick opnieuw
         }
-        if (!f || f.missing || f.qty <= 0) {
-          // terminaal zonder fill beslist executeDay (requeue); hier niets doen
+        if (f?.missing) continue; // nog niet te vinden: executeDay beslist, de wacht plaatst nooit een order
+        const sym = meta.symbol;
+        if (meta.side === 'buy') {
+          if (!f || f.qty <= 0) continue; // terminaal zonder fill beslist executeDay (requeue)
+          const before = book.positions[sym]?.qty ?? 0;
+          await applyFillToBook(book, f, meta, input.date, record);
+          // een cid-marker wordt vervangen door het echte order-id (of verdwijnt als de order terminaal is)
+          if (orderId !== f.orderId && book.openOrders) delete book.openOrders[orderId];
+          if ((book.positions[sym]?.qty ?? 0) > before) {
+            (book.stopMissing ??= {})[sym] = input.date; // stop moet naar de volle stand
+            await input.store.logDecision({
+              date: input.date, versionId: cfg.id, kind: 'stop', symbol: sym,
+              detail: `stopwacht: buy ${sym} gevuld (${f.qty}${f.done === false ? ', deels' : ''}), stop naar de volle stand`,
+            });
+          }
           continue;
         }
-        const before = book.positions[meta.symbol]?.qty ?? 0;
-        await applyFillToBook(book, f, meta, input.date, record);
-        // een cid-marker wordt vervangen door het echte order-id (of verdwijnt als de order terminaal is)
-        if (orderId !== f.orderId && book.openOrders) delete book.openOrders[orderId];
-        if ((book.positions[meta.symbol]?.qty ?? 0) > before) {
-          (book.stopMissing ??= {})[meta.symbol] = input.date; // stop moet naar de volle stand
+        // Sell (exit): het deel dat gevuld is komt in het boek. Is de sell beëindigd (gevuld, geannuleerd,
+        // verlopen) en staat er nog een positie, dan komt hij uit openOrders en krijgt de rest direct een
+        // disaster-stop. De wacht verkoopt nooit zelf: de exit gaat als intent terug naar executeDay.
+        // f = null: terminaal zonder fill (verlopen of geannuleerd)
+        if (f) await applyFillToBook(book, f, meta, input.date, record);
+        if (f?.done === false) {
+          if (orderId !== f.orderId && book.openOrders) delete book.openOrders[orderId];
+          continue; // loopt nog: de stukken zitten in de sell, geen stop mogelijk
+        }
+        if (book.openOrders) {
+          delete book.openOrders[orderId];
+          if (f) delete book.openOrders[f.orderId];
+        }
+        const left = book.positions[sym];
+        if (left) {
+          if (meta.requeue) requeue.push({ ...withoutCid(meta.requeue), qty: left.qty });
+          (book.stopMissing ??= {})[sym] = input.date;
           await input.store.logDecision({
-            date: input.date, versionId: cfg.id, kind: 'stop', symbol: meta.symbol,
-            detail: `stopwacht: buy ${meta.symbol} gevuld (${f.qty}${f.done === false ? ', deels' : ''}), stop naar de volle stand`,
+            date: input.date, versionId: cfg.id, kind: 'stop', symbol: sym,
+            detail: `stopwacht: sell ${sym} beëindigd (${f?.qty ?? 0} verkocht), rest ${left.qty} krijgt direct een stop`,
           });
         }
       }
+      if (requeue.length) await input.store.savePending(cfg.id, [...(await input.store.loadPending(cfg.id)), ...requeue]);
       await input.store.saveBook(book); // fills eerst vastleggen, ook als de stop hierna faalt
     }
     if (!book.stopMissing) continue;
@@ -257,10 +282,10 @@ export async function hasMissingStops(cfgs: VersionConfig[], store: Pick<Store, 
   return false;
 }
 
-/** Werk voor de stopwacht: een gemarkeerde ontbrekende stop, of een open buy / cid-marker die nog kan vullen. */
+/** Werk voor de stopwacht: een gemarkeerde ontbrekende stop, of een open order (buy, sell, cid-marker) die nog kan vullen of aflopen. */
 function bookNeedsGuard(b: VersionBook): boolean {
   if (b.stopMissing && Object.keys(b.stopMissing).length) return true;
-  return Object.values(b.openOrders ?? {}).some((m) => m.side === 'buy');
+  return Object.keys(b.openOrders ?? {}).length > 0; // open buys, cid-markers en open sells
 }
 
 function bookKindMismatch(book: VersionBook | null, expectReal: boolean | undefined): string | null {
