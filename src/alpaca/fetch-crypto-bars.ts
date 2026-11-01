@@ -1,6 +1,6 @@
-import { toTradingDateString } from '../dates/trading-date';
-import { tradingDateEt } from '../scheduler/decide';
-import { buildCryptoBarsListUrl } from './crypto-bars-query';
+import { toTradingDateString } from '../dates/trading-date.js';
+import { tradingDateEt } from '../scheduler/decide.js';
+import { buildCryptoBarsListUrl } from './crypto-bars-query.js';
 
 export interface AlpacaBar {
   t: string;

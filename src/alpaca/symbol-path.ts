@@ -9,6 +9,11 @@ export function alpacaPositionSymbol(symbol: string): string {
   return trimmed.replaceAll('/', '');
 }
 
+/** Compare Alpaca position symbols (BTCUSD) with watchlist pairs (BTC/USD). */
+export function alpacaSymbolsEqual(a: string, b: string): boolean {
+  return alpacaPositionSymbol(a) === alpacaPositionSymbol(b);
+}
+
 export function alpacaPositionCloseUrl(baseUrl: string, symbol: string): string {
   const base = baseUrl.replace(/\/$/, '');
   const positionSymbol = alpacaPositionSymbol(symbol);

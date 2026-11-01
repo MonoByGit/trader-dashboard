@@ -1,5 +1,6 @@
 import { dbQuery, dbRun, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
+import { openOrderMatchesSymbol } from '../../../src/crypto/symbol-match';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
 
@@ -56,7 +57,10 @@ export async function enforceSoftwareCryptoStops(
 
   const open = await alpaca.openOrders();
   const hasStop = open.some(
-    (o) => o.symbol === symbol && o.side === 'sell' && (o.type === 'stop_limit' || o.type === 'stop'),
+    (o) =>
+      openOrderMatchesSymbol(o, symbol) &&
+      o.side === 'sell' &&
+      (o.type === 'stop_limit' || o.type === 'stop'),
   );
   if (hasStop) return { triggered: false };
 
