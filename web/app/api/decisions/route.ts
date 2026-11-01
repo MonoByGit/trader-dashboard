@@ -6,16 +6,23 @@ const memStore: unknown[] = [];
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const limit = parseInt(searchParams.get('limit') ?? '100');
+  const assetClass = searchParams.get('asset_class');
 
   if (!hasDb()) {
     return NextResponse.json(memStore.slice(-limit).reverse());
   }
 
   await initDb();
+  const params: unknown[] = [limit];
+  let where = '';
+  if (assetClass === 'etf' || assetClass === 'crypto') {
+    where = ' WHERE asset_class = $2';
+    params.push(assetClass);
+  }
   const rows = await dbQuery(
-    `SELECT id, ts, routine, symbol, decision, criteria, rationale, agent_note, confidence, order_id
-     FROM decisions ORDER BY ts DESC LIMIT $1`,
-    [limit]
+    `SELECT id, ts, routine, symbol, decision, criteria, rationale, agent_note, confidence, order_id, asset_class, strategy_version
+     FROM decisions${where} ORDER BY ts DESC LIMIT $1`,
+    params,
   );
   return NextResponse.json(rows);
 }

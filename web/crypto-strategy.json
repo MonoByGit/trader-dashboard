@@ -1,0 +1,20 @@
+{
+  "name": "Momentum Crypto",
+  "version": "1.0.0",
+  "description": "24/7 paper crypto sleeve — majors only, stricter guards than ETF.",
+  "asset_class": "crypto",
+  "symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "LTC/USD"],
+  "rules": {
+    "max_positions": 4,
+    "position_size_pct": 0.05,
+    "hold_overnight": true,
+    "hard_stop_pct": 0.08,
+    "take_profit_pct": 0.12,
+    "rsi_min": 45,
+    "rsi_max": 70,
+    "volume_ratio_min": 1.0
+  },
+  "schedule_utc": {
+    "scan_interval_hours": 2
+  }
+}

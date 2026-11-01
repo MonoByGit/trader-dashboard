@@ -29,6 +29,7 @@ import { postMortemFromEodClose, postMortemFromFilledSell } from '@/lib/postmort
 import { cancelOpenStopTakeProfitForSymbol, isStopFill, isTakeProfitFill } from '@/lib/alpaca-orders';
 import { runWeeklyReview } from '@/lib/weekly-review';
 import strategy from '@/strategy.json';
+import { filterByAssetClass } from '@/lib/asset-class';
 
 async function liveStrategy(): Promise<StrategyContent> {
   try {
@@ -165,13 +166,14 @@ async function runMarketOpen() {
     return { skipped: true, reason };
   }
 
-  const openSymbols = positions.map(p => p.symbol);
-  const totalExposure = positions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+  const etfPositions = filterByAssetClass(positions, 'etf');
+  const openSymbols = etfPositions.map(p => p.symbol);
+  const totalExposure = etfPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
   const dailyTrades = await countDailyTrades();
   const config = await getEffectiveGuardConfig();
 
   if (openSymbols.length >= config.maxPositions) {
-    return { skipped: true, reason: 'Max positions reached' };
+    return { skipped: true, reason: 'Max ETF positions reached' };
   }
 
   const barsData = await alpaca.bars(watchlist, '1Day', 30);
@@ -229,7 +231,7 @@ async function runMarketOpen() {
     c.qty = sizing.shares;
 
     const orderValue = c.qty * lastPrice;
-    const symbolExposure = positions
+    const symbolExposure = etfPositions
       .filter(p => p.symbol === c.symbol)
       .reduce((s, p) => s + parseFloat(p.market_value), 0);
     const limits = await checkOrderAgainstLimits({
@@ -350,7 +352,8 @@ async function runMidday() {
 
 async function runEod() {
   await notifyStopFills();
-  const [clock, positions] = await Promise.all([alpaca.clock(), alpaca.positions()]);
+  const [clock, allPositions] = await Promise.all([alpaca.clock(), alpaca.positions()]);
+  const positions = filterByAssetClass(allPositions, 'etf');
   const guardConfig = loadGuardConfig();
   const eodPlan = planEodClose(clock, positions.length > 0, guardConfig);
   const closed: string[] = [];
@@ -449,9 +452,16 @@ async function runEod() {
   }).catch(() => {});
 
   await syncRecentOrders().catch((e) => console.error('[syncOrders]', e));
-  await writeDailySnapshot().catch((e) => console.error('[dailySnapshot]', e));
+  const snap = await writeDailySnapshot().catch((e) => {
+    console.error('[dailySnapshot]', e);
+    return null;
+  });
 
-  return { routine: 'eod', closed, equity, eodPlan: eodPlan.action, report: report.slice(0, 200) };
+  const sleeveNote = snap?.sleeves
+    ? `\nSleeves: ETF ${snap.sleeves.etf.equityUsd.toFixed(0)} (${snap.sleeves.etf.dailyReturnPct?.toFixed(2) ?? '—'}% vs SPY ${snap.sleeves.etf.benchmarkDailyReturnPct?.toFixed(2) ?? '—'}%) · Crypto ${snap.sleeves.crypto.equityUsd.toFixed(0)} (${snap.sleeves.crypto.dailyReturnPct?.toFixed(2) ?? '—'}% vs BTC ${snap.sleeves.crypto.benchmarkDailyReturnPct?.toFixed(2) ?? '—'}%) · Totaal ${snap.equity.toFixed(0)}.`
+    : '';
+
+  return { routine: 'eod', closed, equity, eodPlan: eodPlan.action, report: report.slice(0, 200), sleeves: snap?.sleeves ?? null, sleeveNote };
 }
 
 registerRoutineHandler('premarket', runPremarket);

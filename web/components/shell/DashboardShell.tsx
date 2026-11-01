@@ -22,10 +22,12 @@ import { LessonsPage } from '@/components/pages/LessonsPage';
 import { ReportsPage } from '@/components/pages/ReportsPage';
 import { HistoryPage } from '@/components/pages/HistoryPage';
 import { BacktestsPage } from '@/components/pages/BacktestsPage';
+import { CryptoPage } from '@/components/pages/CryptoPage';
 
 const PAGES = [
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
-  { id: 'positions', label: 'Positions', icon: 'positions' },
+  { id: 'crypto', label: 'Crypto', icon: 'bolt' },
+  { id: 'positions', label: 'ETF Positions', icon: 'positions' },
   { id: 'decisions', label: 'Decision Log', icon: 'log' },
   { id: 'conversations', label: 'Conversations', icon: 'chat' },
   { id: 'routines', label: 'Routines', icon: 'routines' },
@@ -273,6 +275,7 @@ export function DashboardShell() {
   const currentPage = (() => {
     switch (page) {
       case 'overview': return <OverviewPage portfolio={portfolio} guards={guards} marketOpen={live.data?.marketOpen ?? null} accountLoading={accountLoading} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect}/>;
+      case 'crypto': return <CryptoPage/>;
       case 'positions': return <PositionsPage portfolio={portfolio} onClose={handleClosePosition}/>;
       case 'decisions': return <DecisionLogPage onOpenDecision={setSelectedDecision}/>;
       case 'conversations': return <ConversationsPage pendingThread={pendingKickoffThread} onKickoffHandled={() => setPendingKickoffThread(null)}/>;

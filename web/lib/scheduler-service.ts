@@ -1,8 +1,11 @@
 import '@/lib/cron-routines';
+import '@/lib/crypto/routines';
+import { decideDueCryptoRoutines } from '@scheduler/decide-crypto';
+import { loadCryptoGuardConfig } from '@guards/crypto-config';
 import { decideDueRoutines, tradingDateEt, type CalendarDay } from '@scheduler/decide';
 import { alpaca } from './alpaca';
 import { dispatchRoutine } from './routine-dispatch';
-import { listRunsForTradingDate } from './routine-runs';
+import { listRecentRunsByRoutine, listRunsForTradingDate } from './routine-runs';
 
 function weekBoundsEt(nowMs: number): { start: string; end: string } {
   const tradingDate = tradingDateEt(nowMs);
@@ -37,12 +40,26 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
     finished_at: r.finished_at,
   }));
 
-  const due = decideDueRoutines({
+  const dueEtf = decideDueRoutines({
     nowMs,
     calendarToday,
     calendarThisWeek,
     runs: runRecords,
   });
+
+  const cryptoCfg = loadCryptoGuardConfig();
+  const cryptoRuns = await listRecentRunsByRoutine('crypto-scan', 20);
+  const dueCrypto = decideDueCryptoRoutines({
+    nowMs,
+    runs: cryptoRuns.map((r) => ({
+      routine: r.routine,
+      status: r.status === 'running' ? 'failed' : r.status,
+      finished_at: r.finished_at,
+    })),
+    config: { tickIntervalHours: cryptoCfg.tickIntervalHours },
+  });
+
+  const due = [...dueEtf, ...dueCrypto];
 
   const results: Record<string, unknown> = {};
   for (const routine of due) {

@@ -16,15 +16,20 @@ export interface RoutineRunRow {
   error_message: string | null;
 }
 
+function assetClassForRoutine(routine: string): 'etf' | 'crypto' {
+  return routine.startsWith('crypto') ? 'crypto' : 'etf';
+}
+
 export async function startRoutineRun(routine: string, tradingDate?: string): Promise<string | null> {
   if (!hasDb()) return null;
   await ensureSchema();
   const id = `run-${routine}-${Date.now()}`;
   const day = tradingDate ?? tradingDateEt(Date.now());
+  const assetClass = assetClassForRoutine(routine);
   await dbRun(
-    `INSERT INTO routine_runs (id, routine, trading_date, started_at, status)
-     VALUES ($1, $2, $3::date, NOW(), 'running')`,
-    [id, routine, day],
+    `INSERT INTO routine_runs (id, routine, trading_date, started_at, status, asset_class)
+     VALUES ($1, $2, $3::date, NOW(), 'running', $4)`,
+    [id, routine, day, assetClass],
   );
   return id;
 }
@@ -62,5 +67,15 @@ export async function listRecentRuns(limit = 100): Promise<RoutineRunRow[]> {
     `SELECT id, routine, trading_date::text AS trading_date, started_at, finished_at, status, skip_reason, duration_ms, error_message
      FROM routine_runs ORDER BY started_at DESC LIMIT $1`,
     [limit],
+  );
+}
+
+export async function listRecentRunsByRoutine(routine: string, limit = 20): Promise<RoutineRunRow[]> {
+  if (!hasDb()) return [];
+  await ensureSchema();
+  return dbQuery<RoutineRunRow>(
+    `SELECT id, routine, trading_date::text AS trading_date, started_at, finished_at, status, skip_reason, duration_ms, error_message
+     FROM routine_runs WHERE routine = $1 ORDER BY started_at DESC LIMIT $2`,
+    [routine, limit],
   );
 }

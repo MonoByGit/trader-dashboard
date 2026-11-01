@@ -31,6 +31,11 @@
   --accent-dim: rgba(13, 153, 255, 0.14);
   --accent-hover: #2eacff;
 
+  --sleeve-etf: #0d99ff;
+  --sleeve-etf-dim: rgba(13, 153, 255, 0.12);
+  --sleeve-crypto: #a855f7;
+  --sleeve-crypto-dim: rgba(168, 85, 247, 0.14);
+
   --pos: #14ae5c;
   --pos-dim: rgba(20, 174, 92, 0.14);
   --neg: #f24822;
@@ -1283,5 +1288,45 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 /* On small screens, keep the popover within the viewport edges. */
 @media (max-width: 640px) {
   .tip-pop { max-width: 220px; }
+}
+
+.crypto-page .sleeve-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.crypto-page .sleeve-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sleeve-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-right: 8px;
+}
+.sleeve-badge.etf {
+  background: var(--sleeve-etf-dim);
+  color: var(--sleeve-etf);
+}
+.sleeve-badge.crypto {
+  background: var(--sleeve-crypto-dim);
+  color: var(--sleeve-crypto);
+}
+.crypto-page .sleeve-card.crypto {
+  border-left: 3px solid var(--sleeve-crypto);
+}
+.crypto-page .grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 

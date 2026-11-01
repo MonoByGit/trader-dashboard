@@ -18,11 +18,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'periodStart en periodEnd zijn verplicht' }, { status: 400 });
     }
 
+    const assetClass = body.assetClass === 'crypto' ? 'crypto' : 'etf';
+    const barMode =
+      body.params?.barMode === 'hourly' || body.barMode === 'hourly' ? 'hourly' : 'daily';
+
     const run = await startBacktestRun({
       periodStart,
       periodEnd,
       strategyVersion: body.strategyVersion,
-      params: { ...DEFAULT_BACKTEST_PARAMS, ...body.params },
+      strategyVersionId: body.strategyVersionId ?? body.params?.strategyVersionId,
+      assetClass,
+      params: {
+        ...DEFAULT_BACKTEST_PARAMS,
+        ...body.params,
+        barMode,
+        assetClass,
+      },
     });
 
     return NextResponse.json(run, { status: 202 });

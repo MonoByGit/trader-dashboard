@@ -22,6 +22,7 @@
       "@guards/*": ["../src/guards/*"],
       "@scheduler/*": ["../src/scheduler/*"],
       "@scheduler/decide": ["../src/scheduler/decide.ts"],
+      "@scheduler/decide-crypto": ["../src/scheduler/decide-crypto.ts"],
       "@snapshots/*": ["../src/snapshots/*"],
       "@snapshots/returns": ["../src/snapshots/returns.ts"],
       "@ai-cost/*": ["../src/ai-cost/*"],
