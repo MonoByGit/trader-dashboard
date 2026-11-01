@@ -52,6 +52,9 @@ export const alpaca = {
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
   openOrders: (limit = 100) =>
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
+  getOrder: (orderId: string) => get<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`),
+  cancelOrder: (orderId: string) =>
+    del<unknown>(`${BASE}/v2/orders/${orderId}`, { trading: true }),
   placeOrder: (o: AlpacaOrderRequest) =>
     post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),

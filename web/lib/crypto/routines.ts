@@ -15,7 +15,7 @@ import {
 import { syncRecentOrders } from '@/lib/orders-store';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
-import { enforceSoftwareCryptoStops, placeCryptoStopLimit, saveCryptoStop } from './stops';
+import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy } from './stops';
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
@@ -36,12 +36,32 @@ function buildSnapshots(
     .filter(Boolean);
 }
 
+export async function runCryptoSoftwareStopsForPositions(
+  cryptoPositions: { symbol: string; current_price: string }[],
+  bars: Record<string, { c: number; v: number }[]>,
+  watchlistSymbols: string[],
+): Promise<void> {
+  for (const p of cryptoPositions) {
+    const barKey = watchlistSymbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
+    const b = bars[barKey] ?? [];
+    const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
+    await enforceSoftwareCryptoStops(p.symbol, last);
+  }
+}
+
 async function runCryptoScan(): Promise<Record<string, unknown>> {
+  const [account, positions] = await Promise.all([alpaca.account(), alpaca.positions()]);
+  const symbols = getCryptoSymbols();
+  const barsData = await alpaca.cryptoBars(symbols, '1Day', 40);
+  const bars = barsData.bars ?? {};
+  const cryptoPositions = filterByAssetClass(positions, 'crypto');
+
+  await runCryptoSoftwareStopsForPositions(cryptoPositions, bars, symbols);
+
   if (!(await isCryptoModuleEnabled())) {
     return { skipped: true, reason: 'Crypto module disabled', asset_class: 'crypto' };
   }
 
-  const [account, positions] = await Promise.all([alpaca.account(), alpaca.positions()]);
   const equity = parseFloat(account.equity);
   const cash = parseFloat(account.cash);
   const guardState = await refreshCircuitBreaker(equity);
@@ -60,18 +80,6 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         ? 'Global circuit breaker'
         : 'Kill switch activated';
     return { skipped: true, reason, asset_class: 'crypto' };
-  }
-
-  const cryptoPositions = filterByAssetClass(positions, 'crypto');
-  const symbols = getCryptoSymbols();
-  const barsData = await alpaca.cryptoBars(symbols, '1Day', 40);
-  const bars = barsData.bars ?? {};
-
-  for (const p of cryptoPositions) {
-    const barKey = symbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
-    const b = bars[barKey] ?? [];
-    const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
-    await enforceSoftwareCryptoStops(p.symbol, last);
   }
 
   const sleeves = await sleevesFromAlpacaLive(equity, cash, positions);
@@ -191,11 +199,8 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         type: 'market',
         time_in_force: 'gtc',
       });
-      await saveCryptoStop(c.symbol, stopPrice, qty);
-      await placeCryptoStopLimit(c.symbol, qty, stopPrice).catch((e) => {
-        console.error('[crypto stop-limit]', e);
-      });
-      orders.push({ symbol: c.symbol, qty, orderId: order.id });
+      const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
+      orders.push({ symbol: c.symbol, qty: protection.qty, orderId: order.id });
       await saveDecision({
         routine: 'crypto-scan',
         symbol: c.symbol,

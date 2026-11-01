@@ -6,6 +6,12 @@ import {
   cryptoStopStorageKey,
   legacyCryptoStopStorageKeys,
 } from '../../../src/crypto/stop-storage-key';
+import { resolveCryptoPositionSellQty } from '../../../src/crypto/buy-fill-qty';
+import {
+  brokerStopOrdersBlockSoftwareBackup,
+  stopOrderNeedsSoftwareBackup,
+} from '../../../src/crypto/stop-order-backup';
+import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
 
@@ -76,6 +82,27 @@ export async function placeCryptoStopLimit(
   return order.id;
 }
 
+/** Poll buy fill / position and attach software + broker stops using actual qty (B-5). */
+export async function protectCryptoPositionAfterBuy(
+  symbol: string,
+  buyOrderId: string,
+  stopPrice: number,
+): Promise<{ qty: number; stopLimitOrderId: string | null }> {
+  const qty = await resolveCryptoPositionSellQty(symbol, buyOrderId, {
+    getOrder: (id) => alpaca.getOrder(id),
+    positions: () => alpaca.positions(),
+    symbolsEqual: alpacaSymbolsEqual,
+  });
+  await saveCryptoStop(symbol, stopPrice, qty);
+  try {
+    const stopLimitOrderId = await placeCryptoStopLimit(symbol, qty, stopPrice);
+    return { qty, stopLimitOrderId };
+  } catch (e) {
+    await logGuardEvent('crypto_stop_limit_fail', String(e), { symbol, buyOrderId, qty });
+    throw e;
+  }
+}
+
 /** Tick backup if price breaches stored stop. */
 export async function enforceSoftwareCryptoStops(
   symbol: string,
@@ -85,13 +112,22 @@ export async function enforceSoftwareCryptoStops(
   if (!stop || lastPrice > stop.stopPrice) return { triggered: false };
 
   const open = await alpaca.openOrders();
-  const hasStop = open.some(
+  const symbolStops = open.filter(
     (o) =>
       openOrderMatchesSymbol(o, symbol) &&
       o.side === 'sell' &&
       (o.type === 'stop_limit' || o.type === 'stop'),
   );
-  if (hasStop) return { triggered: false };
+
+  if (brokerStopOrdersBlockSoftwareBackup(symbolStops, lastPrice, stop.stopPrice)) {
+    return { triggered: false };
+  }
+
+  for (const o of symbolStops) {
+    if (stopOrderNeedsSoftwareBackup(o, lastPrice)) {
+      await alpaca.cancelOrder(o.id);
+    }
+  }
 
   await logGuardEvent('crypto_software_stop', `Price ${lastPrice} <= stop ${stop.stopPrice}`, { symbol });
   const order = await alpaca.placeOrder({

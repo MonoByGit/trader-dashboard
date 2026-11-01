@@ -26,12 +26,24 @@ await jest.unstable_mockModule('@/lib/migrate', () => ({
 }));
 
 const placeOrder = jest.fn<() => Promise<{ id: string }>>();
-const openOrders = jest.fn<() => Promise<{ symbol: string; side: string; type: string }[]>>();
+const openOrders = jest.fn<
+  () => Promise<
+    { id: string; symbol: string; side: string; type: string; status: string; limit_price: string | null }[]
+  >
+>();
+const cancelOrder = jest.fn<() => Promise<unknown>>();
+const getOrder = jest.fn<
+  () => Promise<{ status: string; filled_qty: string }>
+>();
+const positions = jest.fn<() => Promise<{ symbol: string; qty: string }[]>>();
 
 await jest.unstable_mockModule('@/lib/alpaca', () => ({
   alpaca: {
     placeOrder,
     openOrders,
+    cancelOrder,
+    getOrder,
+    positions,
   },
 }));
 
@@ -39,13 +51,14 @@ await jest.unstable_mockModule('@/lib/guards/service', () => ({
   logGuardEvent: jest.fn(async () => {}),
 }));
 
-const { saveCryptoStop, enforceSoftwareCryptoStops } = await import('./stops');
+const { saveCryptoStop, enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy } = await import('./stops');
 
 describe('enforceSoftwareCryptoStops', () => {
   beforeEach(() => {
     store.clear();
     placeOrder.mockReset();
     openOrders.mockReset();
+    cancelOrder.mockReset();
     openOrders.mockResolvedValue([]);
     placeOrder.mockResolvedValue({ id: 'mkt-sell-1' });
   });
@@ -88,13 +101,66 @@ describe('enforceSoftwareCryptoStops', () => {
     );
   });
 
-  it('skips software stop when Alpaca already has a stop-limit open', async () => {
+  it('does not fire when a working stop-limit still protects above the market (B-6)', async () => {
     await saveCryptoStop('BTC/USD', 90_000, 0.01);
-    openOrders.mockResolvedValue([{ symbol: 'BTCUSD', side: 'sell', type: 'stop_limit' }]);
+    openOrders.mockResolvedValue([
+      {
+        id: 'sl-1',
+        symbol: 'BTCUSD',
+        side: 'sell',
+        type: 'stop_limit',
+        status: 'accepted',
+        limit_price: '89550',
+      },
+    ]);
 
-    const result = await enforceSoftwareCryptoStops('BTCUSD', 89_000);
+    const result = await enforceSoftwareCryptoStops('BTCUSD', 89_600);
 
     expect(result).toEqual({ triggered: false });
     expect(placeOrder).not.toHaveBeenCalled();
+    expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('cancels a gapped stop-limit and market-sells (B-6)', async () => {
+    await saveCryptoStop('BTC/USD', 90_000, 0.01);
+    openOrders.mockResolvedValue([
+      {
+        id: 'sl-1',
+        symbol: 'BTCUSD',
+        side: 'sell',
+        type: 'stop_limit',
+        status: 'new',
+        limit_price: '89550',
+      },
+    ]);
+
+    const result = await enforceSoftwareCryptoStops('BTCUSD', 89_000);
+
+    expect(cancelOrder).toHaveBeenCalledWith('sl-1');
+    expect(result).toEqual({ triggered: true, orderId: 'mkt-sell-1' });
+  });
+});
+
+describe('protectCryptoPositionAfterBuy (B-5)', () => {
+  beforeEach(() => {
+    store.clear();
+    placeOrder.mockReset();
+    getOrder.mockReset();
+    positions.mockReset();
+  });
+
+  it('places stop-limit with filled qty, not ordered qty', async () => {
+    getOrder.mockResolvedValue({ status: 'filled', filled_qty: '0.0098' });
+    placeOrder.mockResolvedValue({ id: 'stop-limit-1' });
+
+    const result = await protectCryptoPositionAfterBuy('BTC/USD', 'buy-1', 90_000);
+
+    expect(result.qty).toBe(0.0098);
+    expect(placeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ qty: 0.0098, type: 'stop_limit', side: 'sell' }),
+    );
+    expect(store.get('crypto_stop:BTCUSD')).toBe(
+      JSON.stringify({ stopPrice: 90_000, qty: 0.0098 }),
+    );
   });
 });

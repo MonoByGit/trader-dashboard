@@ -25,7 +25,8 @@
     "extensionsToTreatAsEsm": [".ts"],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1",
-      "^@/(.*)$": "<rootDir>/web/$1"
+      "^@/(.*)$": "<rootDir>/web/$1",
+      "^@guards/(.*)$": "<rootDir>/src/guards/$1"
     },
     "roots": ["<rootDir>/src", "<rootDir>/web"],
     "transform": {
@@ -40,7 +41,8 @@
             "isolatedModules": true,
             "rootDir": ".",
             "paths": {
-              "@/*": ["./web/*"]
+              "@/*": ["./web/*"],
+              "@guards/*": ["./src/guards/*"]
             }
           }
         }
