@@ -203,3 +203,15 @@ export async function listRecentRunsByRoutine(routine: string, limit = 20): Prom
   );
   return rows.map(normalizeRoutineRunRow);
 }
+
+/** Runs van de Momentum-schaduwroutines (M2/M3/M5/M6) van de laatste dagen, voor de tick-planning. */
+export async function listRecentMomentumRuns(sinceYmd: string): Promise<RoutineRunRow[]> {
+  if (!hasDb()) return [];
+  await ensureSchema();
+  const rows = await dbQuery<RoutineRunRow>(
+    `SELECT id, routine, trading_date::text AS trading_date, started_at, finished_at, status, skip_reason, duration_ms, error_message
+     FROM routine_runs WHERE routine LIKE 'momentum%' AND trading_date >= $1::date ORDER BY started_at DESC LIMIT 500`,
+    [sinceYmd],
+  );
+  return rows.map(normalizeRoutineRunRow);
+}
