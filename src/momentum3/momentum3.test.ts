@@ -148,6 +148,46 @@ describe('walk-forward', () => {
     expect(r.trades.some((t) => t.side === 'sell')).toBe(true);
   });
 
+  it('initialBook reset lastRebalanceIndex: zelfde trades als vers boek (regressie PR 43)', async () => {
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1, rebalanceEveryDays: 1, smaDays: 30 };
+    const bench = makeBars(160, 100, 0.0005);
+    const bars = dipThenTurn(160, 60);
+    const data = { benchmark: bench, barsBySymbol: { [sym]: bars } };
+    const fresh = await simulateVersion(cfg, data, { hooks: m3Hooks });
+    expect(fresh.trades.length).toBeGreaterThan(0);
+
+    const carried = newBook(cfg, null, null);
+    carried.lastRebalanceIndex = 500;
+    const fromCarry = await simulateVersion(cfg, data, { hooks: m3Hooks, initialBook: carried });
+    expect(fromCarry.trades.length).toBe(fresh.trades.length);
+    expect(fromCarry.book.lastRebalanceIndex).not.toBe(500);
+  });
+
+  it('doorgegeven boek uit testvenster 1 blijft handelen in testvenster 2', async () => {
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1, rebalanceEveryDays: 1 };
+    const bars = dipThenTurn(520, 160);
+    const extra = dipThenTurn(520, 235);
+    for (let i = 228; i < 260; i++) bars[i] = extra[i]!;
+    const bench = makeBars(520, 100, 0.0005);
+    const dates = bench.map((b) => b.t.slice(0, 10));
+    const warm = cfg.smaDays;
+    const testDays = 60;
+    const t0 = warm + 120;
+    const cut = (from: string, to: string) => ({
+      benchmark: bench.filter((b) => b.t.slice(0, 10) >= from && b.t.slice(0, 10) <= to),
+      barsBySymbol: { [sym]: bars.filter((b) => b.t.slice(0, 10) >= from && b.t.slice(0, 10) <= to) },
+    });
+    const w0 = await simulateVersion(cfg, cut(dates[t0 - warm]!, dates[t0 + testDays - 1]!), { hooks: m3Hooks });
+    expect(w0.trades.length).toBeGreaterThan(0);
+    const w1 = await simulateVersion(cfg, cut(dates[t0 + testDays - warm]!, dates[t0 + testDays * 2 - 1]!), {
+      hooks: m3Hooks,
+      initialBook: w0.book,
+    });
+    expect(w1.trades.length).toBeGreaterThan(0);
+  });
+
   it('kiest op train en meet op test, samengesteld rendement per venster', async () => {
     const sym = 'X';
     const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1 };

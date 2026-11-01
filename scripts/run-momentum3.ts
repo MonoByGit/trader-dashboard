@@ -45,7 +45,7 @@ function printSummary(label: string, w: Awaited<ReturnType<typeof walkForward>>,
     `Return ${w.oosReturnPct.toFixed(1)}% | ${bench} ${w.oosBenchmarkPct.toFixed(1)}% | excess ${w.oosExcessPct.toFixed(1)} pp`,
   );
   console.log(
-    `MaxDD ${w.oosMaxDrawdownPct.toFixed(1)}% | Sharpe ${w.oosSharpe.toFixed(2)} | trades ${w.oosTradeCount} | win ${w.oosWinRatePct.toFixed(0)}% | costs ~${w.oosCostsPctOfBudget.toFixed(1)}% of budget`,
+    `MaxDD ${w.oosMaxDrawdownPct.toFixed(1)}% (bench ${w.oosBenchmarkMaxDrawdownPct.toFixed(1)}%) | Sharpe ${w.oosSharpe.toFixed(2)} | trades ${w.oosTradeCount} | win ${w.oosWinRatePct.toFixed(0)}% | costs ~${w.oosCostsPctOfBudget.toFixed(1)}% of budget`,
   );
 }
 

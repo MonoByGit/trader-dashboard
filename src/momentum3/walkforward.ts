@@ -23,6 +23,7 @@ export interface WalkForwardResult {
   oosBenchmarkPct: number;
   oosExcessPct: number;
   oosMaxDrawdownPct: number;
+  oosBenchmarkMaxDrawdownPct: number;
   oosSharpe: number;
   oosTradeCount: number;
   oosWinRatePct: number;
@@ -41,7 +42,10 @@ function slice(data: SimData, fromDate: string, toDate: string): SimData {
 
 const score = (ret: number, dd: number) => ret - 0.5 * dd;
 
-function sharpeFromEquity(daily: Array<{ date: string; equity: number }>): number {
+function sharpeFromEquity(
+  daily: Array<{ date: string; equity: number }>,
+  periodsPerYear: number,
+): number {
   if (daily.length < 3) return 0;
   const rets: number[] = [];
   for (let i = 1; i < daily.length; i++) {
@@ -53,7 +57,18 @@ function sharpeFromEquity(daily: Array<{ date: string; equity: number }>): numbe
   const mean = rets.reduce((a, r) => a + r, 0) / rets.length;
   const var_ = rets.reduce((a, r) => a + (r - mean) ** 2, 0) / (rets.length - 1);
   const sd = Math.sqrt(var_);
-  return sd > 1e-12 ? (mean / sd) * Math.sqrt(252) : 0;
+  return sd > 1e-12 ? (mean / sd) * Math.sqrt(periodsPerYear) : 0;
+}
+
+function maxDrawdownFromSeries(values: number[]): number {
+  if (values.length === 0) return 0;
+  let peak = values[0]!;
+  let maxDd = 0;
+  for (const v of values) {
+    peak = Math.max(peak, v);
+    maxDd = Math.max(maxDd, (peak - v) / peak);
+  }
+  return maxDd * 100;
 }
 
 function estimateCostsPct(trades: TradeLogRow[], budgetUsd: number, feeBps: number, slippageBps = 2): number {
@@ -85,7 +100,11 @@ export async function walkForward(input: {
   let globalPeak = cfg.budgetUsd;
   let globalMaxDd = 0;
   const equityPath: Array<{ date: string; equity: number }> = [];
+  const benchmarkPath: number[] = [];
+  let benchOosStart: number | null = null;
+  const benchByDate = new Map(data.benchmark.map((b) => [dateOf(b), b.c]));
   const allTrades: TradeLogRow[] = [];
+  const sharpeYear = cfg.kind === 'crypto' ? 365 : 252;
 
   for (let a = warm; a + trainDays + testDays <= dates.length; a += testDays) {
     const trainSlice = slice(data, dates[a - warm]!, dates[a + trainDays - 1]!);
@@ -110,6 +129,11 @@ export async function walkForward(input: {
       equityPath.push({ date: row.date, equity: row.equity });
       globalPeak = Math.max(globalPeak, row.equity);
       globalMaxDd = Math.max(globalMaxDd, (globalPeak - row.equity) / globalPeak);
+      const px = benchByDate.get(row.date);
+      if (px != null) {
+        if (benchOosStart === null) benchOosStart = px;
+        benchmarkPath.push(px / benchOosStart);
+      }
     }
     oos *= 1 + t.metrics.totalReturnPct / 100;
     bench *= 1 + t.metrics.spyReturnPct / 100;
@@ -141,7 +165,8 @@ export async function walkForward(input: {
     oosBenchmarkPct,
     oosExcessPct: oosReturnPct - oosBenchmarkPct,
     oosMaxDrawdownPct: globalMaxDd * 100,
-    oosSharpe: sharpeFromEquity(equityPath),
+    oosBenchmarkMaxDrawdownPct: maxDrawdownFromSeries(benchmarkPath),
+    oosSharpe: sharpeFromEquity(equityPath, sharpeYear),
     oosTradeCount: allTrades.length,
     oosWinRatePct: sells.length ? (wins / sells.length) * 100 : 0,
     oosCostsPctOfBudget: estimateCostsPct(allTrades, cfg.budgetUsd, cfg.feeBps ?? 0, slippageBps),
