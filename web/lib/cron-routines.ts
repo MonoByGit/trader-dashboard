@@ -1,5 +1,5 @@
 import { alpaca } from '@/lib/alpaca';
-import { AiJsonParseError, claudeJsonArray, claudeText, geminiText, MODELS } from '@/lib/ai';
+import { agentNewsLookup, AiJsonParseError, claudeJsonArray, claudeText, MODELS } from '@/lib/ai';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { saveDecision } from '@/lib/decisions';
 import { registerRoutineHandler } from '@/lib/routine-dispatch';
@@ -31,7 +31,14 @@ import { runWeeklyReview } from '@/lib/weekly-review';
 import strategy from '@/strategy.json';
 import { filterByAssetClass } from '@/lib/asset-class';
 import { snapshotFromDailyBars } from '../../src/indicators/live-snapshot';
+import {
+  applyPremarketDecisionRules,
+  momentumRsiRuleText,
+  newsContextPrompt,
+  newsIsUsable,
+} from '../../src/strategy/premarket-decisions';
 import { loadVolStressSnapshot } from '@/lib/vol-stress';
+import { isSoftStartEnabled } from '@/lib/strategy-versions';
 
 async function liveStrategy(): Promise<StrategyContent> {
   try {
@@ -90,24 +97,34 @@ async function runPremarket() {
     .map((symbol) => snapshotFromDailyBars(symbol, bars[symbol] ?? []))
     .filter(Boolean);
 
-  let news = '{}';
-  try {
-    news = await geminiText(
-      MODELS.flash,
-      `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${watchlist.join(',')}: any earnings risks or major negative news TODAY? Reply with JSON only: {"QQQ":"safe/risky: reason",...}`,
-    );
-  } catch {
-    news = '{}';
+  const newsPrompt = `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${watchlist.join(',')}: any earnings risks or major negative news TODAY? JSON only: {"QQQ":"safe/risky: reason",...}`;
+  const newsResult = await agentNewsLookup(newsPrompt, {
+    routine: 'premarket-news',
+    assetClass: 'etf',
+  });
+  const news = newsResult.json;
+  const newsUsable = newsIsUsable(newsResult.status);
+  if (newsResult.error) {
+    console.error('[premarket] news pre-call failed:', newsResult.error);
+  } else if (!newsUsable) {
+    console.warn('[premarket] news pre-call unusable', {
+      status: newsResult.status,
+      finishReason: newsResult.finishReason,
+    });
   }
+
+  const softStartEnabled = await isSoftStartEnabled();
+  const rsiMin = strat.rules.rsi_min ?? 50;
+  const rsiMax = strat.rules.rsi_max ?? 75;
 
   let decisions: Record<string, unknown>[];
   try {
     decisions = await claudeJsonArray<Record<string, unknown>>(
       MODELS.sonnet,
       `Je bent Momentum. Strategie: ${strat.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
-Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit (VIXY stress ratio ≤ ${volStress.maxRatio}, nu ${volStress.ratio?.toFixed(2) ?? 'n/a'}), no_earnings_risk, news_sentiment.
+Criteria: trend_above_sma20, ${momentumRsiRuleText(rsiMin, rsiMax)}, volume_above_avg(>1.1), vix_below_limit (VIXY stress ratio ≤ ${volStress.maxRatio}, nu ${volStress.ratio?.toFixed(2) ?? 'n/a'}), no_earnings_risk, news_sentiment (pass|fail|unknown).
 Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
-      `Vol stress: ${JSON.stringify(volStress)}\nData:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON-object: {"decisions":[{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]}`,
+      `${newsContextPrompt(newsResult.status)}\nVol stress: ${JSON.stringify(volStress)}\nData:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON-object: {"decisions":[{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail/unknown},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]}`,
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
@@ -122,11 +139,37 @@ Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
     };
   }
 
+  const normalized: Record<string, unknown>[] = [];
   for (const d of decisions) {
-    await saveDecision({ routine: 'premarket', ...d });
+    const symbol = String(d.symbol ?? '');
+    const snap = snapshots.find((s) => s && s.symbol === symbol);
+    const ruled = applyPremarketDecisionRules(
+      {
+        symbol,
+        decision: String(d.decision ?? 'NO_GO'),
+        criteria: (d.criteria as Record<string, unknown>) ?? {},
+      },
+      {
+        newsUsable,
+        softStartEnabled,
+        rsi: snap?.rsi ?? null,
+        rsiMin,
+        rsiMax,
+      },
+    );
+    const row = { ...d, decision: ruled.decision, criteria: ruled.criteria };
+    normalized.push(row);
+    await saveDecision({ routine: 'premarket', ...row });
   }
 
-  return { routine: 'premarket', decisions, equity, openPositions: openSymbols, marketOpen: clock.is_open };
+  return {
+    routine: 'premarket',
+    decisions: normalized,
+    newsStatus: newsResult.status,
+    equity,
+    openPositions: openSymbols,
+    marketOpen: clock.is_open,
+  };
 }
 
 async function runMarketOpen() {
