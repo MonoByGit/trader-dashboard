@@ -26,6 +26,7 @@
       "@snapshots/returns": ["../src/snapshots/returns.ts"],
       "@ai-cost/*": ["../src/ai-cost/*"],
       "@ai-cost/pricing": ["../src/ai-cost/pricing.ts"],
+      "@ai/json-response": ["../src/ai/json-response.ts"],
       "@backtest/*": ["../src/backtest/*"],
       "@backtest/engine": ["../src/backtest/engine.ts"],
       "@backtest/types": ["../src/backtest/types.ts"]

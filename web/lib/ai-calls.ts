@@ -9,6 +9,7 @@ export async function recordAiCall(input: {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  finishReason?: string | null;
   decisionId?: string;
 }): Promise<void> {
   if (!hasDb()) return;
@@ -16,8 +17,8 @@ export async function recordAiCall(input: {
   const cost = estimateCostUsd(input.model, input.inputTokens, input.outputTokens, loadPriceTable());
   const id = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await dbRun(
-    `INSERT INTO ai_calls (id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd, decision_id)
-     VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO ai_calls (id, ts, routine, provider, model, input_tokens, output_tokens, finish_reason, cost_usd, decision_id)
+     VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       id,
       input.routine ?? null,
@@ -25,6 +26,7 @@ export async function recordAiCall(input: {
       input.model,
       input.inputTokens,
       input.outputTokens,
+      input.finishReason ?? null,
       cost,
       input.decisionId ?? null,
     ],

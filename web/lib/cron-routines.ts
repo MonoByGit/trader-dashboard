@@ -1,5 +1,5 @@
 import { alpaca } from '@/lib/alpaca';
-import { claudeJson, claudeText, geminiText, MODELS } from '@/lib/ai';
+import { AiJsonParseError, claudeJson, claudeText, geminiText, MODELS } from '@/lib/ai';
 import { dbQuery, dbRun, initDb, hasDb } from '@/lib/db';
 import { saveDecision } from '@/lib/decisions';
 import { registerRoutineHandler } from '@/lib/routine-dispatch';
@@ -97,14 +97,27 @@ async function runPremarket() {
     if (m) news = m[0];
   } catch { news = '{}'; }
 
-  const decisions = await claudeJson<Record<string, unknown>[]>(
-    MODELS.sonnet,
-    `Je bent Momentum. Strategie: ${strategy.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
+  let decisions: Record<string, unknown>[];
+  try {
+    decisions = await claudeJson<Record<string, unknown>[]>(
+      MODELS.sonnet,
+      `Je bent Momentum. Strategie: ${strategy.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
 Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit, no_earnings_risk, news_sentiment.
 Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
-    `Data:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
-    2048
-  );
+      `Data:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
+    );
+  } catch (e) {
+    const msg = e instanceof AiJsonParseError ? e.message : String(e);
+    console.error('[premarket] AI JSON mislukt — geen besluiten opgeslagen:', msg);
+    return {
+      routine: 'premarket',
+      skipped: true,
+      reason: 'AI JSON response invalid or truncated',
+      equity,
+      openPositions: openSymbols,
+      marketOpen: clock.is_open,
+    };
+  }
 
   for (const d of decisions) {
     await saveDecision({ routine: 'premarket', ...d });
@@ -161,12 +174,18 @@ async function runMarketOpen() {
   const activeLessons = await getActiveLessons();
   const lessonSuffix = marketOpenLessonsSystemSuffix(activeLessons);
 
-  const candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
-    MODELS.sonnet,
-    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.${lessonSuffix}`,
-    `Bars data:\n${JSON.stringify(Object.fromEntries(WATCHLIST.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
-    1024
-  );
+  let candidates: { symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[];
+  try {
+    candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
+      MODELS.sonnet,
+      `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.${lessonSuffix}`,
+      `Bars data:\n${JSON.stringify(Object.fromEntries(WATCHLIST.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
+    );
+  } catch (e) {
+    const msg = e instanceof AiJsonParseError ? e.message : String(e);
+    console.error('[market-open] AI JSON mislukt — geen orders geplaatst:', msg);
+    return { skipped: true, reason: 'AI JSON response invalid or truncated' };
+  }
 
   const orders: { symbol: string; qty: number; orderId: string; stop?: number; takeProfit?: number }[] = [];
   for (const c of candidates) {

@@ -80,7 +80,6 @@ export async function GET() {
       MODELS.sonnet,
       `Je bent Momentum. Equity: $${equity.toFixed(0)}. Selecteer precies 3 ETFs voor de sessie van vandaag. Kies de beste setups op basis van momentum, trend en volume.`,
       `Data: ${JSON.stringify(snapshots)}\nNieuws: ${newsCtx}\n\nGeef JSON array met precies 3 items: [{"symbol":"QQQ","thesis":"1-zin thesis","rationale":"2-zin onderbouwing","confidence":0.0-1.0,"criteria":{"trend_above_sma20":"pass/fail","momentum_rsi":"pass/fail","volume_above_avg":"pass/fail","vix_below_limit":"pass/fail","no_earnings_risk":"pass/fail","news_sentiment":"pass/fail"},"entryZone":"prijszone bijv $470-$472","stopLevel":"stop bijv $460 (−2%)"}]`,
-      1024
     );
 
     return NextResponse.json({ options, source: 'live' });
