@@ -2,24 +2,19 @@ import { alpaca, AlpacaPosition } from '@/lib/alpaca';
 import { cancelSellLegsAndWait } from '@/lib/alpaca-orders';
 import { logGuardEvent } from '@/lib/guards/service';
 import { retryAsync } from '../../src/trading/eod-close-retry';
-import { getActiveStrategyContent } from '@/lib/strategy-versions';
+import strategy from '@/strategy.json';
 import { etfClientOrderId } from '@/lib/etf-order-id';
 
 export type EodFlattenResult =
   | { ok: true; symbol: string }
   | { ok: false; symbol: string; error: string; cancelReady: boolean; remainingLegs: number; restopPlaced?: boolean };
 
-async function eodHardStopPct(): Promise<number> {
-  const strat = await getActiveStrategyContent();
-  return strat.rules.hard_stop_pct ?? 0.02;
-}
-
 async function placeEodSafetyStop(symbol: string, position: AlpacaPosition): Promise<boolean> {
   const qtyRaw = position.qty_available ?? position.qty;
   const qty = parseFloat(qtyRaw);
   const last = parseFloat(position.current_price);
   if (!qty || !last) return false;
-  const hardStopPct = await eodHardStopPct();
+  const hardStopPct = (strategy as { rules: { hard_stop_pct: number } }).rules.hard_stop_pct ?? 0.02;
   const stop = +(last * (1 - hardStopPct)).toFixed(2);
   try {
     await alpaca.placeOrder({

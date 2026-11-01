@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { loadCryptoGuardConfig } from '@guards/crypto-config';
 import { alpaca } from '@/lib/alpaca';
-import { buildGuardStatus, countDailyCryptoTrades, getEffectiveGuardConfig } from '@/lib/guards/service';
+import { buildGuardStatus } from '@/lib/guards/service';
 import { isCryptoModuleEnabled, setCryptoModuleEnabled } from '@/lib/crypto/state';
 import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { filterByAssetClass } from '@/lib/asset-class';
@@ -18,12 +18,8 @@ export async function GET() {
     const cash = parseFloat(account.cash);
     const sleeves = await sleevesFromAlpacaLive(equity, cash, positions);
     const cryptoPositions = filterByAssetClass(positions, 'crypto');
-    const [guards, cfg, dailyCryptoTrades, guardCfg] = await Promise.all([
-      buildGuardStatus(equity, cash, positions.length),
-      Promise.resolve(loadCryptoGuardConfig()),
-      countDailyCryptoTrades(),
-      getEffectiveGuardConfig(),
-    ]);
+    const guards = await buildGuardStatus(equity, cash, positions.length);
+    const cfg = loadCryptoGuardConfig();
 
     return NextResponse.json({
       enabled,
@@ -49,8 +45,6 @@ export async function GET() {
         maxNewPositionsPerDay: cfg.maxNewCryptoPositionsPerDay,
         hardStopPct: cfg.hardStopPct * 100,
         tickIntervalHours: cfg.tickIntervalHours,
-        dailyCryptoTrades,
-        maxDailyCryptoTrades: guardCfg.maxDailyCryptoTrades,
       },
       benchmark: 'BTC/USD',
     });

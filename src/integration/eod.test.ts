@@ -20,12 +20,8 @@ async function load(qa: string, ready: boolean, closeFails: boolean) {
   jest.resetModules();
   const placeOrder = jest.fn(async () => ({ id: 'x' }));
   const events: string[] = [];
-  jest.unstable_mockModule('@/lib/strategy-versions', () => ({
-    getActiveStrategyContent: async () => ({
-      rules: { hard_stop_pct: 0.02, take_profit_pct: 0.05, max_positions: 3 },
-      symbols: ['QQQ'],
-      name: 't',
-    }),
+  jest.unstable_mockModule('@/strategy.json', () => ({
+    default: { rules: { hard_stop_pct: 0.02, take_profit_pct: 0.05 } },
   }));
   jest.unstable_mockModule('@/lib/alpaca', () => ({
     alpaca: {

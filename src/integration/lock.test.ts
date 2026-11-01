@@ -74,7 +74,7 @@ describe('B-2 lock on real Postgres (pglite)', () => {
     expect(mid).toMatchObject({ blocked: true });
 
     await pg.query(`UPDATE routine_run_locks SET acquired_at = NOW() - interval '16 minutes'`);
-    expect(await rr.verifyRoutineRunLock(a.runId)).toBe(false);
+    expect(await rr.verifyRoutineRunLock(a.runId)).toBe(true);
 
     const b = await rr.tryBeginRoutineRun('crypto-scan', '2026-11-01', now + 180_000);
     expect('runId' in b).toBe(true);

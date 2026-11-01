@@ -31,8 +31,6 @@ type CryptoApi = {
     maxNewPositionsPerDay: number;
     hardStopPct: number;
     tickIntervalHours: number;
-    dailyCryptoTrades: number;
-    maxDailyCryptoTrades: number;
   };
   benchmark: string;
 };
@@ -149,12 +147,6 @@ export function CryptoPage() {
           <div className="prop-row">
             <span className="k">Soft-start</span>
             <span className="v">{data.guards.maxNewPositionsPerDay} nieuwe posities/dag</span>
-          </div>
-          <div className="prop-row">
-            <span className="k">Crypto BUYs vandaag (UTC)</span>
-            <span className="v">
-              {data.guards.dailyCryptoTrades} / {data.guards.maxDailyCryptoTrades}
-            </span>
           </div>
           <div className="prop-row">
             <span className="k">Hard stop</span>

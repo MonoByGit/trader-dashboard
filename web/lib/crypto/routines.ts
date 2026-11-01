@@ -1,6 +1,6 @@
 import cryptoStrategy from '@/crypto-strategy.json';
 import { AiJsonParseError, claudeJsonArray, logFailedAiCall, MODELS } from '@/lib/ai';
-import { gateBuyIfLockLost, hasBuyDecisionTodayUtc } from '@/lib/buy-idempotency';
+import { gateBuyIfLockLost, hasBuyDecisionTodayEt } from '@/lib/buy-idempotency';
 import { getRoutineRunContext } from '@/lib/routine-run-context';
 import { cryptoDailyPnlFromLive, yesterdayUtcCloseBySymbol } from './daily-pnl-live';
 import { blocksNewEntries, evaluateCryptoLimits } from '@guards/index';
@@ -229,7 +229,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     const freshPositions = await alpaca.positions();
     const freshCrypto = filterByAssetClass(freshPositions, 'crypto');
     if (hasCryptoPosition(freshCrypto, c.symbol)) continue;
-    if (await hasBuyDecisionTodayUtc(c.symbol, 'crypto-scan')) continue;
+    if (await hasBuyDecisionTodayEt(c.symbol, 'crypto-scan')) continue;
 
     const runCtx = getRoutineRunContext();
     const lockGate = await gateBuyIfLockLost(runCtx?.runId, c.symbol);
