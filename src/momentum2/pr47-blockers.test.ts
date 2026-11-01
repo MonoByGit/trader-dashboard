@@ -862,3 +862,85 @@ describe('PR 47 ronde 4 (review Dave op 27a88a2): B5 stopwacht verwerkt open buy
     expect(fake.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
   });
 });
+
+describe('PR 47 ronde 4, extra randgevallen', () => {
+  function lostReply(fake: FakeAlpaca, lag: number) {
+    const place = fake.placeOrder.bind(fake);
+    let first = true;
+    fake.placeOrder = async (r) => {
+      const x = await place(r);
+      if (r.type === 'market' && first) { first = false; throw new Error('socket hang up (ETIMEDOUT)'); }
+      return x;
+    };
+    const byCid = fake.getOrderByClientOrderId.bind(fake);
+    fake.getOrderByClientOrderId = async (c) => (lag-- > 0 ? null : byCid(c));
+  }
+  const day = (cfg: VersionConfig, broker: ReturnType<typeof makeAlpacaPaperBroker>, mem: ReturnType<typeof memStore>, date: string, px: number) =>
+    executeDay({ date, cfgs: [cfg], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: px }, broker, store: mem.store, expectReal: true });
+
+  it('B5 extra (Cosmo-thread): W5: buy vult deels in de run, de rest daarna: de stopwacht zet de stop binnen een tick op de volle stand', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    fake.marketFillRatio = 0.5; // 10 van 20 meteen, rest blijft open
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await day(m5Cfg!, broker, mem, '2024-06-03', 50);
+    expect(mem.book().positions.QLD?.qty).toBe(10);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+    fake.fillOpenMarkets(50); // na de run vult de rest
+    expect(fake.pos.QLD).toBe(20);
+
+    await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store });
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(fake.openStops('QLD').reduce((s, o) => s + Number(o.qty), 0)).toBe(20);
+    expect(mem.book().openOrders ?? {}).toEqual({});
+    // nog een tick: niets dubbel (fill één keer in het boek, één stop)
+    await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store });
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(fake.openStops('QLD')).toHaveLength(1);
+    expect(fake.orders_.filter((o) => o.type === 'market')).toHaveLength(1);
+  });
+
+  it('B5 extra: timeout-variant: buy-POST time-out, de hele run onzichtbaar, later gevuld: de stopwacht boekt hem en zet de stop', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    lostReply(fake, 2); // bij plaatsen en aan het eind van de run nog onzichtbaar
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await day(m5Cfg!, broker, mem, '2024-06-03', 50);
+    expect(mem.book().positions.QLD).toBeUndefined();
+    expect(fake.pos.QLD).toBe(20); // staat wel bij de broker, zonder stop
+    expect(fake.openStops('QLD')).toHaveLength(0);
+
+    await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store });
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(fake.openStops('QLD').reduce((s, o) => s + Number(o.qty), 0)).toBe(20);
+    expect(fake.orders_.filter((o) => o.type === 'market')).toHaveLength(1);
+    expect(mem.pending()).toEqual([]);
+  });
+
+  it('stopwacht houdt een nog onzichtbare order gevolgd en plaatst nooit zelf een market order', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    lostReply(fake, 5);
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await day(m5Cfg!, broker, mem, '2024-06-03', 50);
+    await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store });
+    expect(Object.values(mem.book().openOrders ?? {}).map((m) => m.side)).toEqual(['buy']);
+    expect(mem.pending()).toEqual([]); // niet terug in de rij zolang hij misschien bestaat
+    expect(fake.orders_.filter((o) => o.type === 'market')).toHaveLength(1);
+  });
+
+  it('wachtbudget telt de echte tijd, ook trage HTTP-calls', async () => {
+    const fake = new FakeAlpaca();
+    let clock = 0;
+    const slowGet = fake.getOrder.bind(fake);
+    fake.getOrder = async (id) => { clock += 15_000; return slowGet(id); }; // elke GET duurt 15 s
+    const broker = makeAlpacaPaperBroker(fake, { sleep: async () => {}, now: () => clock, waitBudgetMs: 45_000 });
+    const prefix = momentumStopClientPrefix(m5Cfg!);
+    fake.seedPosition('QLD', 20);
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: prefix });
+    fake.cancelHangPolls = 10_000;
+    const out = await broker.cancelStop({ versionId: m5Cfg!.id, symbol: 'QLD', stopClientPrefix: prefix });
+    expect(out).toBe('timeout');
+    expect(clock).toBeLessThanOrEqual(60_000); // budget plus hooguit één lopende call
+  });
+});

@@ -14,6 +14,8 @@ export async function awaitStopOrderCanceled(
     delayMs?: number;
     attempts?: number;
     sleep?: (ms: number) => Promise<void>;
+    /** true = tijd op: stoppen met pollen en 'timeout' melden (na minstens één GET). */
+    outOfTime?: () => boolean;
   },
 ): Promise<AwaitCancelOutcome> {
   const attempts = deps.attempts ?? 12;
@@ -46,6 +48,7 @@ export async function awaitStopOrderCanceled(
     if (!pollOnly && i === 0) {
       /* continue polling after successful DELETE */
     }
+    if (deps.outOfTime?.()) return 'timeout';
     if (i < attempts - 1) await sleep(delayMs);
   }
   return 'timeout';

@@ -26,8 +26,12 @@ const STOP_GUARDS: Partial<Record<MomentumStrategy, StopGuard>> = {
   momentum5: runMomentum5StopGuard,
   momentum6: runMomentum6StopGuard,
 };
-/** Eén stopwacht tegelijk per proces (twee overlappende tick-requests). */
-const guardBusy = new Set<MomentumStrategy>();
+/**
+ * Per strategie loopt er in dit proces nooit meer dan één ding tegelijk (dagstap of stopwacht), ook niet als
+ * twee tick-requests elkaar overlappen: anders kan de wacht van tick N+1 het boek van een lopende executeDay
+ * overschrijven. Railway draait één web-instantie; de dagstappen hebben daarnaast hun lock in de database.
+ */
+const strategyBusy = new Set<MomentumStrategy>();
 
 export type MomentumTickDeps = {
   runners?: Partial<Record<MomentumStrategy, Runner>>;
@@ -80,8 +84,12 @@ export async function runMomentumTick(
   // Ook bij noodstop: een stop beschermt, hij opent niets.
   for (const strategy of paper) {
     const g = deps.stopGuards?.[strategy] ?? STOP_GUARDS[strategy];
-    if (!g || guardBusy.has(strategy)) continue;
-    guardBusy.add(strategy);
+    if (!g) continue;
+    if (strategyBusy.has(strategy)) {
+      log(`[momentum-tick] ${strategy}-stopwacht overgeslagen: ${strategy} loopt nog`);
+      continue;
+    }
+    strategyBusy.add(strategy);
     try {
       const r = await g(nowMs);
       if (r) {
@@ -91,13 +99,29 @@ export async function runMomentumTick(
     } catch (e) {
       log(`[momentum-tick] ${strategy}-stopwacht failed papier: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      guardBusy.delete(strategy);
+      strategyBusy.delete(strategy);
     }
   }
   return out;
 }
 
 async function runJob(
+  job: MomentumJob,
+  nowMs: number,
+  emergencyStop: boolean,
+  deps: MomentumTickDeps,
+  log: (l: string) => void,
+): Promise<Record<string, unknown>> {
+  if (strategyBusy.has(job.strategy)) return { skipped: true, reason: `${job.strategy} loopt nog in dit proces` };
+  strategyBusy.add(job.strategy);
+  try {
+    return await runJobLocked(job, nowMs, emergencyStop, deps, log);
+  } finally {
+    strategyBusy.delete(job.strategy);
+  }
+}
+
+async function runJobLocked(
   job: MomentumJob,
   nowMs: number,
   emergencyStop: boolean,

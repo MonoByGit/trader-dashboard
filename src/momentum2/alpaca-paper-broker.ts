@@ -141,13 +141,17 @@ export function makeAlpacaPaperBroker(
      * en een market order als 'loopt nog' (volgen via openOrders). Nooit een positie zonder stop.
      */
     waitBudgetMs?: number;
+    /** Klok voor het budget (tests). Het budget telt de echte verstreken tijd, ook HTTP, en minstens de slaaptijd. */
+    now?: () => number;
     log?: (line: string) => void;
   } = {},
 ): MomentumBroker {
   const rawSleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const budget = opts.waitBudgetMs ?? DEFAULT_WAIT_BUDGET_MS;
   let waited = 0;
-  const budgetLeft = () => budget - waited;
+  const now = opts.now ?? Date.now;
+  const started = now();
+  const budgetLeft = () => budget - Math.max(waited, now() - started);
   const sleep = async (ms: number) => {
     waited += ms;
     await rawSleep(ms);
@@ -178,6 +182,7 @@ export function makeAlpacaPaperBroker(
     awaitStopOrderCanceled(id, {
       ...baseCancelDeps,
       attempts: Math.max(1, Math.min(cancelAttempts, Math.floor(Math.max(0, budgetLeft()) / cancelDelayMs) + 1)),
+      outOfTime: () => budgetLeft() <= 0,
     });
 
   const ownOrders = async (prefix: string, symbol: string, statuses: Set<string>) =>
