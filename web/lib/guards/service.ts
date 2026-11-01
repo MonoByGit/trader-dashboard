@@ -2,8 +2,10 @@ import {
   loadGuardConfig,
   evaluateCircuitBreakers,
   evaluatePortfolioLimits,
+  applySoftStartToGuardConfig,
   type GuardConfig,
 } from '@guards/index';
+import { isSoftStartEnabled } from '@/lib/strategy-versions';
 import { dbQuery, dbRun, hasDb, initDb } from '@/lib/db';
 
 export interface GuardRuntimeState {
@@ -285,7 +287,13 @@ export async function setTradingEnabled(enabled: boolean): Promise<void> {
   else await setSetting(SETTINGS.tradingEnabled, String(enabled));
 }
 
-export function checkOrderAgainstLimits(input: {
+export async function getEffectiveGuardConfig(): Promise<GuardConfig> {
+  const base = loadGuardConfig();
+  const soft = await isSoftStartEnabled();
+  return applySoftStartToGuardConfig(base, soft);
+}
+
+export async function checkOrderAgainstLimits(input: {
   equity: number;
   cash: number;
   openPositionCount: number;
@@ -294,15 +302,17 @@ export function checkOrderAgainstLimits(input: {
   currentSymbolExposureUsd?: number;
   totalExposureUsd: number;
 }) {
-  return evaluatePortfolioLimits(input, loadGuardConfig());
+  const config = await getEffectiveGuardConfig();
+  return evaluatePortfolioLimits(input, config);
 }
 
 export async function buildGuardStatus(
   equity: number,
   cash: number,
   openPositions: number
-): Promise<GuardStatusSnapshot> {
-  const config = loadGuardConfig();
+): Promise<GuardStatusSnapshot & { softStartEnabled: boolean }> {
+  const softStartEnabled = await isSoftStartEnabled();
+  const config = applySoftStartToGuardConfig(loadGuardConfig(), softStartEnabled);
   const state = await refreshCircuitBreaker(equity);
   const dailyTrades = await countDailyTrades();
   const ordersLast10Min = await countOrdersLast10Min();
@@ -316,6 +326,7 @@ export async function buildGuardStatus(
   return {
     ...state,
     config,
+    softStartEnabled,
     dailyDrawdownPct: +dailyDrawdownPct.toFixed(2),
     peakDrawdownPct: +peakDrawdownPct.toFixed(2),
     openPositions,

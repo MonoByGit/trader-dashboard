@@ -1,6 +1,7 @@
 'use client';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
+import { Toggle } from '@/components/ui/Toggle';
 import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
 
@@ -15,6 +16,11 @@ interface Guards {
   dailyTrades: number; maxDailyTrades: number;
   cashReservePct: number; cashReserveMin: number;
   maxOrderSize: number; minOrderSize: number;
+  softStartEnabled?: boolean;
+  effectiveMaxOpenPositions?: number;
+  effectiveMaxDailyTrades?: number;
+  effectiveMaxPositionSizePct?: number;
+  effectiveMaxTotalExposurePct?: number;
 }
 
 interface RiskPageProps {
@@ -23,9 +29,10 @@ interface RiskPageProps {
   onResetBreaker: () => void;
   onEmergencyStop: () => void;
   onEmergencyResume: () => void;
+  onToggleSoftStart: (enabled: boolean) => void;
 }
 
-export function RiskPage({ guards: g, onOpenKill, onResetBreaker, onEmergencyStop, onEmergencyResume }: RiskPageProps) {
+export function RiskPage({ guards: g, onOpenKill, onResetBreaker, onEmergencyStop, onEmergencyResume, onToggleSoftStart }: RiskPageProps) {
   const barPct = (v: number, max: number) => Math.max(0, Math.min(100, (Math.abs(v) / Math.abs(max)) * 100));
 
   return (
@@ -110,6 +117,28 @@ export function RiskPage({ guards: g, onOpenKill, onResetBreaker, onEmergencySto
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ borderColor: g.softStartEnabled ? 'var(--accent)' : 'var(--border-subtle)' }}>
+        <div className="card-head">
+          <h3><Icon name="shield" size={12}/> Soft-start (paper ramp-up)</h3>
+          <Pill kind={g.softStartEnabled ? 'accent' : 'muted'}>{g.softStartEnabled ? 'AAN' : 'UIT'}</Pill>
+        </div>
+        <div className="card-body">
+          <p className="text-secondary" style={{ fontSize: 11, margin: '0 0 12px', lineHeight: 1.5 }}>
+            Beperkt risico bij de eerste live paper trades: max {g.effectiveMaxDailyTrades ?? 2} nieuwe posities/dag,
+            max {g.effectiveMaxPositionSizePct ?? 5}% per positie, max {g.effectiveMaxTotalExposurePct ?? 15}% totale exposure.
+            Brackets en overige guards blijven actief.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="text-secondary" style={{ fontSize: 11 }}>Soft-start mode</span>
+            <Toggle
+              on={!!g.softStartEnabled}
+              onChange={(v) => onToggleSoftStart(v)}
+              aria-label="Soft-start"
+            />
           </div>
         </div>
       </div>

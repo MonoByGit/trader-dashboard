@@ -7,7 +7,11 @@ export type BacktestRunStatus = 'queued' | 'running' | 'completed' | 'failed';
 export interface BacktestRunRow {
   id: string;
   strategy_version: string;
-  params: BacktestParams & { useLlmSampleDays?: number };
+  params: BacktestParams & {
+    useLlmSampleDays?: number;
+    strategyVersionId?: string;
+    barMode?: 'daily' | 'hourly';
+  };
   period_start: string;
   period_end: string;
   status: BacktestRunStatus;

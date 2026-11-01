@@ -1,5 +1,10 @@
 import strategy from '@/strategy.json';
-import { fetchHistoricalDailyBars, fetchTradingDates } from '@/lib/backtest-bars';
+import {
+  fetchHistoricalDailyBars,
+  fetchHistoricalHourlyBars,
+  dailyBarsFromHourly,
+  fetchTradingDates,
+} from '@/lib/backtest-bars';
 import {
   createBacktestRun,
   getBacktestRun,
@@ -7,13 +12,16 @@ import {
   setBacktestStatus,
   type BacktestRunRow,
 } from '@/lib/backtests';
+import { getStrategyVersionById } from '@/lib/strategy-versions';
 import { runBacktest } from '@backtest/engine';
 import type { BacktestParams, StrategyRulesLike } from '@backtest/types';
+import type { StrategyContent as FullStrategyContent } from '../../src/strategy/content';
 import { getStrategyVersion } from '@/lib/strategy-version';
 
 export const DEFAULT_BACKTEST_PARAMS: BacktestParams = {
   initialCapital: 100_000,
   fillMode: 'next_open',
+  barMode: 'daily',
   slippageBps: 5,
   commissionPerShare: 0,
   minCommissionUsd: 0,
@@ -23,7 +31,25 @@ export interface StartBacktestInput {
   periodStart: string;
   periodEnd: string;
   strategyVersion?: string;
-  params?: Partial<BacktestParams & { useLlmSampleDays?: number }>;
+  strategyVersionId?: string;
+  params?: Partial<BacktestParams & { useLlmSampleDays?: number; strategyVersionId?: string }>;
+}
+
+async function resolveStrategyForRun(input: StartBacktestInput): Promise<{
+  versionLabel: string;
+  content: FullStrategyContent;
+}> {
+  const versionId = input.strategyVersionId ?? input.params?.strategyVersionId;
+  if (versionId) {
+    const row = await getStrategyVersionById(versionId);
+    if (row) {
+      return { versionLabel: row.version, content: row.content };
+    }
+  }
+  return {
+    versionLabel: input.strategyVersion ?? getStrategyVersion(),
+    content: strategy as FullStrategyContent,
+  };
 }
 
 /** Execute backtest synchronously (CLI or worker). */
@@ -32,9 +58,14 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
   trades: Awaited<ReturnType<typeof runBacktest>>['trades'];
   equityCurve: Awaited<ReturnType<typeof runBacktest>>['equityCurve'];
 }> {
-  const symbols = strategy.symbols as string[];
-  const rules = strategy.rules as StrategyRulesLike;
-  const params: BacktestParams = { ...DEFAULT_BACKTEST_PARAMS, ...input.params };
+  const { content } = await resolveStrategyForRun(input);
+  const symbols = content.symbols as string[];
+  const rules = content.rules as StrategyRulesLike;
+  const params: BacktestParams = {
+    ...DEFAULT_BACKTEST_PARAMS,
+    ...input.params,
+    barMode: input.params?.barMode ?? DEFAULT_BACKTEST_PARAMS.barMode,
+  };
   const useLlm = input.params?.useLlmSampleDays ?? 0;
   if (useLlm > 0) {
     console.warn(
@@ -48,17 +79,30 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
   }
 
   const allSymbols = [...symbols, 'SPY'];
-  const barsBySymbol = await fetchHistoricalDailyBars(allSymbols, input.periodStart, input.periodEnd);
+  let hourlyBarsBySymbol: Record<string, import('@backtest/types').DailyBar[]> | undefined;
+  let barsBySymbol: Record<string, import('@backtest/types').DailyBar[]>;
+
+  if (params.barMode === 'hourly') {
+    hourlyBarsBySymbol = await fetchHistoricalHourlyBars(allSymbols, input.periodStart, input.periodEnd);
+    barsBySymbol = dailyBarsFromHourly(hourlyBarsBySymbol);
+  } else {
+    barsBySymbol = await fetchHistoricalDailyBars(allSymbols, input.periodStart, input.periodEnd);
+  }
+
   const spyBars = barsBySymbol.SPY ?? [];
   delete barsBySymbol.SPY;
+  if (hourlyBarsBySymbol) {
+    delete hourlyBarsBySymbol.SPY;
+  }
 
-  const vixBars = await fetchHistoricalDailyBars(['VIXY'], input.periodStart, input.periodEnd).then(
-    (m) => m.VIXY,
-  ).catch(() => undefined);
+  const vixBars = await fetchHistoricalDailyBars(['VIXY'], input.periodStart, input.periodEnd)
+    .then((m) => m.VIXY)
+    .catch(() => undefined);
 
   const result = runBacktest({
     tradingDates,
     barsBySymbol,
+    hourlyBarsBySymbol,
     spyBars,
     vixBars,
     symbols,
@@ -70,10 +114,10 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
 }
 
 export async function startBacktestRun(input: StartBacktestInput): Promise<BacktestRunRow> {
-  const version = input.strategyVersion ?? getStrategyVersion();
+  const { versionLabel } = await resolveStrategyForRun(input);
   const params = { ...DEFAULT_BACKTEST_PARAMS, ...input.params };
   const run = await createBacktestRun({
-    strategyVersion: version,
+    strategyVersion: versionLabel,
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     params,

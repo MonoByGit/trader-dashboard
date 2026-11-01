@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Toggle } from '@/components/ui/Toggle';
@@ -7,12 +7,138 @@ import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
 import { MOCK } from '@/lib/mock';
 
+type VersionRow = {
+  id: string;
+  version: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  content?: { rules?: Record<string, unknown> };
+};
+
+type ComparisonSummary = {
+  draftBeatsActive: boolean | null;
+  draftBeatsSpy: boolean | null;
+  spyTotalReturnPct: number | null;
+  draft?: { metrics?: Record<string, number | null> };
+  active?: { metrics?: Record<string, number | null> };
+};
+
 export function StrategyPage() {
   const c = MOCK.strategyConfig as Record<string, unknown>;
   const [holdOvernight, setHoldOvernight] = useState(c.hold_overnight as boolean);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [activeId, setActiveId] = useState<string>('');
+  const [compareDraftId, setCompareDraftId] = useState<string | null>(null);
+  const [comparison, setComparison] = useState<ComparisonSummary | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const loadVersions = useCallback(async () => {
+    const res = await fetch('/api/strategy-versions');
+    if (!res.ok) return;
+    const data = await res.json();
+    setVersions(data.versions ?? []);
+    setActiveId(data.activeId ?? '');
+  }, []);
+
+  useEffect(() => { void loadVersions(); }, [loadVersions]);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  const runCompare = async (draftId: string) => {
+    setCompareDraftId(draftId);
+    const res = await fetch(`/api/strategy-versions/${draftId}/compare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!res.ok) {
+      showToast('Vergelijking starten mislukt');
+      return;
+    }
+    showToast('Backtest-vergelijking gestart (draft vs actief vs SPY)');
+    void pollComparison(draftId);
+  };
+
+  const pollComparison = async (draftId: string) => {
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const res = await fetch(`/api/strategy-versions/${draftId}/compare`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.comparison?.status === 'completed') {
+        setComparison(data.comparison.summary);
+        return;
+      }
+      if (data.comparison?.status === 'failed') {
+        showToast('Vergelijking mislukt');
+        return;
+      }
+    }
+  };
+
+  const activateDraft = async (id: string) => {
+    const res = await fetch(`/api/strategy-versions/${id}/activate`, { method: 'POST' });
+    if (!res.ok) {
+      showToast('Activatie mislukt (login vereist)');
+      return;
+    }
+    showToast('Strategieversie geactiveerd voor live paper routines');
+    void loadVersions();
+  };
+
+  const drafts = versions.filter((v) => v.status === 'draft');
+
   return (
     <>
-      <div className="page-head"><div><h1>Strategy</h1><div className="subtitle text-secondary">Momentum Breakout · Version 1.0. Parameters via Railway env; deze UI is read-mostly.</div></div></div>
+      <div className="page-head"><div><h1>Strategy</h1><div className="subtitle text-secondary">Momentum Breakout · versies in Postgres · live routines gebruiken altijd de actieve versie.</div></div></div>
+
+      <div className="card">
+        <div className="card-head"><h3><Icon name="strategy" size={12}/> Strategieversies</h3>{toast && <span className="text-secondary" style={{ fontSize: 11 }}>{toast}</span>}</div>
+        <div className="card-body flush">
+          <table className="data">
+            <thead><tr><th>Versie</th><th>Status</th><th>Notities</th><th /></tr></thead>
+            <tbody>
+              {versions.map((v) => (
+                <tr key={v.id}>
+                  <td className="mono">{v.version}</td>
+                  <td><Pill kind={v.status === 'active' ? 'pos' : v.status === 'draft' ? 'accent' : 'muted'}>{v.status}</Pill></td>
+                  <td className="text-secondary" style={{ fontSize: 11 }}>{v.notes ?? '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {v.status === 'draft' && (
+                      <>
+                        <button type="button" className="btn outline" style={{ marginRight: 8 }} onClick={() => void runCompare(v.id)}>Vergelijk</button>
+                        <button type="button" className="btn primary" onClick={() => void activateDraft(v.id)}>Activeer</button>
+                      </>
+                    )}
+                    {v.id === activeId && <span className="text-tertiary" style={{ fontSize: 10 }}>live</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {comparison && compareDraftId && (
+          <div className="card-body" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <h4 style={{ margin: '0 0 8px', fontSize: 12 }}>Vergelijking (draft vs actief · SPY benchmark)</h4>
+            <table className="data-table" style={{ width: '100%', fontSize: 11 }}>
+              <thead><tr><th /><th>Draft</th><th>Actief</th><th>SPY</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Totaal rendement</td>
+                  <td>{fmt.pct(comparison.draft?.metrics?.totalReturnPct as number)}</td>
+                  <td>{fmt.pct(comparison.active?.metrics?.totalReturnPct as number)}</td>
+                  <td>{fmt.pct(comparison.spyTotalReturnPct as number)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="text-secondary" style={{ fontSize: 11, marginTop: 8 }}>
+              Draft vs actief: {comparison.draftBeatsActive === true ? 'draft wint' : comparison.draftBeatsActive === false ? 'actief wint' : '—'}
+              {' · '}
+              Draft vs SPY: {comparison.draftBeatsSpy === true ? 'draft wint' : comparison.draftBeatsSpy === false ? 'SPY wint' : '—'}
+            </p>
+          </div>
+        )}
+        {drafts.length === 0 && versions.length > 0 && (
+          <div className="card-body"><p className="text-tertiary" style={{ fontSize: 11, margin: 0 }}>Geen drafts — lesvoorstellen maken automatisch een draft + backtest.</p></div>
+        )}
+      </div>
 
       <div className="grid-2">
         <div className="card">
@@ -39,7 +165,7 @@ export function StrategyPage() {
       </div>
 
       <div className="card">
-        <div className="card-head"><h3><Icon name="settings" size={12}/> Configuration</h3><Pill kind="muted">Env-managed</Pill></div>
+        <div className="card-head"><h3><Icon name="settings" size={12}/> Configuration</h3><Pill kind="muted">Env + actieve versie</Pill></div>
         <div className="card-body">
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
             <ConfigCell k="max_positions" v={String(c.max_positions)}/>

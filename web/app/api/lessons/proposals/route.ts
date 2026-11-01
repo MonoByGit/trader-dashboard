@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 type ProposalRow = {
   id: string; title: string; description: string | null; category: string | null; status: string;
   confidence: number | null; related_trades: unknown; rationale: string | null; proposed_at: string;
+  strategy_draft_id: string | null; comparison_id: string | null;
 };
 
 export async function GET() {
@@ -26,6 +27,8 @@ export async function GET() {
         relatedTrades: Array.isArray(p.related_trades) ? p.related_trades : [],
         rationale: p.rationale || '',
         proposedAt: p.proposed_at,
+        strategyDraftId: p.strategy_draft_id,
+        comparisonId: p.comparison_id,
       })),
     });
   }
