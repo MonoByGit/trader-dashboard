@@ -48,6 +48,16 @@ async function load(qa: string, ready: boolean, closeFails: boolean) {
       events.push(k);
     },
   }));
+  jest.unstable_mockModule('@/lib/db', () => ({
+    hasDb: () => false,
+    dbQuery: async () => [],
+  }));
+  jest.unstable_mockModule('@/lib/momentum2/ownership', () => ({
+    foreignQtyForSymbol: async () => 0,
+  }));
+  jest.unstable_mockModule('@/lib/etf-order-id', () => ({
+    etfClientOrderId: () => 'test-eod-id',
+  }));
   const m = await import('@/lib/eod-flatten');
   return { m, placeOrder, events };
 }

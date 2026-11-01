@@ -34,13 +34,13 @@ describe('config', () => {
 });
 
 describe('risk', () => {
-  it('harde stop 7% bij entry, trailing pas vanaf +9% en daarna alleen omhoog', () => {
+  it('harde stop 7% bij entry, trailing pas vanaf +10% en daarna alleen omhoog', () => {
     const p = { entryPrice: 100, highWater: 100 };
     expect(m3StopLevel(p, crypto!)).toEqual({ level: 93, kind: 'hard' });
-    expect(m3StopLevel({ ...p, highWater: 108 }, crypto!)).toEqual({ level: 93, kind: 'hard' }); // nog geen +9%
-    const t = m3StopLevel({ ...p, highWater: 110 }, crypto!);
+    expect(m3StopLevel({ ...p, highWater: 108 }, crypto!)).toEqual({ level: 93, kind: 'hard' });
+    const t = m3StopLevel({ ...p, highWater: 112 }, crypto!);
     expect(t.kind).toBe('trailing');
-    expect(t.level).toBeCloseTo(103.4, 6);
+    expect(t.level).toBeCloseTo(103.04, 1);
     expect(m3StopLevel({ ...p, highWater: 120 }, crypto!).level).toBeGreaterThan(t.level);
   });
   it('de eerste trailing-uitstap staat altijd in de plus (geen break-even-uitstappen), ook in het hele raster', () => {
@@ -134,6 +134,20 @@ describe('simulate crypto', () => {
 });
 
 describe('walk-forward', () => {
+  it('draagt gehalte boek door naar het volgende testvenster', async () => {
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1 };
+    const data = { barsBySymbol: { [sym]: dipThenTurn(120, 40) }, benchmark: makeBars(120, 100, 0.0005) };
+    const halted = newBook(cfg, null, null);
+    halted.halted = true;
+    halted.haltReason = 'verliesgrens';
+    halted.positions[sym] = { qty: 1, entryPrice: 50, entryDate: '2024-01-01', highWater: 50 };
+    const r = await simulateVersion(cfg, data, { hooks: m3Hooks, initialBook: halted });
+    expect(r.book.halted).toBe(true);
+    expect(r.trades.filter((t) => t.side === 'buy')).toHaveLength(0);
+    expect(r.trades.some((t) => t.side === 'sell')).toBe(true);
+  });
+
   it('kiest op train en meet op test, samengesteld rendement per venster', async () => {
     const sym = 'X';
     const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1 };
