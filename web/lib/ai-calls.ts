@@ -3,6 +3,24 @@ import type { Provider } from './ai';
 import { dbRun, hasDb } from './db';
 import { ensureSchema } from './migrate';
 
+export async function recordAiCallFailure(input: {
+  routine?: string;
+  provider: Provider;
+  model: string;
+  finishReason?: string | null;
+  assetClass?: 'etf' | 'crypto';
+}): Promise<void> {
+  await recordAiCall({
+    routine: input.routine,
+    provider: input.provider,
+    model: input.model,
+    inputTokens: 0,
+    outputTokens: 0,
+    finishReason: input.finishReason ?? 'error',
+    assetClass: input.assetClass,
+  });
+}
+
 export async function recordAiCall(input: {
   routine?: string;
   provider: Provider;

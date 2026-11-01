@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["web/*"],
+      "@guards/*": ["src/guards/*"],
+      "@scheduler/decide": ["src/scheduler/decide.ts"],
+      "@scheduler/decide-crypto": ["src/scheduler/decide-crypto.ts"],
+      "@scheduler/routine-lock": ["src/scheduler/routine-lock.ts"],
+      "@scheduler/run-status": ["src/scheduler/run-status.ts"],
+      "@scheduler/*": ["src/scheduler/*"],
+      "@snapshots/*": ["src/snapshots/*"],
+      "@snapshots/returns": ["src/snapshots/returns.ts"],
+      "@ai-cost/*": ["src/ai-cost/*"],
+      "@ai-cost/pricing": ["src/ai-cost/pricing.ts"],
+      "@ai/json-response": ["src/ai/json-response.ts"],
+      "@backtest/*": ["src/backtest/*"],
+      "@backtest/engine": ["src/backtest/engine.ts"],
+      "@backtest/types": ["src/backtest/types.ts"],
+      "@backtest/intraday-brackets": ["src/backtest/intraday-brackets.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "web/**/*.integration.test.ts"]
+}

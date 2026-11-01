@@ -10,6 +10,7 @@ import {
 } from '@guards/index';
 import { isSoftStartEnabled } from '@/lib/strategy-versions';
 import { dbQuery, dbRun, hasDb, initDb } from '@/lib/db';
+import { nextConsecutiveLosses } from '../../../src/guards/consecutive-losses';
 
 export interface GuardRuntimeState {
   tradingEnabled: boolean;
@@ -193,17 +194,41 @@ export async function syncEquitySnapshots(equity: number): Promise<GuardRuntimeS
   return state;
 }
 
+/** ETF market-open BUYs today (ET); crypto uses countDailyCryptoTrades. */
 export async function countDailyTrades(): Promise<number> {
   if (!hasDb()) return 0;
   await initDb();
   const day = todayEt();
   const rows = await dbQuery<{ c: string }>(
     `SELECT COUNT(*)::text AS c FROM decisions
-     WHERE routine='market-open' AND decision='BUY'
+     WHERE decision='BUY'
+       AND routine = 'market-open'
        AND (ts AT TIME ZONE 'America/New_York')::date = $1::date`,
     [day]
   );
   return rows.length ? parseInt(rows[0].c, 10) : 0;
+}
+
+export async function countDailyCryptoTrades(): Promise<number> {
+  if (!hasDb()) return 0;
+  await initDb();
+  const day = todayEt();
+  const rows = await dbQuery<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM decisions
+     WHERE decision='BUY'
+       AND routine = 'crypto-scan'
+       AND (ts AT TIME ZONE 'America/New_York')::date = $1::date`,
+    [day]
+  );
+  return rows.length ? parseInt(rows[0].c, 10) : 0;
+}
+
+export async function recordClosedTradePnl(realizedPnl: number): Promise<void> {
+  const state = await loadGuardState();
+  const next = nextConsecutiveLosses(state.consecutiveLosses, realizedPnl);
+  if (next !== state.consecutiveLosses) {
+    await persistGuardState({ consecutiveLosses: next });
+  }
 }
 
 export async function countOrdersLast10Min(): Promise<number> {

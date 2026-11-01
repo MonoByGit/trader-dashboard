@@ -1,3 +1,5 @@
+import { shouldScheduleRoutineRun } from './run-status.js';
+
 export type RoutineName = 'premarket' | 'market-open' | 'midday' | 'eod' | 'weekly';
 
 export interface CalendarDay {
@@ -11,6 +13,7 @@ export interface RoutineRunRecord {
   trading_date: string;
   status: string;
   finished_at?: string | null;
+  started_at?: string | null;
 }
 
 export interface SchedulerConfig {
@@ -109,14 +112,7 @@ function shouldRunRoutine(
   nowMs: number,
 ): boolean {
   const last = lastRunFor(runs, routine, tradingDate);
-  if (last?.status === 'ok') return false;
-  if (last?.status === 'skipped') return false;
-  if (last?.status === 'failed' && last.finished_at) {
-    const finishedMs = new Date(last.finished_at).getTime();
-    if (nowMs - finishedMs > cfg.retryWindowMinutes * 60_000) return false;
-    return true;
-  }
-  return true;
+  return shouldScheduleRoutineRun(last, nowMs, cfg.retryWindowMinutes);
 }
 
 export interface DecideInput {

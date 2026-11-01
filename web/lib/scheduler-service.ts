@@ -36,8 +36,9 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
   const runRecords = runs.map((r) => ({
     routine: r.routine,
     trading_date: r.trading_date,
-    status: r.status === 'running' ? 'failed' : r.status,
+    status: r.status,
     finished_at: r.finished_at,
+    started_at: r.started_at,
   }));
 
   const dueEtf = decideDueRoutines({
@@ -53,8 +54,9 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
     nowMs,
     runs: cryptoRuns.map((r) => ({
       routine: r.routine,
-      status: r.status === 'running' ? 'failed' : r.status,
+      status: r.status,
       finished_at: r.finished_at,
+      started_at: r.started_at,
     })),
     config: { tickIntervalHours: cryptoCfg.tickIntervalHours },
   });

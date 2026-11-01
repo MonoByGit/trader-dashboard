@@ -9,6 +9,8 @@ import {
   type JsonCompletion,
 } from '@ai/json-response';
 import { safeNewsJsonFromText } from '../../src/ai/news-json';
+import { aiFetchSignal, withAiAbort } from './ai-timeout';
+import { recordAiCallFailure } from './ai-calls';
 
 export { AiJsonParseError };
 
@@ -233,6 +235,7 @@ async function deepseekChat(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal: aiFetchSignal(),
   });
   if (!res.ok) {
     throw new Error(`DeepSeek ${res.status}: ${await res.text()}`);
@@ -259,9 +262,12 @@ function transcript(messages: ChatMsg[]): string {
 async function generateText(system: string, user: string, maxTokens: number, tier: Tier): Promise<string> {
   const provider = activeProvider();
   const model = modelForTier(tier);
-  if (provider === 'claude') return (await claudeChat(model, system, [{ role: 'user', content: user }], maxTokens)).text;
-  if (provider === 'deepseek') return (await deepseekChat(model, system, user, maxTokens, false)).text;
-  return (await geminiGenerate(model, system, user, maxTokens)).text;
+  const run = async () => {
+    if (provider === 'claude') return (await claudeChat(model, system, [{ role: 'user', content: user }], maxTokens)).text;
+    if (provider === 'deepseek') return (await deepseekChat(model, system, user, maxTokens, false)).text;
+    return (await geminiGenerate(model, system, user, maxTokens)).text;
+  };
+  return withAiAbort(run());
 }
 
 async function generateJsonCompletion(
@@ -272,9 +278,12 @@ async function generateJsonCompletion(
 ): Promise<JsonCompletion> {
   const provider = activeProvider();
   const model = modelForTier(tier);
-  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
-  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
-  return geminiGenerate(model, system, user, maxTokens, true);
+  const run = () => {
+    if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+    if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
+    return geminiGenerate(model, system, user, maxTokens, true);
+  };
+  return withAiAbort(run());
 }
 
 async function generateNewsCompletion(
@@ -284,9 +293,12 @@ async function generateNewsCompletion(
 ): Promise<JsonCompletion> {
   const provider = activeProvider();
   const model = modelForTier('fast');
-  if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
-  if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
-  return geminiGenerate(model, system, user, maxTokens, true, { disableThinking: true });
+  const run = () => {
+    if (provider === 'claude') return claudeChat(model, system, [{ role: 'user', content: user }], maxTokens);
+    if (provider === 'deepseek') return deepseekChat(model, system, user, maxTokens, true);
+    return geminiGenerate(model, system, user, maxTokens, true, { disableThinking: true });
+  };
+  return withAiAbort(run());
 }
 
 export type AgentNewsLookupResult = {
@@ -446,4 +458,21 @@ export function claudeText(model: string, system: string, user: string, maxToken
 /** @deprecated use agentNewsLookup with an explicit routine name. */
 export function geminiText(_model: string, prompt: string, maxTokens = 2048): Promise<string> {
   return agentNewsLookup(prompt, { routine: 'legacy-news', maxTokens }).then((r) => r.json);
+}
+
+export async function logFailedAiCall(
+  error: unknown,
+  routineOverride?: string,
+  modelOverride?: string,
+): Promise<void> {
+  const ctx = aiRoutineContext.getStore();
+  const routine = routineOverride ?? ctx?.routine;
+  const msg = error instanceof Error ? error.message : String(error);
+  await recordAiCallFailure({
+    routine,
+    provider: activeProvider(),
+    model: modelOverride ?? modelForTier('fast'),
+    finishReason: `error:${msg.slice(0, 200)}`,
+    assetClass: ctx?.assetClass ?? (routine?.startsWith('crypto') ? 'crypto' : 'etf'),
+  });
 }

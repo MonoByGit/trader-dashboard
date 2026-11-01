@@ -45,6 +45,22 @@ describe('scheduler decideDueRoutines', () => {
     expect(due).not.toContain('premarket');
   });
 
+  it('does not redispatch while a run is still running', () => {
+    const nowMs = openMs + 5 * 60_000;
+    const tradingDate = tradingDateEt(nowMs);
+    const runs: RoutineRunRecord[] = [
+      {
+        routine: 'market-open',
+        trading_date: tradingDate,
+        status: 'running',
+        started_at: new Date(nowMs - 2 * 60_000).toISOString(),
+        finished_at: null,
+      },
+    ];
+    const due = decideDueRoutines({ nowMs, calendarToday: day, calendarThisWeek: [day], runs });
+    expect(due).not.toContain('market-open');
+  });
+
   it('retries failed run within retry window', () => {
     const nowMs = openMs - 30 * 60_000;
     const tradingDate = tradingDateEt(nowMs);
@@ -53,6 +69,7 @@ describe('scheduler decideDueRoutines', () => {
         routine: 'premarket',
         trading_date: tradingDate,
         status: 'failed',
+        started_at: new Date(nowMs - 20 * 60_000).toISOString(),
         finished_at: new Date(nowMs - 10 * 60_000).toISOString(),
       },
     ];

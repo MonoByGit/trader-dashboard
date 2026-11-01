@@ -8,6 +8,8 @@ export interface GuardConfig {
   maxTotalExposurePct: number;
   minCashReservePct: number;
   maxDailyTrades: number;
+  /** Crypto-scan BUY cap per day (separate from ETF maxDailyTrades). */
+  maxDailyCryptoTrades: number;
   maxOrderSizeUsd: number;
   minOrderSizeUsd: number;
   maxOrdersPer10Min: number;
@@ -34,6 +36,7 @@ export function loadGuardConfig(env: NodeJS.ProcessEnv = process.env): GuardConf
     maxTotalExposurePct: num('MAX_TOTAL_EXPOSURE_PCT', 70),
     minCashReservePct: num('MIN_CASH_RESERVE_PCT', 10),
     maxDailyTrades: num('MAX_DAILY_TRADES', 10),
+    maxDailyCryptoTrades: num('MAX_DAILY_CRYPTO_TRADES', 2),
     maxOrderSizeUsd: num('MAX_ORDER_SIZE_USD', 30_000),
     minOrderSizeUsd: num('MIN_ORDER_SIZE_USD', 500),
     maxOrdersPer10Min: num('MAX_ORDERS_PER_10MIN', 5),

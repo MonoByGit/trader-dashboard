@@ -10,8 +10,11 @@
 //
 // Pure functies, geen side effects: makkelijk te testen los van de bot.
 
+import { clampWeightToGuardCap } from '../../src/sizing/guard-cap';
+
 const TARGET_VOL = 0.12; // gewenste jaarlijkse portfolio-volatiliteit (12%)
 const TRADING_DAYS = 252;
+
 const BASE_CAP = 0.25; // strategie-basis: 25% van equity per trade als bovengrens
 const MAX_PER_SYMBOL = 0.30; // nooit meer dan 30% van equity in één symbool
 const CASH_FLOOR = 0.10; // houd minstens 10% cash aan
@@ -22,6 +25,7 @@ export type SizingBinding =
   | 'vol-target'
   | 'kelly'
   | 'base-cap'
+  | 'guard-cap'
   | 'cash-floor'
   | 'insufficient-data'
   | 'no-shares';
@@ -32,6 +36,8 @@ export interface SizingInputs {
   price: number; // huidige/laatste prijs voor omrekening naar shares
   equity: number; // totale portfolio-equity
   availableCash: number; // vrije cash
+  /** Portfolio guard max position size (% of equity), e.g. soft-start 5. */
+  maxPositionSizePct?: number;
 }
 
 export interface KellyStats {
@@ -98,6 +104,14 @@ export function computePositionSize(inp: SizingInputs, kelly?: KellyStats): Sizi
   let weight = chosen.w;
   let binding: SizingBinding = chosen.tag;
 
+  if (inp.maxPositionSizePct != null) {
+    const capped = clampWeightToGuardCap(weight, inp.maxPositionSizePct);
+    if (capped < weight) {
+      weight = capped;
+      binding = 'guard-cap';
+    }
+  }
+
   if (volAnnual == null && kellyCap == null) {
     // Geen vol-data en geen Kelly: val terug op de basis-cap, maar markeer het.
     binding = 'insufficient-data';
@@ -145,6 +159,8 @@ function explain(symbol: string, shares: number, notional: number, weight: numbe
       return `${shares}x ${symbol} ($${notional}, ${pct}% van equity). Kelly-limiet bond: op basis van de recente trefkans is dit de verstandige maximale inzet.`;
     case 'base-cap':
       return `${shares}x ${symbol} ($${notional}, ${pct}% van equity). Basis-cap bond: ${symbol} is rustig genoeg (${vol}), dus de standaard 25%-grens is leidend.`;
+    case 'guard-cap':
+      return `${shares}x ${symbol} ($${notional}, ${pct}% van equity). Guard-cap bond: positie beperkt tot het actieve max-position-percentage.`;
     case 'cash-floor':
       return `${shares}x ${symbol} ($${notional}, ${pct}% van equity). Cash-bodem bond: ingeperkt om minstens 10% cash aan te houden.`;
     case 'insufficient-data':

@@ -24,8 +24,24 @@ await jest.unstable_mockModule('@/lib/guards/service', () => ({
     circuitBreakerTripped: false,
   })),
   getEffectiveCryptoGuardConfig: jest.fn(async () => ({ hardStopPct: 0.08 })),
+  getEffectiveGuardConfig: jest.fn(async () => ({ maxDailyCryptoTrades: 2, maxDailyTrades: 3 })),
   checkOrderAgainstLimits: jest.fn(async () => ({ allowed: true, failReasons: [] })),
   countDailyTrades: jest.fn(async () => 0),
+  countDailyCryptoTrades: jest.fn(async () => 0),
+}));
+
+await jest.unstable_mockModule('./daily-pnl-live', () => ({
+  cryptoDailyPnlFromLive: jest.fn(() => 0),
+  yesterdayUtcCloseBySymbol: jest.fn(() => ({})),
+}));
+
+await jest.unstable_mockModule('@/lib/buy-idempotency', () => ({
+  gateBuyIfLockLost: jest.fn(async () => ({ allowed: true, reason: '' })),
+  hasBuyDecisionTodayEt: jest.fn(async () => false),
+}));
+
+await jest.unstable_mockModule('@/lib/routine-run-context', () => ({
+  getRoutineRunContext: jest.fn(() => ({ runId: 'test-run' })),
 }));
 
 await jest.unstable_mockModule('./state', () => ({
@@ -42,11 +58,14 @@ await jest.unstable_mockModule('@/lib/alpaca', () => ({
     placeOrder: jest.fn(async () => {
       throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
     }),
+    orders: jest.fn(async () => []),
   },
 }));
 
 await jest.unstable_mockModule('@/lib/asset-class', () => ({
   filterByAssetClass: jest.fn((_p: unknown[], cls: string) => (cls === 'crypto' ? [] : [])),
+  classifySymbol: jest.fn(() => 'crypto'),
+  isCryptoSymbol: jest.fn(() => true),
 }));
 
 await jest.unstable_mockModule('@/lib/sleeves', () => ({
@@ -67,6 +86,7 @@ await jest.unstable_mockModule('./strategy-version', () => ({
 }));
 await jest.unstable_mockModule('@/lib/ai', () => ({
   claudeJsonArray: jest.fn(async () => [{ symbol: 'BTC/USD', action: 'buy', reason: 'test' }]),
+  logFailedAiCall: jest.fn(),
   MODELS: { sonnet: 's' },
   AiJsonParseError: class extends Error {},
 }));

@@ -6,8 +6,11 @@ export interface CryptoLimitsInput {
   symbolExposureUsd: number;
   proposedOrderUsd: number;
   newPositionsOpenedToday: number;
+  /** Legacy sleeve-equity fields (kept for callers); prefer cryptoDailyPnlUsd when set. */
   cryptoDayStartEquityUsd: number;
   cryptoSleeveEquityUsd: number;
+  /** Sum of crypto position change_today (USD); negative = intraday loss. */
+  cryptoDailyPnlUsd?: number;
 }
 
 export interface CryptoLimitsResult {
@@ -47,7 +50,14 @@ export function evaluateCryptoLimits(
     }
   }
 
-  if (input.cryptoDayStartEquityUsd > 0 && input.cryptoSleeveEquityUsd > 0) {
+  if (input.cryptoDailyPnlUsd !== undefined && input.cryptoDailyPnlUsd < 0) {
+    const lossPct = (-input.cryptoDailyPnlUsd / equity) * 100;
+    if (lossPct > config.maxCryptoDailyLossPct) {
+      failReasons.push(
+        `Crypto daily loss ${lossPct.toFixed(2)}% of account exceeds limit ${config.maxCryptoDailyLossPct}%`,
+      );
+    }
+  } else if (input.cryptoDayStartEquityUsd > 0 && input.cryptoSleeveEquityUsd > 0) {
     const lossPct =
       ((input.cryptoDayStartEquityUsd - input.cryptoSleeveEquityUsd) / input.totalEquityUsd) * 100;
     if (lossPct > config.maxCryptoDailyLossPct) {

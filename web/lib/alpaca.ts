@@ -156,8 +156,11 @@ export interface AlpacaPosition {
   cost_basis: string;
   unrealized_pl: string;
   unrealized_plpc: string;
+  unrealized_intraday_pl?: string;
+  unrealized_intraday_plpc?: string;
   side: string;
   asset_class: string;
+  /** Fractional day change (e.g. -0.05), not USD. */
   change_today: string;
 }
 

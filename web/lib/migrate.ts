@@ -176,6 +176,14 @@ async function migrate(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_routine_runs_day ON routine_runs (trading_date, routine);
 
+    CREATE TABLE IF NOT EXISTS routine_run_locks (
+      routine TEXT NOT NULL,
+      slot_key TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (routine, slot_key)
+    );
+
     CREATE TABLE IF NOT EXISTS ai_calls (
       id TEXT PRIMARY KEY,
       ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
