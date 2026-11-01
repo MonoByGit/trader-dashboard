@@ -2,9 +2,8 @@ import type { AssetClassId } from './types';
 
 /** Alpaca crypto pairs use BASE/USD; equities are plain tickers. */
 export function classifySymbol(symbol: string, assetClassHint?: string | null): AssetClassId {
-  if (assetClassHint === 'crypto' || assetClassHint === 'us_equity') {
-    return assetClassHint === 'crypto' ? 'crypto' : 'etf';
-  }
+  if (assetClassHint === 'crypto') return 'crypto';
+  if (assetClassHint === 'us_equity' || assetClassHint === 'etf') return 'etf';
   if (symbol.includes('/')) return 'crypto';
   // Alpaca position symbols omit the slash (e.g. BTCUSD); avoid matching equity tickers that rarely end in USD.
   if (!symbol.includes('/') && /^[A-Z0-9]{2,12}USD$/.test(symbol)) return 'crypto';

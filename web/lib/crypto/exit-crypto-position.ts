@@ -3,6 +3,7 @@ import { ensureSchema } from '@/lib/migrate';
 import { awaitOrderFilled, awaitStopOrderCanceled } from '../../../src/crypto/cancel-stop-order';
 import { cryptoStopLookupKeys } from '../../../src/crypto/stop-storage-key';
 import { cryptoTpLookupKeys } from '../../../src/crypto/exit-storage-key';
+import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
 import { positionQtyAvailable } from '../../../src/crypto/buy-fill-qty';
 import { alpacaPositionSymbol, alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
@@ -50,8 +51,7 @@ async function awaitPositionFlat(
   for (let i = 0; i < attempts; i++) {
     const positions = await alpaca.positions();
     const pos = positions.find((p) => alpacaSymbolsEqual(p.symbol, symbol));
-    const sellQty = pos ? positionQtyAvailable(pos) : 0;
-    if (!(sellQty > 0)) return true;
+    if (!pos || parseFloat(pos.qty) === 0) return true;
     if (i < attempts - 1) await sleep(delayMs);
   }
   return false;
@@ -152,12 +152,19 @@ export async function exitCryptoPosition(
     if (lockBlock) return lockBlock;
 
     await logExitReason(symbol, reason, `Market sell ${sellQty} (${reason})`);
+    const clientOrderId = buildAlpacaClientOrderId({
+      routine: 'crypto-exit',
+      runId: owner.replace(/-/g, '').slice(0, 12),
+      symbol: alpacaPositionSymbol(symbol),
+      side: 'sell',
+    });
     const order = await alpaca.placeOrder({
       symbol,
       qty: sellQty,
       side: 'sell',
       type: 'market',
       time_in_force: 'gtc',
+      client_order_id: clientOrderId,
     });
     const filled = await awaitOrderFilled(order.id, (id) => alpaca.getOrder(id));
     if (filled) {

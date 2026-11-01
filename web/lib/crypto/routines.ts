@@ -18,6 +18,7 @@ import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } fr
 import { enforceSoftwareCryptoStops, protectCryptoPositionAfterBuy, saveCryptoStop } from './stops';
 import { getCryptoSymbols } from './strategy-version';
 import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
+import { buildAlpacaClientOrderId } from '../../../src/alpaca/client-order-id';
 import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
 
@@ -127,6 +128,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   }
 
   const orders: { symbol: string; qty: number; orderId: string }[] = [];
+  const scanRunId = String(Date.now());
   for (const c of candidates) {
     if (
       c.action !== 'buy' ||
@@ -196,6 +198,12 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
 
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
     let order;
+    const clientOrderId = buildAlpacaClientOrderId({
+      routine: 'crypto-scan',
+      runId: scanRunId,
+      symbol: c.symbol,
+      side: 'buy',
+    });
     try {
       order = await alpaca.placeOrder({
         symbol: c.symbol,
@@ -203,6 +211,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         side: 'buy',
         type: 'market',
         time_in_force: 'gtc',
+        client_order_id: clientOrderId,
       });
     } catch (e) {
       await logGuardEvent('crypto_order_fail', String(e), { symbol: c.symbol });

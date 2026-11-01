@@ -4,17 +4,6 @@ import { alpaca } from './alpaca';
 import { exitCryptoPosition } from '@/lib/crypto/exit-crypto-position';
 import { awaitStopOrderCanceled } from '../../src/crypto/cancel-stop-order';
 
-export class ClosePositionOrdersTimeoutError extends Error {
-  constructor(
-    message: string,
-    readonly canceledOrderIds: string[],
-    readonly stillOpenOrderIds: string[],
-  ) {
-    super(message);
-    this.name = 'ClosePositionOrdersTimeoutError';
-  }
-}
-
 export type ClosePositionAlreadyClosed = {
   alreadyClosed: true;
   reason: 'broker_filled';

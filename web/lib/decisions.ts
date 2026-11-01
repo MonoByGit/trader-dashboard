@@ -10,7 +10,11 @@ export async function saveDecision(d: Record<string, unknown>): Promise<string> 
   await initDb();
   const symbol = String(d.symbol);
   const assetClass =
-    (d.asset_class as AssetClassId | undefined) ?? classifySymbol(symbol);
+    (d.asset_class as AssetClassId | undefined) ??
+    classifySymbol(
+      symbol,
+      typeof d.alpaca_asset_class === 'string' ? d.alpaca_asset_class : undefined,
+    );
 
   let strategyVersion: string;
   if (assetClass === 'crypto') {

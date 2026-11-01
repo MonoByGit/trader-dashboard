@@ -7,7 +7,7 @@ import { ensureSchema } from './migrate';
 export async function upsertAlpacaOrder(o: AlpacaOrder): Promise<void> {
   if (!hasDb()) return;
   await ensureSchema();
-  const assetClass = classifySymbol(o.symbol);
+  const assetClass = classifySymbol(o.symbol, o.asset_class);
   await dbRun(
     `INSERT INTO alpaca_orders (
       id, symbol, side, qty, filled_qty, type, status, limit_price, stop_price,

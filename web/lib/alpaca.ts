@@ -10,6 +10,8 @@ import {
 import { logAlpacaModeAtStartup } from './alpaca-startup';
 import { alpacaPositionCloseUrl } from '../../src/alpaca/symbol-path';
 import { AlpacaHttpError } from '../../src/alpaca/alpaca-http-error';
+import { alpacaHttpStatusFromError } from '../../src/alpaca/parse-http-error';
+import { placeOrderWithReconcile } from '../../src/alpaca/order-post-reconcile';
 
 logAlpacaModeAtStartup();
 
@@ -60,6 +62,25 @@ async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> 
   return parseJsonBody<T>(res);
 }
 
+async function getOrderByClientOrderId(clientOrderId: string): Promise<AlpacaOrder | null> {
+  try {
+    return await get<AlpacaOrder>(
+      `${BASE}/v2/orders:by_client_order_id?client_order_id=${encodeURIComponent(clientOrderId)}`,
+    );
+  } catch (e) {
+    if (alpacaHttpStatusFromError(e) === 404) return null;
+    throw e;
+  }
+}
+
+async function placeOrderRequest(o: AlpacaOrderRequest): Promise<AlpacaOrder> {
+  assertAlpacaPaperTrading(BASE);
+  return placeOrderWithReconcile<AlpacaOrder>(o.client_order_id, {
+    submit: () => post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
+    lookupByClientOrderId: (id) => getOrderByClientOrderId(id),
+  });
+}
+
 export const alpaca = {
   account: () => get<AlpacaAccount>(`${BASE}/v2/account`),
   positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`),
@@ -72,8 +93,8 @@ export const alpaca = {
   getOrder: (orderId: string) => get<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`),
   cancelOrder: (orderId: string) =>
     del<unknown>(`${BASE}/v2/orders/${orderId}`, { trading: true }),
-  placeOrder: (o: AlpacaOrderRequest) =>
-    post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
+  placeOrder: (o: AlpacaOrderRequest) => placeOrderRequest(o),
+  getOrderByClientOrderId,
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
   bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {
     const bars = await fetchStockDailyBars({
@@ -142,8 +163,10 @@ export interface AlpacaPosition {
 
 export interface AlpacaOrder {
   id: string;
+  client_order_id?: string;
   symbol: string;
   side: string;
+  asset_class?: string;
   qty: string;
   filled_qty: string;
   type: string;
@@ -168,6 +191,7 @@ export interface AlpacaOrderRequest {
   order_class?: 'simple' | 'bracket' | 'oco' | 'oto';
   stop_loss?: { stop_price: number };
   take_profit?: { limit_price: number };
+  client_order_id?: string;
 }
 
 export interface AlpacaClock {
