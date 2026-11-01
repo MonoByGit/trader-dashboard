@@ -22,6 +22,46 @@ function assetClassForRoutine(routine: string): 'etf' | 'crypto' {
   return routine.startsWith('crypto') ? 'crypto' : 'etf';
 }
 
+/** Idempotent: lock table may be missing until first migrate on a live DB. */
+async function ensureRoutineRunLocksTable(): Promise<void> {
+  if (!hasDb()) return;
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS routine_run_locks (
+      routine TEXT NOT NULL,
+      slot_key TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (routine, slot_key)
+    );
+  `);
+}
+
+/** Persist a failed attempt when tryBegin/dispatch throws before a normal run row exists. */
+export async function recordFailedRoutineRunAttempt(
+  routine: string,
+  tradingDate: string,
+  errorMessage: string,
+  nowMs = Date.now(),
+): Promise<string | null> {
+  if (!hasDb()) return null;
+  await ensureSchema();
+  await ensureRoutineRunLocksTable();
+  const id = `run-${routine}-${nowMs}-fail`;
+  const assetClass = assetClassForRoutine(routine);
+  const msg = errorMessage.slice(0, 2000);
+  try {
+    await dbRun(
+      `INSERT INTO routine_runs (id, routine, trading_date, started_at, finished_at, status, error_message, asset_class)
+       VALUES ($1, $2, $3::date, NOW(), NOW(), 'failed', $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [id, routine, tradingDate, msg, assetClass],
+    );
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 export async function startRoutineRun(routine: string, tradingDate?: string): Promise<string | null> {
   const begun = await tryBeginRoutineRun(routine, tradingDate);
   if ('blocked' in begun) return null;
@@ -37,6 +77,7 @@ export async function tryBeginRoutineRun(
     return { runId: `run-${routine}-${nowMs}`, slotKey: routineLockSlotKey(routine, tradingDateEt(nowMs), nowMs) };
   }
   await ensureSchema();
+  await ensureRoutineRunLocksTable();
   const day = tradingDate ?? tradingDateEt(nowMs);
   const slotKey = routineLockSlotKey(routine, day, nowMs);
   const id = `run-${routine}-${nowMs}`;
@@ -69,7 +110,7 @@ export async function tryBeginRoutineRun(
        RETURNING run_id`,
       [routine, slotKey, id],
     );
-    if (!lock.rowCount) {
+    if (lock.rows.length === 0) {
       return { blocked: true as const, reason: 'Routine run lock conflict' };
     }
 

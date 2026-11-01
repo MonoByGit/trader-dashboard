@@ -12,6 +12,9 @@ export async function POST(req: Request) {
     const result = await runSchedulerTick(nowMs);
     return NextResponse.json(result);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error('[scheduler-tick] failed', { message, stack });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
