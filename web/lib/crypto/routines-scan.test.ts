@@ -1,11 +1,14 @@
 import { jest } from '@jest/globals';
 
 const enforceSoftwareCryptoStops = jest.fn<() => Promise<{ triggered: boolean }>>();
+const enforceSoftwareCryptoTakeProfit = jest.fn<() => Promise<{ triggered: boolean }>>();
 
 await jest.unstable_mockModule('./stops', () => ({
   enforceSoftwareCryptoStops,
+  enforceSoftwareCryptoTakeProfit,
   placeCryptoStopLimit: jest.fn(),
   saveCryptoStop: jest.fn(),
+  saveCryptoTakeProfit: jest.fn(),
   protectCryptoPositionAfterBuy: jest.fn(),
 }));
 
@@ -122,7 +125,7 @@ describe('runCryptoSoftwareStopsForPositions (M-6)', () => {
     expect(enforceSoftwareCryptoStops).toHaveBeenCalledWith('BTCUSD', 89_000);
   });
 
-  it('logs crypto_software_stop_tick_fail when enforce throws', async () => {
+  it('logs crypto_enforce_fail when enforce throws', async () => {
     const logGuardEvent = (await import('@/lib/guards/service')).logGuardEvent as jest.Mock;
     enforceSoftwareCryptoStops.mockRejectedValueOnce(new Error('tick boom'));
     await runCryptoSoftwareStopsForPositions(
@@ -131,7 +134,7 @@ describe('runCryptoSoftwareStopsForPositions (M-6)', () => {
       ['BTC/USD'],
     );
     expect(logGuardEvent).toHaveBeenCalledWith(
-      'crypto_software_stop_tick_fail',
+      'crypto_enforce_fail',
       'Error: tick boom',
       expect.objectContaining({ symbol: 'BTCUSD' }),
     );

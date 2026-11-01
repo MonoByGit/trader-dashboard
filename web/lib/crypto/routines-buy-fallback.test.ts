@@ -10,8 +10,10 @@ const registerRoutineHandler = jest.fn();
 
 await jest.unstable_mockModule('./stops', () => ({
   saveCryptoStop,
+  saveCryptoTakeProfit: jest.fn(),
   protectCryptoPositionAfterBuy,
   enforceSoftwareCryptoStops: jest.fn(),
+  enforceSoftwareCryptoTakeProfit: jest.fn(),
 }));
 
 await jest.unstable_mockModule('@/lib/decisions', () => ({ saveDecision }));
@@ -53,7 +55,9 @@ await jest.unstable_mockModule('@/lib/alpaca', () => ({
   alpaca: {
     account: jest.fn(async () => ({ equity: '100000', cash: '50000' })),
     positions: jest.fn(async () => []),
-    cryptoBars: jest.fn(async () => ({ bars: { 'BTC/USD': [{ c: 90000, v: 1 }] } })),
+    cryptoBars: jest.fn(async () => ({
+      bars: { 'BTC/USD': Array.from({ length: 20 }, () => ({ c: 90000, v: 1000 })) },
+    })),
     placeOrder: jest.fn(async () => ({ id: 'buy-99' })),
     orders: jest.fn(async () => []),
   },
@@ -76,7 +80,18 @@ await jest.unstable_mockModule('@/lib/orders-store', () => ({
 }));
 await jest.unstable_mockModule('@/lib/routine-dispatch', () => ({ registerRoutineHandler }));
 await jest.unstable_mockModule('@/crypto-strategy.json', () => ({
-  default: { name: 't', rules: { max_positions: 2, hard_stop_pct: 0.08, position_size_pct: 0.05 } },
+  default: {
+    name: 't',
+    rules: {
+      max_positions: 2,
+      hard_stop_pct: 0.08,
+      take_profit_pct: 0.1,
+      position_size_pct: 0.05,
+      rsi_min: 0,
+      rsi_max: 100,
+      volume_ratio_min: 0,
+    },
+  },
 }));
 await jest.unstable_mockModule('./strategy-version', () => ({
   getCryptoSymbols: jest.fn(() => ['BTC/USD']),
@@ -90,6 +105,9 @@ await jest.unstable_mockModule('@/lib/ai', () => ({
 await jest.unstable_mockModule('@guards/index', () => ({
   blocksNewEntries: jest.fn(() => false),
   evaluateCryptoLimits: jest.fn(() => ({ allowed: true, failReasons: [] })),
+}));
+await jest.unstable_mockModule('../../../src/crypto/entry-criteria', () => ({
+  passesCryptoEntryCriteria: jest.fn(() => ({ ok: true })),
 }));
 
 await import('./routines');
