@@ -1,0 +1,14 @@
+<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>APPLE INC</nameOfIssuer>
+    <cusip>037833100</cusip>
+    <value>1000000</value>
+    <shrsOrPrnAmt><sshPrnamt>10000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>AMERICAN EXPRESS CO</nameOfIssuer>
+    <cusip>025816109</cusip>
+    <value>500000</value>
+    <shrsOrPrnAmt><sshPrnamt>5000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+  </infoTable>
+</informationTable>
