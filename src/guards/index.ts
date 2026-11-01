@@ -1,4 +1,7 @@
 export { loadGuardConfig, type GuardConfig } from './config';
+export { loadCryptoGuardConfig, type CryptoGuardConfig } from './crypto-config';
+export { evaluateCryptoLimits } from './crypto-limits';
+export { applySoftStartToCryptoGuardConfig } from './crypto-soft-start';
 export { evaluateCircuitBreakers } from './circuit-breakers';
 export { evaluatePortfolioLimits } from './portfolio-limits';
 export { planEodClose } from './eod-clock';

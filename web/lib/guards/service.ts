@@ -1,9 +1,12 @@
 import {
   loadGuardConfig,
+  loadCryptoGuardConfig,
+  applySoftStartToGuardConfig,
+  applySoftStartToCryptoGuardConfig,
   evaluateCircuitBreakers,
   evaluatePortfolioLimits,
-  applySoftStartToGuardConfig,
   type GuardConfig,
+  type CryptoGuardConfig,
 } from '@guards/index';
 import { isSoftStartEnabled } from '@/lib/strategy-versions';
 import { dbQuery, dbRun, hasDb, initDb } from '@/lib/db';
@@ -291,6 +294,12 @@ export async function getEffectiveGuardConfig(): Promise<GuardConfig> {
   const base = loadGuardConfig();
   const soft = await isSoftStartEnabled();
   return applySoftStartToGuardConfig(base, soft);
+}
+
+export async function getEffectiveCryptoGuardConfig(): Promise<CryptoGuardConfig> {
+  const base = loadCryptoGuardConfig();
+  const soft = await isSoftStartEnabled();
+  return applySoftStartToCryptoGuardConfig(base, soft);
 }
 
 export async function checkOrderAgainstLimits(input: {

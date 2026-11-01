@@ -17,6 +17,8 @@ import { runBacktest } from '@backtest/engine';
 import type { BacktestParams, StrategyRulesLike } from '@backtest/types';
 import type { StrategyContent as FullStrategyContent } from '../../src/strategy/content';
 import { getStrategyVersion } from '@/lib/strategy-version';
+import { executeCryptoBacktest } from '@/lib/backtest-crypto-runner';
+import { getActiveCryptoStrategyVersionLabel } from '@/lib/crypto/strategy-version';
 
 export const DEFAULT_BACKTEST_PARAMS: BacktestParams = {
   initialCapital: 100_000,
@@ -32,7 +34,10 @@ export interface StartBacktestInput {
   periodEnd: string;
   strategyVersion?: string;
   strategyVersionId?: string;
-  params?: Partial<BacktestParams & { useLlmSampleDays?: number; strategyVersionId?: string }>;
+  assetClass?: 'etf' | 'crypto';
+  params?: Partial<
+    BacktestParams & { useLlmSampleDays?: number; strategyVersionId?: string; assetClass?: string }
+  >;
 }
 
 async function resolveStrategyForRun(input: StartBacktestInput): Promise<{
@@ -114,8 +119,25 @@ export async function executeBacktest(input: StartBacktestInput): Promise<{
 }
 
 export async function startBacktestRun(input: StartBacktestInput): Promise<BacktestRunRow> {
-  const { versionLabel } = await resolveStrategyForRun(input);
-  const params = { ...DEFAULT_BACKTEST_PARAMS, ...input.params };
+  const paramsAsset = input.params?.assetClass;
+  const isCrypto = input.assetClass === 'crypto' || paramsAsset === 'crypto';
+
+  let versionLabel: string;
+  if (isCrypto) {
+    versionLabel =
+      input.strategyVersion ??
+      (await getActiveCryptoStrategyVersionLabel().catch(() => getStrategyVersion()));
+  } else {
+    versionLabel = (await resolveStrategyForRun(input)).versionLabel;
+  }
+
+  const params = {
+    ...DEFAULT_BACKTEST_PARAMS,
+    ...input.params,
+    barMode: input.params?.barMode ?? DEFAULT_BACKTEST_PARAMS.barMode,
+    assetClass: isCrypto ? 'crypto' : 'etf',
+  };
+
   const run = await createBacktestRun({
     strategyVersion: versionLabel,
     periodStart: input.periodStart,
@@ -143,12 +165,21 @@ async function runBacktestJob(runId: string): Promise<void> {
   await setBacktestStatus(runId, 'running', { started_at: new Date().toISOString() });
 
   try {
-    const result = await executeBacktest({
-      periodStart: run.period_start,
-      periodEnd: run.period_end,
-      strategyVersion: run.strategy_version,
-      params: run.params,
-    });
+    const runParams = run.params as BacktestParams & { assetClass?: string; strategyVersionId?: string };
+    const isCrypto = runParams.assetClass === 'crypto';
+    const result = isCrypto
+      ? await executeCryptoBacktest({
+          periodStart: run.period_start,
+          periodEnd: run.period_end,
+          params: runParams,
+        })
+      : await executeBacktest({
+          periodStart: run.period_start,
+          periodEnd: run.period_end,
+          strategyVersion: run.strategy_version,
+          strategyVersionId: runParams.strategyVersionId,
+          params: runParams,
+        });
 
     await saveBacktestResults(
       runId,

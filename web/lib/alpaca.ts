@@ -47,6 +47,18 @@ export const alpaca = {
     ),
   calendar: (start: string, end: string) =>
     get<AlpacaCalendarDay[]>(`${BASE}/v2/calendar?start=${start}&end=${end}`),
+  cryptoBars: (symbols: string[], timeframe = '1Day', limit = 100) => {
+    const encoded = symbols.map((s) => encodeURIComponent(s)).join(',');
+    return get<{ bars: Record<string, AlpacaBar[]> }>(
+      `${DATA}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=${timeframe}&limit=${limit}`,
+    );
+  },
+  cryptoBarsRange: (symbols: string[], start: string, end: string, timeframe = '1Day') => {
+    const encoded = symbols.map((s) => encodeURIComponent(s)).join(',');
+    return get<{ bars: Record<string, AlpacaBar[]> }>(
+      `${DATA}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=${timeframe}&start=${start}&end=${end}&limit=10000`,
+    );
+  },
   portfolioHistory: (period = '1A', timeframe = '1D') =>
     get<AlpacaPortfolioHistory>(
       `${BASE}/v2/account/portfolio/history?period=${period}&timeframe=${timeframe}&extended_hours=false`,

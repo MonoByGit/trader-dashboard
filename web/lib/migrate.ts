@@ -210,6 +210,16 @@ async function migrate(): Promise<void> {
       synced_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_alpaca_orders_submitted ON alpaca_orders (submitted_at DESC);
+
+    ALTER TABLE decisions ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    ALTER TABLE ai_calls ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    ALTER TABLE alpaca_orders ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    ALTER TABLE routine_runs ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS btc_close NUMERIC;
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS sleeves JSONB;
+    CREATE INDEX IF NOT EXISTS idx_decisions_asset_class ON decisions (asset_class, ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_alpaca_orders_asset_class ON alpaca_orders (asset_class, submitted_at DESC);
   `);
 
   await dbRun(`
@@ -266,6 +276,8 @@ async function migrate(): Promise<void> {
       activated_at TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS idx_strategy_versions_status ON strategy_versions (status, created_at DESC);
+    ALTER TABLE strategy_versions ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    CREATE INDEX IF NOT EXISTS idx_strategy_versions_asset ON strategy_versions (asset_class, status, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS strategy_comparisons (
       id TEXT PRIMARY KEY,
@@ -290,6 +302,11 @@ async function migrate(): Promise<void> {
 
   await dbRun(`
     INSERT INTO settings (key, value) VALUES ('soft_start_enabled', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  await dbRun(`
+    INSERT INTO settings (key, value) VALUES ('crypto_module_enabled', 'true')
     ON CONFLICT (key) DO NOTHING
   `);
 }

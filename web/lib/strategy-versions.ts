@@ -14,6 +14,7 @@ export interface StrategyVersionRow {
   notes: string | null;
   created_at: string;
   activated_at: string | null;
+  asset_class?: string | null;
 }
 
 const SETTINGS_SOFT_START = 'soft_start_enabled';
@@ -41,15 +42,16 @@ export async function ensureActiveStrategyVersion(): Promise<StrategyVersionRow>
   }
   await ensureSchema();
   const active = await dbQuery<StrategyVersionRow>(
-    `SELECT * FROM strategy_versions WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST LIMIT 1`,
+    `SELECT * FROM strategy_versions WHERE status = 'active' AND COALESCE(asset_class, 'etf') = 'etf'
+     ORDER BY activated_at DESC NULLS LAST LIMIT 1`,
   );
   if (active[0]) return active[0];
 
   const content = defaultContentFromFile();
   const id = newId('sv');
   await dbRun(
-    `INSERT INTO strategy_versions (id, version, content, status, notes, created_at, activated_at)
-     VALUES ($1, $2, $3::jsonb, 'active', $4, NOW(), NOW())`,
+    `INSERT INTO strategy_versions (id, version, content, status, notes, created_at, activated_at, asset_class)
+     VALUES ($1, $2, $3::jsonb, 'active', $4, NOW(), NOW(), 'etf')`,
     [id, content.version, JSON.stringify(content), 'Imported from strategy.json'],
   );
   const rows = await dbQuery<StrategyVersionRow>(`SELECT * FROM strategy_versions WHERE id = $1`, [id]);
@@ -88,6 +90,7 @@ export async function createDraftStrategyVersion(input: {
   content?: StrategyContent;
   notes?: string;
   versionLabel?: string;
+  assetClass?: 'etf' | 'crypto';
 }): Promise<StrategyVersionRow> {
   if (!hasDb()) throw new Error('Database not configured');
   await ensureSchema();
@@ -111,9 +114,9 @@ export async function createDraftStrategyVersion(input: {
 
   const id = newId('sv');
   await dbRun(
-    `INSERT INTO strategy_versions (id, version, content, status, notes, created_at)
-     VALUES ($1, $2, $3::jsonb, 'draft', $4, NOW())`,
-    [id, content.version, JSON.stringify(content), input.notes ?? null],
+    `INSERT INTO strategy_versions (id, version, content, status, notes, created_at, asset_class)
+     VALUES ($1, $2, $3::jsonb, 'draft', $4, NOW(), COALESCE($5, 'etf'))`,
+    [id, content.version, JSON.stringify(content), input.notes ?? null, input.assetClass ?? 'etf'],
   );
   const rows = await dbQuery<StrategyVersionRow>(`SELECT * FROM strategy_versions WHERE id = $1`, [id]);
   return rows[0]!;
@@ -126,7 +129,11 @@ export async function activateStrategyVersion(id: string): Promise<StrategyVersi
   if (!draft) throw new Error('Strategy version not found');
   if (draft.status !== 'draft') throw new Error('Only draft versions can be activated');
 
-  await dbRun(`UPDATE strategy_versions SET status = 'retired' WHERE status = 'active'`);
+  const assetClass = draft.asset_class ?? 'etf';
+  await dbRun(
+    `UPDATE strategy_versions SET status = 'retired' WHERE status = 'active' AND COALESCE(asset_class, 'etf') = $1`,
+    [assetClass],
+  );
   await dbRun(
     `UPDATE strategy_versions SET status = 'active', activated_at = NOW() WHERE id = $1`,
     [id],

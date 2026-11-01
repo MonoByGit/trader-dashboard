@@ -8,6 +8,7 @@ export async function GET(req: Request) {
   const group = searchParams.get('group') ?? 'day';
   const routine = searchParams.get('routine');
   const decisionId = searchParams.get('decisionId');
+  const assetClass = searchParams.get('asset_class');
 
   if (!hasDb()) {
     return NextResponse.json({ todayUsd: 0, rows: [] });
@@ -25,9 +26,18 @@ export async function GET(req: Request) {
 
   const todayUsd = await sumAiCostTodayEt();
 
+  if (assetClass === 'etf' || assetClass === 'crypto') {
+    const rows = await dbQuery(
+      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, asset_class
+       FROM ai_calls WHERE asset_class = $1 ORDER BY ts DESC LIMIT 200`,
+      [assetClass],
+    );
+    return NextResponse.json({ todayUsd, rows });
+  }
+
   if (routine) {
     const rows = await dbQuery(
-      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd
+      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, asset_class
        FROM ai_calls WHERE routine = $1 ORDER BY ts DESC LIMIT 200`,
       [routine],
     );
