@@ -36,6 +36,20 @@ async function ensureRoutineRunLocksTable(): Promise<void> {
   `);
 }
 
+function normalizeTimestamp(v: unknown): string | null {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+function normalizeRoutineRunRow(row: RoutineRunRow & { started_at?: unknown; finished_at?: unknown }): RoutineRunRow {
+  return {
+    ...row,
+    started_at: normalizeTimestamp(row.started_at) ?? '',
+    finished_at: normalizeTimestamp(row.finished_at),
+  };
+}
+
 /** Persist a failed attempt when tryBegin/dispatch throws before a normal run row exists. */
 export async function recordFailedRoutineRunAttempt(
   routine: string,
@@ -159,11 +173,12 @@ export async function finishRoutineRun(
 export async function listRunsForTradingDate(tradingDate: string): Promise<RoutineRunRow[]> {
   if (!hasDb()) return [];
   await ensureSchema();
-  return dbQuery<RoutineRunRow>(
+  const rows = await dbQuery<RoutineRunRow>(
     `SELECT id, routine, trading_date::text AS trading_date, started_at, finished_at, status, skip_reason, duration_ms, error_message
      FROM routine_runs WHERE trading_date = $1::date ORDER BY started_at DESC`,
     [tradingDate],
   );
+  return rows.map(normalizeRoutineRunRow);
 }
 
 export async function listRecentRuns(limit = 100): Promise<RoutineRunRow[]> {
@@ -179,9 +194,10 @@ export async function listRecentRuns(limit = 100): Promise<RoutineRunRow[]> {
 export async function listRecentRunsByRoutine(routine: string, limit = 20): Promise<RoutineRunRow[]> {
   if (!hasDb()) return [];
   await ensureSchema();
-  return dbQuery<RoutineRunRow>(
+  const rows = await dbQuery<RoutineRunRow>(
     `SELECT id, routine, trading_date::text AS trading_date, started_at, finished_at, status, skip_reason, duration_ms, error_message
      FROM routine_runs WHERE routine = $1 ORDER BY started_at DESC LIMIT $2`,
     [routine, limit],
   );
+  return rows.map(normalizeRoutineRunRow);
 }

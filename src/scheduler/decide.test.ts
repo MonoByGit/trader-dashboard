@@ -77,6 +77,30 @@ describe('scheduler decideDueRoutines', () => {
     expect(due).toContain('premarket');
   });
 
+  it('dedupes using latest finished_at when values are Date objects (pg driver shape)', () => {
+    const nowMs = openMs - 30 * 60_000;
+    const tradingDate = tradingDateEt(nowMs);
+    const runs: RoutineRunRecord[] = [
+      {
+        routine: 'premarket',
+        trading_date: tradingDate,
+        status: 'ok',
+        finished_at: new Date(nowMs - 60 * 60_000),
+      },
+      {
+        routine: 'premarket',
+        trading_date: tradingDate,
+        status: 'ok',
+        finished_at: new Date(nowMs),
+      },
+    ];
+    expect(() =>
+      decideDueRoutines({ nowMs, calendarToday: day, calendarThisWeek: [day], runs }),
+    ).not.toThrow();
+    const due = decideDueRoutines({ nowMs, calendarToday: day, calendarThisWeek: [day], runs });
+    expect(due).not.toContain('premarket');
+  });
+
   it('handles DST spring forward session bounds', () => {
     const dstDay: CalendarDay = { date: '2026-03-09', open: '09:30', close: '16:00' };
     const bounds = sessionBoundsEt(dstDay);

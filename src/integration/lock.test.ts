@@ -89,4 +89,42 @@ describe('B-2 lock on real Postgres (pglite)', () => {
     await rr.finishRoutineRun(b.runId, 'ok', { startedMs: now });
     expect(await rr.verifyRoutineRunLock(b.runId)).toBe(false);
   });
+
+  it('listRecentRunsByRoutine returns ISO strings for timestamptz columns', async () => {
+    jest.unstable_mockModule('@/lib/db', () => ({
+      hasDb: () => true,
+      dbQuery: async (s: string, p?: unknown[]) => (await q(s, p ?? [])).rows,
+      dbRun: async (s: string, p?: unknown[]) => {
+        await q(s, p ?? []);
+      },
+      initDb: async () => {},
+      dbTransaction: async (fn: (query: typeof q) => Promise<unknown>) => {
+        await pg.query('BEGIN');
+        try {
+          const r = await fn(q);
+          await pg.query('COMMIT');
+          return r;
+        } catch (e) {
+          await pg.query('ROLLBACK');
+          throw e;
+        }
+      },
+    }));
+    jest.unstable_mockModule('@/lib/migrate', () => ({ ensureSchema: async () => {} }));
+
+    await pg.query(
+      `INSERT INTO routine_runs (id, routine, trading_date, started_at, finished_at, status, asset_class)
+       VALUES
+         ('run-a', 'crypto-scan', '2026-11-01', '2026-11-01T10:00:00Z', '2026-11-01T10:06:00Z', 'ok', 'crypto'),
+         ('run-b', 'crypto-scan', '2026-11-01', '2026-11-01T12:00:00Z', '2026-11-01T12:05:00Z', 'ok', 'crypto')`,
+    );
+
+    const rr = await import('@/lib/routine-runs');
+    const runs = await rr.listRecentRunsByRoutine('crypto-scan', 10);
+    expect(runs).toHaveLength(2);
+    for (const row of runs) {
+      expect(typeof row.started_at).toBe('string');
+      expect(row.finished_at === null || typeof row.finished_at === 'string').toBe(true);
+    }
+  });
 });
