@@ -46,6 +46,8 @@ export interface VersionConfig {
   feeBps?: number;
   /** Fractionele aantallen toegestaan (crypto). Anders hele aandelen. */
   fractional?: boolean;
+  /** Override voor client_order_id-prefix (bijv. m5, m6). */
+  orderTag?: string;
 }
 
 export interface Position {
@@ -95,6 +97,8 @@ export interface VersionBook {
   lastDecisionDate?: string;
   /** Laatste volledige uitstap per symbool (datum), voor afkoelperiodes. */
   lastExit?: Record<string, string>;
+  /** Strategie-specifieke staat (serialiseerbaar, geen lookahead). */
+  strategyState?: Record<string, unknown>;
 }
 
 export type OrderIntent = {

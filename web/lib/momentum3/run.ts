@@ -53,8 +53,10 @@ export async function runMomentum3(step: 'decide' | 'execute', nowMs = Date.now(
     if (last) lastPrice[s] = last.c;
   }
   const broker = shadowBroker(lastPrice);
-  const a = await executeDay({ date: today, cfgs: [cryptoCfg!], hooks: m3Hooks, lastPrice, broker, store });
+  const a = await executeDay({ date: today, cfgs: [cryptoCfg!], hooks: m3Hooks, lastPrice, barsBySymbol: cryptoBars, broker, store });
   const clock = await alpaca.clock();
-  const e = clock.is_open ? await executeDay({ date: today, cfgs: [etfCfg!], hooks: m3Hooks, lastPrice, broker, store }) : { trades: [] };
+  const e = clock.is_open
+    ? await executeDay({ date: today, cfgs: [etfCfg!], hooks: m3Hooks, lastPrice, barsBySymbol: etfBars, broker, store })
+    : { trades: [] };
   return { step, date: today, shadow: true, trades: a.trades.length + e.trades.length };
 }

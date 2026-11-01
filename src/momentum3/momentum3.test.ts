@@ -47,6 +47,41 @@ describe('risk', () => {
     expect(withToday.level).not.toBeCloseTo(withoutToday.level, 4);
   });
 
+  it('live decideDay stopFor krijgt bars t/m gisteren (ATR-trail)', async () => {
+    const { decideDay } = await import('../momentum2/live');
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], smaDays: 5, topN: 1, positionPct: 1 };
+    const bars = makeBars(30, 100, 0.01);
+    const spy = makeBars(30, 100, 0.001);
+    const date = bars[29]!.t.slice(0, 10);
+    const lens: number[] = [];
+    const hooks = {
+      ...m3Hooks,
+      stopFor: (p: Parameters<typeof m3Hooks.stopFor>[0], c: Parameters<typeof m3Hooks.stopFor>[1], b?: Bar[], s?: string) => {
+        if (b && s === sym) lens.push(b.length);
+        return m3Hooks.stopFor(p, c, b, s);
+      },
+    };
+    const books: Record<string, import('../momentum2/types').VersionBook> = {};
+    const store = {
+      loadBook: async (id: string) => books[id] ?? null,
+      saveBook: async (b: import('../momentum2/types').VersionBook) => { books[b.versionId] = JSON.parse(JSON.stringify(b)); },
+      loadPending: async () => [],
+      savePending: async () => {},
+      logEquity: async () => {},
+      logTrade: async () => {},
+      logDecision: async () => {},
+    };
+    books[cfg.id] = {
+      versionId: cfg.id, startDate: null, startBudgetUsd: 5000, startSpyPrice: 100, cash: 0,
+      positions: { [sym]: { qty: 1, entryPrice: 100, entryDate: '2024-01-01', highWater: 112 } },
+      peakEquity: 5000, halted: false, haltReason: null, lastRebalanceIndex: 1,
+    };
+    await decideDay({ date, cfgs: [cfg], hooks, barsBySymbol: { [sym]: bars, SPY: spy }, benchmark: spy, store });
+    expect(lens.length).toBeGreaterThan(0);
+    expect(lens[0]).toBe(29);
+  });
+
   it('simulate stopFor krijgt alleen bars t/m gisteren', async () => {
     const sym = 'X';
     const cfg = { ...crypto!, universe: [sym], smaDays: 5, topN: 1, positionPct: 1 };

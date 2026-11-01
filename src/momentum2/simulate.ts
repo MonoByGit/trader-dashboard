@@ -153,11 +153,19 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
         continue;
       }
       gapMiss[sym] = { miss: 0, lastClose: bar.c };
-      const st = hooks.stopFor(pos, cfg, barsThroughYesterday(sym, date));
+      const st = hooks.stopFor(pos, cfg, barsThroughYesterday(sym, date), sym);
+      if (!Number.isFinite(st.level) || st.level <= 0) {
+        pos.highWater = Math.max(pos.highWater, bar.h);
+        continue;
+      }
       const r = checkStopLevel(st.level, st.kind, bar);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
+        const riskSym = 'riskSymbol' in cfg ? (cfg as { riskSymbol: string }).riskSymbol : null;
+        if (riskSym && sym === riskSym && r.kind === 'trailing') {
+          (book.strategyState ??= {})['m5AwaitFreshUp'] = true;
+        }
       } else {
         pos.highWater = Math.max(pos.highWater, bar.h);
       }

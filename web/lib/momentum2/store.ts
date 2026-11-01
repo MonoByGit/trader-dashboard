@@ -1,4 +1,10 @@
 import { dbQuery, dbRun, hasDb } from '../db';
+import {
+  bookSettingKey,
+  legacyBookSettingKey,
+  legacyPendingSettingKey,
+  pendingSettingKey,
+} from '../../../src/momentum2/book-keys';
 import type { DecisionRecord, Store } from '../../../src/momentum2/live';
 import type { EquityLogRow, OrderIntent, TradeLogRow, VersionBook } from '../../../src/momentum2/types';
 
@@ -33,14 +39,26 @@ async function log(versionId: string, kind: string, day: string, payload: unknow
   ]);
 }
 
+async function loadBookId(id: string): Promise<VersionBook | null> {
+  return (await getSetting<VersionBook>(bookSettingKey(id))) ?? (await getSetting<VersionBook>(legacyBookSettingKey(id)));
+}
+
+async function loadPendingId(id: string): Promise<OrderIntent[]> {
+  return (
+    (await getSetting<OrderIntent[]>(pendingSettingKey(id))) ??
+    (await getSetting<OrderIntent[]>(legacyPendingSettingKey(id))) ??
+    []
+  );
+}
+
 /** Boeken en logs staan in Postgres (settings + momentum2_log). Zonder database: geen opslag, dus de route weigert te draaien. */
 export function postgresStore(): Store {
   if (!hasDb()) throw new Error('momentum2 vereist DATABASE_URL');
   return {
-    loadBook: async (id) => { await ensure(); return getSetting<VersionBook>(`m2:book:${id}`); },
-    saveBook: async (b) => setSetting(`m2:book:${b.versionId}`, b),
-    loadPending: async (id) => (await getSetting<OrderIntent[]>(`m2:pending:${id}`)) ?? [],
-    savePending: async (id, o) => setSetting(`m2:pending:${id}`, o),
+    loadBook: async (id) => { await ensure(); return loadBookId(id); },
+    saveBook: async (b) => setSetting(bookSettingKey(b.versionId), b),
+    loadPending: async (id) => loadPendingId(id),
+    savePending: async (id, o) => setSetting(pendingSettingKey(id), o),
     logEquity: async (id, r: EquityLogRow) => { await ensure(); await log(id, 'equity', r.date, r); },
     logTrade: async (id, r: TradeLogRow) => { await ensure(); await log(id, 'trade', r.date, r); },
     logDecision: async (r: DecisionRecord) => { await ensure(); await log(r.versionId, `decision:${r.kind}`, r.date, r); },

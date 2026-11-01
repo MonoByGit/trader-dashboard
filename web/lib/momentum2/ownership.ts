@@ -1,4 +1,5 @@
 import { dbQuery, hasDb } from '../db';
+import { BOOK_KEY_SQL } from '../../../src/momentum2/book-keys';
 import type { VersionBook } from '../../../src/momentum2/types';
 
 /**
@@ -7,7 +8,7 @@ import type { VersionBook } from '../../../src/momentum2/types';
  */
 export async function foreignQtyForSymbol(symbol: string): Promise<number> {
   if (!hasDb()) return 0;
-  const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE key LIKE 'm2:book:%'`);
+  const rows = await dbQuery<{ value: string }>(`SELECT value FROM settings WHERE ${BOOK_KEY_SQL}`);
   let total = 0;
   for (const r of rows) {
     try {

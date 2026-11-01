@@ -2,7 +2,7 @@ import { alpaca } from '../alpaca';
 import type { Broker, Fill } from '../../../src/momentum2/live';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const stopPrefix = (versionId: string, symbol: string) => `m2s-${versionId}-${symbol}-`;
+const stopPrefix = (clientPrefix: string, symbol: string) => `${clientPrefix}${symbol}-`;
 const OPEN = new Set(['new', 'accepted', 'held', 'pending_new', 'partially_filled']);
 
 /**
@@ -28,7 +28,7 @@ export function alpacaPaperBroker(): Broker {
     },
 
     async setStop(o) {
-      const prefix = stopPrefix(o.versionId, o.symbol);
+      const prefix = stopPrefix(o.stopClientPrefix, o.symbol);
       const open = (await alpaca.openOrders(100)).filter((x) => x.client_order_id?.startsWith(prefix) && OPEN.has(x.status));
       const cur = open.find((x) => x.stop_price);
       if (cur && Number(cur.stop_price) >= o.stopPrice && Number(cur.qty) === o.qty) return; // alleen omhoog
@@ -41,14 +41,14 @@ export function alpacaPaperBroker(): Broker {
     },
 
     async cancelStop(o) {
-      const prefix = stopPrefix(o.versionId, o.symbol);
+      const prefix = stopPrefix(o.stopClientPrefix ?? `m2s-${o.versionId}-`, o.symbol);
       for (const x of await alpaca.openOrders(100)) {
         if (x.client_order_id?.startsWith(prefix)) await alpaca.cancelOrder(x.id);
       }
     },
 
     async stopFill(o): Promise<Fill | null> {
-      const prefix = stopPrefix(o.versionId, o.symbol);
+      const prefix = stopPrefix(`m2s-${o.versionId}-`, o.symbol);
       const hit = (await alpaca.orders(100)).find(
         (x) => x.client_order_id?.startsWith(prefix) && x.status === 'filled' && x.filled_at && x.filled_at.slice(0, 10) >= o.since,
       );
