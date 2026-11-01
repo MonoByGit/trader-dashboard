@@ -1,6 +1,6 @@
-import { baselineFromSnapshotRow } from '@/lib/snapshots';
+import { baselineFromSnapshotRow } from './baseline';
 
-describe('snapshot baseline', () => {
+describe('baselineFromSnapshotRow', () => {
   it('skips zero baseline_equity and uses first nonzero equity row', () => {
     const row = baselineFromSnapshotRow({
       equity: 50_000,
