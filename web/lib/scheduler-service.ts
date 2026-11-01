@@ -1,8 +1,12 @@
 import '@/lib/cron-routines';
+import '@/lib/crypto-routines';
 import { decideDueRoutines, tradingDateEt, type CalendarDay } from '@scheduler/decide';
+import { decideCryptoTickDue } from '@crypto/scheduler';
+import { loadCryptoGuardConfig } from '@crypto/config';
+import { isCryptoModuleEnabled } from '@/lib/crypto/enabled';
 import { alpaca } from './alpaca';
 import { dispatchRoutine } from './routine-dispatch';
-import { listRunsForTradingDate } from './routine-runs';
+import { getLastFinishedRunMs, listRunsForTradingDate } from './routine-runs';
 
 function weekBoundsEt(nowMs: number): { start: string; end: string } {
   const tradingDate = tradingDateEt(nowMs);
@@ -20,6 +24,7 @@ function weekBoundsEt(nowMs: number): { start: string; end: string } {
 export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
   tradingDate: string;
   due: string[];
+  cryptoDue: boolean;
   results: Record<string, unknown>;
 }> {
   const tradingDate = tradingDateEt(nowMs);
@@ -49,5 +54,20 @@ export async function runSchedulerTick(nowMs: number = Date.now()): Promise<{
     results[routine] = await dispatchRoutine(routine);
   }
 
-  return { tradingDate, due, results };
+  const cryptoEnabled = await isCryptoModuleEnabled();
+  const cryptoCfg = loadCryptoGuardConfig();
+  const lastCryptoMs = await getLastFinishedRunMs('crypto-tick');
+  const cryptoDue =
+    cryptoEnabled &&
+    decideCryptoTickDue({
+      nowMs,
+      intervalHours: cryptoCfg.tickIntervalHours,
+      lastFinishedAtMs: lastCryptoMs,
+    });
+
+  if (cryptoDue) {
+    results['crypto-tick'] = await dispatchRoutine('crypto-tick');
+  }
+
+  return { tradingDate, due, cryptoDue: !!cryptoDue, results };
 }

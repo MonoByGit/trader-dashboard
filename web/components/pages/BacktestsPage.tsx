@@ -29,6 +29,7 @@ export function BacktestsPage() {
   const [start, setStart] = useState('2025-01-02');
   const [end, setEnd] = useState('2025-06-30');
   const [toast, setToast] = useState<string | null>(null);
+  const [assetClass, setAssetClass] = useState<'etf' | 'crypto'>('etf');
 
   const loadRuns = useCallback(async () => {
     const res = await fetch('/api/backtests');
@@ -87,7 +88,7 @@ export function BacktestsPage() {
     const res = await fetch('/api/backtests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodStart: start, periodEnd: end }),
+      body: JSON.stringify({ periodStart: start, periodEnd: end, assetClass }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -107,11 +108,20 @@ export function BacktestsPage() {
       <header className="page-header">
         <div>
           <h1>Backtests</h1>
-          <p className="muted">Strategieversie vs SPY buy-and-hold op historische Alpaca-data (paper).</p>
+          <p className="muted">
+            ETF vs SPY, crypto vs BTC buy-and-hold (Alpaca paper data).
+          </p>
         </div>
       </header>
 
       <section className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <label>
+          <span className="label">Asset class</span>
+          <select value={assetClass} onChange={(e) => setAssetClass(e.target.value as 'etf' | 'crypto')}>
+            <option value="etf">ETF (SPY benchmark)</option>
+            <option value="crypto">Crypto (BTC benchmark)</option>
+          </select>
+        </label>
         <label>
           <span className="label">Van</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />

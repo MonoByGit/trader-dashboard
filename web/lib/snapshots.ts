@@ -1,6 +1,6 @@
 import { computeSnapshotSeries } from '@snapshots/returns';
 import { tradingDateEt } from '@scheduler/decide';
-import { alpaca, type AlpacaBar, type AlpacaPosition } from './alpaca';
+import { alpaca, inferAssetClass, type AlpacaBar, type AlpacaPosition } from './alpaca';
 import { dbQuery, dbRun, hasDb } from './db';
 import { ensureSchema } from './migrate';
 
@@ -63,6 +63,10 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
 
   const spyBars = (await alpaca.bars(['SPY'], '1Day', 400)).bars?.SPY ?? [];
   const spyClose = await spyCloseForDate(tradingDate, spyBars);
+  const btcBarsRaw = await alpaca.cryptoBars(['BTC/USD'], '1Day', 400).catch(() => ({ bars: {} as Record<string, AlpacaBar[]> }));
+  const btcBarMap = btcBarsRaw.bars ?? {};
+  const btcBars = (btcBarMap['BTC/USD'] ?? btcBarMap.BTCUSD ?? []) as AlpacaBar[];
+  const btcClose = await spyCloseForDate(tradingDate, btcBars);
 
   let baseline = await getBaseline();
   if (baseline.equity <= 0) {
@@ -90,14 +94,48 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
       : null;
 
   const posJson = JSON.stringify(positionsSummary(positions));
+  const etfPositions = positions.filter((p) => inferAssetClass(p.symbol, p.asset_class) === 'etf');
+  const cryptoPositions = positions.filter((p) => inferAssetClass(p.symbol, p.asset_class) === 'crypto');
+  const etfExposure = etfPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+  const cryptoExposure = cryptoPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+  const assetBreakdown = {
+    etf: { exposureUsd: etfExposure, positionCount: etfPositions.length },
+    crypto: { exposureUsd: cryptoExposure, positionCount: cryptoPositions.length },
+  };
+
+  const prevBtcRows = await dbQuery<{ btc_close: string | null; baseline_btc_close: string | null }>(
+    `SELECT btc_close, baseline_btc_close FROM daily_snapshots WHERE trading_date < $1::date ORDER BY trading_date DESC LIMIT 1`,
+    [tradingDate],
+  );
+  const prevBtc =
+    prevBtcRows.length && prevBtcRows[0].btc_close != null
+      ? parseFloat(prevBtcRows[0].btc_close)
+      : null;
+  const baselineBtcRow = await dbQuery<{ baseline_btc_close: string | null }>(
+    `SELECT baseline_btc_close FROM daily_snapshots ORDER BY trading_date ASC LIMIT 1`,
+  );
+  let baselineBtc =
+    baselineBtcRow.length && baselineBtcRow[0].baseline_btc_close != null
+      ? parseFloat(baselineBtcRow[0].baseline_btc_close)
+      : btcClose;
+  if (baselineBtc == null && btcClose != null) baselineBtc = btcClose;
+
+  const btcDaily =
+    btcClose != null && prevBtc != null && prevBtc > 0 ? ((btcClose - prevBtc) / prevBtc) * 100 : null;
+  const btcCum =
+    btcClose != null && baselineBtc != null && baselineBtc > 0
+      ? ((btcClose - baselineBtc) / baselineBtc) * 100
+      : null;
 
   await dbRun(
     `INSERT INTO daily_snapshots (
       trading_date, equity, cash, positions, spy_close,
       momentum_daily_return_pct, spy_daily_return_pct,
       momentum_cumulative_return_pct, spy_cumulative_return_pct,
-      baseline_equity, baseline_spy_close, updated_at
-    ) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,NOW())
+      baseline_equity, baseline_spy_close,
+      asset_breakdown, btc_close, btc_daily_return_pct, btc_cumulative_return_pct, baseline_btc_close,
+      updated_at
+    ) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,NOW())
     ON CONFLICT (trading_date) DO UPDATE SET
       equity = EXCLUDED.equity,
       cash = EXCLUDED.cash,
@@ -109,6 +147,11 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
       spy_cumulative_return_pct = EXCLUDED.spy_cumulative_return_pct,
       baseline_equity = EXCLUDED.baseline_equity,
       baseline_spy_close = EXCLUDED.baseline_spy_close,
+      asset_breakdown = EXCLUDED.asset_breakdown,
+      btc_close = EXCLUDED.btc_close,
+      btc_daily_return_pct = EXCLUDED.btc_daily_return_pct,
+      btc_cumulative_return_pct = EXCLUDED.btc_cumulative_return_pct,
+      baseline_btc_close = EXCLUDED.baseline_btc_close,
       updated_at = NOW()`,
     [
       tradingDate,
@@ -122,6 +165,11 @@ export async function writeDailySnapshot(forDate?: string): Promise<DailySnapsho
       spyCum,
       baseline.equity,
       baseline.spyClose,
+      JSON.stringify(assetBreakdown),
+      btcClose,
+      btcDaily,
+      btcCum,
+      baselineBtc,
     ],
   );
 

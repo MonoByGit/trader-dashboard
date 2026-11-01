@@ -40,4 +40,15 @@ describe('canRunRoutine', () => {
       }).allowed
     ).toBe(false);
   });
+
+  it('blocks crypto-tick entries on kill switch like market-open', () => {
+    expect(
+      canRunRoutine({
+        routine: 'crypto-tick',
+        emergencyStop: false,
+        tradingEnabled: false,
+        circuitBreakerTripped: false,
+      }).allowed,
+    ).toBe(false);
+  });
 });

@@ -1,7 +1,7 @@
 import { canRunRoutine } from '@guards/index';
 import { loadGuardState } from '@/lib/guards/service';
 import { finishRoutineRun, startRoutineRun } from '@/lib/routine-runs';
-import { withAiRoutine } from '@/lib/ai';
+import { withAiRoutine, withCryptoAiRoutine } from '@/lib/ai';
 import { tradingDateEt } from '@scheduler/decide';
 
 type RoutineHandler = () => Promise<Record<string, unknown>>;
@@ -37,7 +37,9 @@ export async function dispatchRoutine(routine: string): Promise<Record<string, u
   const startedMs = Date.now();
 
   try {
-    const result = await withAiRoutine(routine, handler);
+    const runHandler =
+      routine === 'crypto-tick' ? () => withCryptoAiRoutine(routine, handler) : () => withAiRoutine(routine, handler);
+    const result = await runHandler();
     if (result.skipped) {
       await finishRoutineRun(runId, 'skipped', {
         skipReason: String(result.reason ?? 'skipped'),

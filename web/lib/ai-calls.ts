@@ -10,14 +10,15 @@ export async function recordAiCall(input: {
   inputTokens: number;
   outputTokens: number;
   decisionId?: string;
+  assetClass?: 'etf' | 'crypto';
 }): Promise<void> {
   if (!hasDb()) return;
   await ensureSchema();
   const cost = estimateCostUsd(input.model, input.inputTokens, input.outputTokens, loadPriceTable());
   const id = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await dbRun(
-    `INSERT INTO ai_calls (id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd, decision_id)
-     VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO ai_calls (id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd, decision_id, asset_class)
+     VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       id,
       input.routine ?? null,
@@ -27,6 +28,7 @@ export async function recordAiCall(input: {
       input.outputTokens,
       cost,
       input.decisionId ?? null,
+      input.assetClass ?? 'etf',
     ],
   );
 }

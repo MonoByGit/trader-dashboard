@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listBacktestRuns } from '@/lib/backtests';
 import { DEFAULT_BACKTEST_PARAMS, startBacktestRun } from '@/lib/backtest-runner';
+import { startCryptoBacktestRun } from '@/lib/crypto-backtest-runner';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -18,12 +19,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'periodStart en periodEnd zijn verplicht' }, { status: 400 });
     }
 
-    const run = await startBacktestRun({
-      periodStart,
-      periodEnd,
-      strategyVersion: body.strategyVersion,
-      params: { ...DEFAULT_BACKTEST_PARAMS, ...body.params },
-    });
+    const assetClass = body.assetClass ?? body.params?.assetClass ?? 'etf';
+    const run =
+      assetClass === 'crypto'
+        ? await startCryptoBacktestRun({
+            periodStart,
+            periodEnd,
+            params: { ...DEFAULT_BACKTEST_PARAMS, ...body.params },
+          })
+        : await startBacktestRun({
+            periodStart,
+            periodEnd,
+            strategyVersion: body.strategyVersion,
+            params: { ...DEFAULT_BACKTEST_PARAMS, ...body.params },
+          });
 
     return NextResponse.json(run, { status: 202 });
   } catch (e) {

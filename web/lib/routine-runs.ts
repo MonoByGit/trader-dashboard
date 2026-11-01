@@ -55,6 +55,19 @@ export async function listRunsForTradingDate(tradingDate: string): Promise<Routi
   );
 }
 
+export async function getLastFinishedRunMs(routine: string): Promise<number | null> {
+  if (!hasDb()) return null;
+  await ensureSchema();
+  const rows = await dbQuery<{ finished_at: string }>(
+    `SELECT finished_at FROM routine_runs
+     WHERE routine = $1 AND status IN ('ok', 'skipped', 'failed') AND finished_at IS NOT NULL
+     ORDER BY finished_at DESC LIMIT 1`,
+    [routine],
+  );
+  if (!rows.length) return null;
+  return new Date(rows[0].finished_at).getTime();
+}
+
 export async function listRecentRuns(limit = 100): Promise<RoutineRunRow[]> {
   if (!hasDb()) return [];
   await ensureSchema();
