@@ -39,7 +39,7 @@ function lastRun(runs: CryptoRunRecord[]): CryptoRunRecord | undefined {
     )[0];
 }
 
-function anchorMs(anchor: string): number | null {
+function anchorMs(anchor: string | Date): number | null {
   const t = new Date(anchor).getTime();
   return Number.isFinite(t) ? t : null;
 }
