@@ -19,6 +19,7 @@ export function alpacaPaperBroker(): MomentumBroker {
     replaceOrder: (id, o) => alpaca.replaceOrder(id, o),
     openOrders: (n) => alpaca.openOrders(n),
     orders: (n) => alpaca.orders(n),
+    ordersFor: (o) => alpaca.ordersFor(o),
     getOrder: (id) => alpaca.getOrder(id),
     getOrderByClientOrderId: (id) => alpaca.getOrderByClientOrderId(id),
     cancelOrder: (id) => alpaca.cancelOrder(id),

@@ -7,6 +7,8 @@ export type OpenStopOrder = {
   stopPrice: number;
   clientOrderId: string;
   orderId?: string;
+  /** Alpaca-status; pending_* = in overgang, niet aanraken. */
+  status?: string;
 };
 
 export type MarketOrderRequest = {

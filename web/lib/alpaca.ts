@@ -95,6 +95,11 @@ export const alpaca = {
     del<unknown>(alpacaPositionCloseUrl(BASE, symbol), { trading: true }),
   cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`, { trading: true }),
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
+  /** Alle orders van één symbool sinds `after` (ISO); max 500 per symbool. */
+  ordersFor: (o: { symbol: string; after: string }) =>
+    get<AlpacaOrder[]>(
+      `${BASE}/v2/orders?status=all&limit=500&direction=desc&symbols=${encodeURIComponent(o.symbol)}&after=${encodeURIComponent(o.after)}`,
+    ),
   openOrders: (limit = 100) =>
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
   getOrder: (orderId: string) => get<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`),

@@ -19,8 +19,10 @@ export interface Fill {
   /** Cumulatieve gevulde qty van deze order. */
   qty: number;
   price: number;
-  /** false = order staat nog open (partial fill); undefined/true = terminaal. */
+  /** false = order staat nog open of de status is (nog) onbekend; undefined/true = terminaal. */
   done?: boolean;
+  /** Crypto-buy: wat er echt binnenkwam (fee gaat van de coin af), cumulatief zoals qty. */
+  received?: number;
 }
 
 /** @deprecated alias */
@@ -44,6 +46,8 @@ export interface Store {
   logTrade(versionId: string, row: TradeLogRow): Promise<void>;
   logDecision(rec: DecisionRecord): Promise<void>;
 }
+
+type OpenOrderMeta = NonNullable<VersionBook['openOrders']>[string];
 
 /** Qty van `symbol` in de echte boeken van ANDERE sleeves (M1 telt niet: die heeft geen boek). */
 export type ForeignQtyFn = (symbol: string, excludeVersionId: string) => Promise<number>;
@@ -294,15 +298,15 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
     };
 
     /** Boek het nieuwe deel van een market-fill; open (partial) orders volgende run verder. */
-    const applyMarketFill = async (
-      f: Fill,
-      meta: { symbol: string; side: 'buy' | 'sell'; reason: string; signalDate?: string },
-    ) => {
+    const applyMarketFill = async (f: Fill, meta: OpenOrderMeta) => {
       const delta = fillDelta(book, f);
       if (delta > 0) {
         markApplied(book, f);
         if (meta.side === 'buy') {
-          await record(applyBuy(book, meta.symbol, delta, f.price, date, meta.reason, {
+          // crypto: de fee gaat van de coin af; het boek volgt wat er echt binnenkwam, de kas betaalt de hele fill
+          const ratio = f.received != null && f.qty > 0 ? Math.min(1, f.received / f.qty) : 1;
+          const got = roundQty(delta * ratio);
+          await record(applyBuy(book, meta.symbol, got, (f.price * delta) / got, date, meta.reason, {
             signalDate: meta.signalDate, brokerFill: true,
           }));
         } else {
@@ -312,6 +316,18 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       if (f.done === false) (book.openOrders ??= {})[f.orderId] = meta;
       else if (book.openOrders) delete book.openOrders[f.orderId];
     };
+
+    /** Een afgesloten sell met nog stukken over: de exit opnieuw in de rij. */
+    const requeued: OrderIntent[] = [];
+    const finishOpenOrder = (orderId: string, meta: OpenOrderMeta) => {
+      if (book.openOrders) delete book.openOrders[orderId];
+      const left = book.positions[meta.symbol];
+      if (meta.side === 'sell' && meta.requeue && left) requeued.push({ ...meta.requeue, qty: left.qty });
+    };
+    /** Symbolen met een order waarvan de echte status (nog) onbekend is: niets nieuws plaatsen. */
+    const unresolved = new Set<string>();
+    /** Symbolen waarvan een eerdere buy nu pas als gevuld bekend werd: een buy-intent daarvoor is op een leeg boek gepland. */
+    const resolvedBuys = new Set<string>();
 
     const ensureStop = async (sym: string) => {
       if (!book.positions[sym]) return;
@@ -335,24 +351,45 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
     // 1. Lopende (deels gevulde) market orders van eerdere runs.
     if (broker.orderFill) {
       for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
-        const f = await broker.orderFill({ orderId });
+        let f: Fill | null;
+        try {
+          f = await broker.orderFill({ orderId });
+        } catch (e) {
+          unresolved.add(meta.symbol);
+          await store.logDecision({
+            date, versionId: cfg.id, kind: 'skip', symbol: meta.symbol,
+            detail: `orderstatus onbekend, niets nieuws op ${meta.symbol}: ${e instanceof Error ? e.message : String(e)}`,
+          });
+          continue;
+        }
         if (f) await applyMarketFill(f, meta);
-        else delete book.openOrders![orderId];
+        if (f && f.qty > 0 && meta.side === 'buy') resolvedBuys.add(meta.symbol);
+        if (!f || f.done !== false) finishOpenOrder(orderId, meta);
       }
     }
+    for (const m of Object.values(book.openOrders ?? {})) unresolved.add(m.symbol);
 
     // 2. Stop-fills (ook partials, maar elk stuk maar één keer).
     for (const sym of Object.keys(book.positions)) await processStopFills(sym);
     await store.saveBook(book);
 
     // 3. Geplande orders.
-    const pending = await store.loadPending(cfg.id);
+    const pending = [...(await store.loadPending(cfg.id)), ...requeued];
     const remaining: OrderIntent[] = [];
 
     for (const o of pending) {
       const px = input.lastPrice[o.symbol];
       if (!px) {
         remaining.push(o);
+        continue;
+      }
+      if (unresolved.has(o.symbol)) {
+        // er loopt al een order (of de status is onbekend): dit intent wordt daardoor uitgevoerd, nooit dubbel
+        await store.logDecision({
+          date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+          detail: `${o.side} niet geplaatst: er loopt nog een order op ${o.symbol}`,
+        });
+        if (o.side === 'sell') remaining.push(o);
         continue;
       }
 
@@ -397,7 +434,7 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
             detail: `exit mislukt: ${e instanceof Error ? e.message : String(e)}`,
           });
         }
-        if (fill) await applyMarketFill(fill, { symbol: o.symbol, side: 'sell', reason: o.reason });
+        if (fill) await applyMarketFill(fill, { symbol: o.symbol, side: 'sell', reason: o.reason, requeue: o });
         if (fill && fill.done === false) {
           await store.saveBook(book);
           continue; // rest volgt via openOrders; stukken zitten in de lopende sell
@@ -412,6 +449,13 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         continue;
       }
 
+      if (resolvedBuys.has(o.symbol)) {
+        await store.logDecision({
+          date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+          detail: `buy ${o.symbol} niet geplaatst: eerdere buy bleek alsnog gevuld (plan was op een onvolledig boek)`,
+        });
+        continue;
+      }
       const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
       const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
       if (qty <= 0) continue;

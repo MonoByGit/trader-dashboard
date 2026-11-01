@@ -392,3 +392,183 @@ describe('PR 47 blocker 6: terug naar schaduw met een papierboek', () => {
     expect(mem.book()).toEqual(shadow);
   });
 });
+
+describe('PR 47 ronde 2 (review 5a93422): B1 pending_cancel', () => {
+  it('exit terwijl de stop-cancel ~15 s in pending_cancel blijft: positie verkocht, ook na settle geen naakte positie', async () => {
+    const { fake, broker, mem, prefix } = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    fake.seedPosition('QLD', 20);
+    fake.prices.QLD = 55;
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 42, stopClientPrefix: prefix });
+    fake.cancelHangPolls = 30;
+    mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 42 }), lastPrice: { QLD: 55 },
+      broker, store: mem.store, expectReal: true,
+    });
+    fake.settle();
+    expect(fake.pos.QLD).toBeUndefined();
+    expect(mem.book().positions.QLD).toBeUndefined();
+  });
+
+  it('cancel blijft langer hangen dan we wachten: oude stop blijft de reservering houden, gat wordt gemarkeerd', async () => {
+    const { fake, broker, mem, prefix } = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    fake.seedPosition('QLD', 20);
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 42, stopClientPrefix: prefix });
+    fake.cancelHangPolls = 10_000;
+    mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 42 }), lastPrice: { QLD: 55 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(fake.calls.filter((c) => c.startsWith('place market sell'))).toHaveLength(0);
+    expect(mem.pending()).toHaveLength(1); // exit blijft staan
+    expect(mem.book().stopMissing?.QLD).toBe('2024-06-03'); // zichtbaar voor de volgende run en het startscherm
+  });
+});
+
+describe('PR 47 ronde 2: B2 onbekende orderstatus', () => {
+  it('buy gevuld, GET geeft eenmalig 503: fill in boek met stop, geen tweede buy de dag erna', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1_000, reason: 'instap' }]);
+    fake.getFails = 1;
+    const run = (date: string) =>
+      executeDay({
+        date, cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+        broker, store: mem.store, expectReal: true,
+      });
+    await run('2024-06-03');
+    await run('2024-06-04');
+    expect(fake.pos.QLD).toBe(20);
+    expect(mem.book().positions.QLD!.qty).toBe(20);
+    expect(fake.openStops('QLD').map((o) => Number(o.qty))).toEqual([20]);
+    expect(fake.calls.filter((c) => c.startsWith('place market buy'))).toHaveLength(1);
+  });
+
+  it('buy: alle GET-polls falen: order wordt gevolgd, niet opnieuw geplaatst; volgende run boekt de fill', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1_000, reason: 'instap' }]);
+    fake.getFails = 1_000;
+    const realPlace = fake.placeOrder.bind(fake);
+    fake.placeOrder = async (o) => ({ ...(await realPlace(o)), status: 'accepted', filled_qty: '0', filled_avg_price: null });
+    const run = (date: string) =>
+      executeDay({
+        date, cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+        broker, store: mem.store, expectReal: true,
+      });
+    await run('2024-06-03');
+    expect(mem.pending()).toHaveLength(0);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+    fake.getFails = 0;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1_000, reason: 'decide plant opnieuw' }]);
+    await run('2024-06-04');
+    expect(fake.calls.filter((c) => c.startsWith('place market buy'))).toHaveLength(1);
+    expect(mem.book().positions.QLD!.qty).toBe(20);
+    expect(fake.openStops('QLD').map((o) => Number(o.qty))).toEqual([20]);
+  });
+
+  it('plaatsen gaf een timeout maar de order staat er: opzoeken op client_order_id, niet dubbel', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    const realPlace = fake.placeOrder.bind(fake);
+    fake.placeOrder = async (o) => {
+      await realPlace(o);
+      if (o.type === 'market') throw new Error('The operation was aborted due to timeout');
+      return realPlace(o);
+    };
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1_000, reason: 'instap' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(fake.calls.filter((c) => c.startsWith('place market buy'))).toHaveLength(1);
+    expect(mem.book().positions.QLD!.qty).toBe(20);
+    expect(mem.pending()).toHaveLength(0);
+  });
+});
+
+describe('PR 47 ronde 2: crypto-fee en PATCH-regels', () => {
+  it('M6 boekt wat er echt binnenkwam (fee van de coin af); stop dekt nooit M1-stukken', async () => {
+    const { fake, broker, mem } = setup(m6Cfg, realBook(m6Cfg, {}, 10_000));
+    fake.seedPosition('BTC/USD', 0.04); // M1
+    fake.prices['BTC/USD'] = 50_000;
+    fake.cryptoFee = 0.0025;
+    mem.setPending([{ symbol: 'BTC/USD', side: 'buy', notionalUsd: 3_000, reason: 'breakout' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m6Cfg], hooks: fixedStop(m6Hooks, { v: 45_000 }), lastPrice: { 'BTC/USD': 50_000 },
+      broker, store: mem.store, expectReal: true, foreignQty: async () => 0,
+    });
+    const m6Real = 0.06 * (1 - 0.0025);
+    expect(mem.book().positions['BTC/USD']!.qty).toBeCloseTo(m6Real, 9);
+    expect(mem.book().cash).toBeCloseTo(10_000 - 3_000, 6); // de kas betaalt de hele fill
+    expect(Number(fake.openStops('BTC/USD')[0]!.qty)).toBeCloseTo(m6Real, 9);
+    expect(fake.available('BTC/USD')).toBeCloseTo(0.04, 9);
+  });
+
+  it('crypto-stop trailt: prijs omhoog bij gelijke fractionele qty gaat via PATCH zonder qty', async () => {
+    const { fake, broker, prefix } = setup(m6Cfg, realBook(m6Cfg, { 'BTC/USD': pos(0.06, 50_000) }));
+    fake.seedPosition('BTC/USD', 0.06);
+    await broker.setStop({ versionId: m6Cfg.id, symbol: 'BTC/USD', qty: 0.06, stopPrice: 40_000, stopClientPrefix: prefix });
+    await broker.setStop({ versionId: m6Cfg.id, symbol: 'BTC/USD', qty: 0.06, stopPrice: 45_000, stopClientPrefix: prefix });
+    const open = fake.openStops('BTC/USD');
+    expect(open.map((o) => [Number(o.qty), Number(o.stop_price)])).toEqual([[0.06, 45_000]]);
+    expect(fake.calls.some((c) => c.startsWith('replace') && c.includes('qty=undefined'))).toBe(true);
+  });
+
+  it('fractionele qty-wijziging: annuleren (bevestigd) en opnieuw plaatsen, nooit twee of nul stops', async () => {
+    const { fake, broker, prefix } = setup(m6Cfg, realBook(m6Cfg, { 'BTC/USD': pos(0.08, 50_000) }));
+    fake.seedPosition('BTC/USD', 0.08);
+    await broker.setStop({ versionId: m6Cfg.id, symbol: 'BTC/USD', qty: 0.06, stopPrice: 40_000, stopClientPrefix: prefix });
+    await broker.setStop({ versionId: m6Cfg.id, symbol: 'BTC/USD', qty: 0.08, stopPrice: 40_000, stopClientPrefix: prefix });
+    expect(fake.openStops('BTC/USD').map((o) => Number(o.qty))).toEqual([0.08]);
+  });
+
+  it('stop "accepted" (buiten de sessie): geen PATCH, maar annuleren en opnieuw; altijd een stop', async () => {
+    const { fake, broker, prefix } = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    fake.seedPosition('QLD', 20);
+    fake.stopStatus = 'accepted';
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 30, stopClientPrefix: prefix });
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 35, stopClientPrefix: prefix });
+    expect(fake.openStops('QLD').map((o) => [Number(o.qty), Number(o.stop_price)])).toEqual([[20, 35]]);
+    expect(fake.calls.some((c) => c.startsWith('replace'))).toBe(false);
+  });
+
+  it('exit met gedeeltelijke day-sell die expireert: rest krijgt een stop en de exit staat de volgende run weer klaar', async () => {
+    const { fake, broker, mem, prefix } = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(10) }));
+    fake.seedPosition('QLD', 10);
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 10, stopPrice: 40, stopClientPrefix: prefix });
+    fake.marketFillRatio = 0.6; // rest blijft open
+    mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 10, reason: 'exit' }]);
+    const run = (date: string) =>
+      executeDay({
+        date, cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 48 },
+        broker, store: mem.store, expectReal: true,
+      });
+    await run('2024-06-03');
+    expect(mem.book().positions.QLD!.qty).toBe(4);
+    // dag voorbij: de rest van de day-order expireert
+    for (const o of fake.orders_) if (o.type === 'market' && o.status === 'partially_filled') o.status = 'expired';
+    fake.marketFillRatio = 1;
+    await run('2024-06-04');
+    expect(fake.pos.QLD).toBeUndefined();
+    expect(mem.book().positions.QLD).toBeUndefined();
+  });
+});
+
+describe('PR 47 ronde 2: replace in overgang', () => {
+  it('reconcile annuleert niets terwijl een stop in pending_replace staat', async () => {
+    const book = realBook(m5Cfg!, { QLD: pos(20) });
+    const { fake, broker, prefix } = setup(m5Cfg!, book);
+    fake.seedPosition('QLD', 20);
+    await broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: prefix });
+    fake.orders_[0]!.status = 'pending_replace';
+    await fake.placeOrder({ symbol: 'QLD', qty: 0.000001, side: 'buy', type: 'market', time_in_force: 'day', client_order_id: 'noop' });
+    const r = await reconcileDisasterStops({
+      date: '2024-06-03', cfgs: [m5Cfg!], books: { [m5Cfg!.id]: book }, hooks: fixedStop(m5Hooks, { v: 44 }),
+      barsBySymbol: {}, broker,
+    });
+    expect(r.deduped).toHaveLength(0);
+    expect(fake.calls.filter((c) => c.startsWith('cancel'))).toHaveLength(0);
+  });
+});

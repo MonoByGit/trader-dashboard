@@ -42,6 +42,8 @@ export async function reconcileDisasterStops<C extends VersionConfig>(input: {
       if (!Number.isFinite(st.level) || st.level <= 0) continue;
 
       const matches = open.filter((o) => symMatch(o.symbol, sym));
+      // een replace of plaatsing loopt nog (oud en nieuw tegelijk zichtbaar): niets annuleren, volgende run
+      if (matches.some((m) => m.status === 'pending_replace' || m.status === 'pending_new')) continue;
       if (matches.length > 1) {
         matches.sort((a, b) => b.stopPrice - a.stopPrice);
         for (const extra of matches.slice(1)) {

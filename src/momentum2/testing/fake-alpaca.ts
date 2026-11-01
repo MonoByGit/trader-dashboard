@@ -9,11 +9,16 @@ import type { AlpacaOrderLike, AlpacaPaperClient } from '../alpaca-paper-broker'
  *    een sell boven qty_available geeft 403 "insufficient qty available";
  *  - partially_filled is zichtbaar en open, filled_qty is cumulatief;
  *  - een client_order_id mag nooit twee keer (ook niet na cancel) -> 422;
- *  - replace (PATCH) maakt een nieuwe order, de oude gaat naar 'replaced'.
+ *  - replace (PATCH) maakt een nieuwe order, de oude gaat naar 'replaced'; niet in accepted/pending_*,
+ *    en qty alleen in hele stukken;
+ *  - een cancel kan een tijd in pending_cancel blijven (en blijft dan reserveren);
+ *  - GET /orders kan tijdelijk 503 geven;
+ *  - crypto: de fee gaat van de ontvangen coin af (positie < filled_qty).
  */
 type Order = AlpacaOrderLike & { limit_price: string | null };
 
-const OPEN = new Set(['new', 'accepted', 'held', 'pending_new', 'partially_filled']);
+const OPEN = new Set(['new', 'accepted', 'held', 'pending_new', 'partially_filled', 'pending_cancel', 'pending_replace']);
+const NO_PATCH = new Set(['accepted', 'pending_new', 'pending_cancel', 'pending_replace']);
 const r9 = (x: number) => Math.round(x * 1e9) / 1e9;
 
 export class FakeAlpaca implements AlpacaPaperClient {
@@ -26,7 +31,16 @@ export class FakeAlpaca implements AlpacaPaperClient {
   marketRestCanceled = false;
   /** Stops plaatsen of vervangen faalt (bijv. broker-storing). */
   failStops = false;
+  /** Zoveel GET-polls blijft een geannuleerde order in pending_cancel. */
+  cancelHangPolls = 0;
+  /** Status van nieuw geplaatste stops (bijv. 'accepted' buiten de sessie). */
+  stopStatus = 'new';
+  /** Zoveel volgende GET /orders/{id} geven 503. */
+  getFails = 0;
+  /** Crypto-fee als fractie van de ontvangen coin. */
+  cryptoFee = 0;
   calls: string[] = [];
+  private hang: Record<string, number> = {};
   private seq = 0;
   private usedClientIds = new Set<string>();
 
@@ -46,10 +60,17 @@ export class FakeAlpaca implements AlpacaPaperClient {
     return r9((this.pos[this.key(symbol)] ?? 0) - this.reserved(symbol, exceptId));
   }
 
+  /** Stops die de positie echt beschermen (pending_cancel telt niet). */
   openStops(symbol?: string): Order[] {
     return this.orders_.filter(
-      (o) => o.side === 'sell' && o.type !== 'market' && OPEN.has(o.status) && (!symbol || alpacaSymbolsEqual(o.symbol, symbol)),
+      (o) =>
+        o.side === 'sell' && o.type !== 'market' && OPEN.has(o.status) && o.status !== 'pending_cancel' &&
+        (!symbol || alpacaSymbolsEqual(o.symbol, symbol)),
     );
+  }
+  /** Alle hangende cancels gaan alsnog door (de tijd verstrijkt). */
+  settle() {
+    for (const o of this.orders_) if (o.status === 'pending_cancel') o.status = 'canceled';
   }
 
   private err(method: 'POST' | 'PATCH' | 'DELETE', status: number, body: string): never {
@@ -70,7 +91,8 @@ export class FakeAlpaca implements AlpacaPaperClient {
     o.filled_qty = String(filled);
     o.filled_at = `${this.today}T15:00:00Z`;
     o.status = filled >= Number(o.qty) - 1e-12 ? 'filled' : 'partially_filled';
-    this.pos[k] = r9((this.pos[k] ?? 0) + (o.side === 'buy' ? qty : -qty));
+    const recv = o.side === 'buy' && o.symbol.includes('/') ? qty * (1 - this.cryptoFee) : qty;
+    this.pos[k] = r9((this.pos[k] ?? 0) + (o.side === 'buy' ? recv : -qty));
     if (this.pos[k]! <= 1e-12) delete this.pos[k];
   }
 
@@ -89,7 +111,7 @@ export class FakeAlpaca implements AlpacaPaperClient {
       qty: String(o.qty),
       filled_qty: '0',
       type: o.type,
-      status: 'new',
+      status: o.type === 'market' ? 'new' : this.stopStatus,
       filled_at: null,
       filled_avg_price: null,
       stop_price: o.stop_price != null ? String(o.stop_price) : null,
@@ -109,7 +131,10 @@ export class FakeAlpaca implements AlpacaPaperClient {
     this.calls.push(`replace ${id} qty=${o.qty} stop=${o.stop_price}`);
     if (this.failStops) this.err('PATCH', 500, '{"message":"internal error"}');
     const cur = this.orders_.find((x) => x.id === id);
-    if (!cur || !OPEN.has(cur.status)) this.err('PATCH', 422, '{"message":"order is not open"}');
+    if (!cur || !OPEN.has(cur.status) || NO_PATCH.has(cur.status)) {
+      this.err('PATCH', 422, `{"message":"order not replaceable (${cur?.status})"}`);
+    }
+    if (o.qty != null && !Number.isInteger(o.qty)) this.err('PATCH', 422, '{"message":"qty must be whole shares"}');
     const qty = o.qty ?? Number(cur.qty);
     if (cur.side === 'sell' && qty > this.available(cur.symbol, cur.id) + 1e-12) {
       this.err('PATCH', 403, '{"message":"insufficient qty available for order"}');
@@ -141,8 +166,16 @@ export class FakeAlpaca implements AlpacaPaperClient {
   }
 
   async getOrder(id: string): Promise<Order> {
+    if (this.getFails > 0) {
+      this.getFails -= 1;
+      throw new AlpacaHttpError('GET', `https://paper-api.alpaca.markets/v2/orders/${id}`, 503, 'service unavailable');
+    }
     const o = this.orders_.find((x) => x.id === id);
     if (!o) throw new AlpacaHttpError('GET', `https://paper-api.alpaca.markets/v2/orders/${id}`, 404, 'not found');
+    if (o.status === 'pending_cancel') {
+      this.hang[o.id] = (this.hang[o.id] ?? 0) - 1;
+      if (this.hang[o.id]! <= 0) o.status = 'canceled';
+    }
     return { ...o };
   }
 
@@ -154,8 +187,13 @@ export class FakeAlpaca implements AlpacaPaperClient {
   async cancelOrder(id: string): Promise<unknown> {
     this.calls.push(`cancel ${id}`);
     const o = this.orders_.find((x) => x.id === id);
-    if (!o || !OPEN.has(o.status)) this.err('DELETE', 422, '{"message":"order is not cancelable"}');
-    o.status = 'canceled';
+    if (!o || !OPEN.has(o.status) || o.status === 'pending_cancel') this.err('DELETE', 422, '{"message":"order is not cancelable"}');
+    if (this.cancelHangPolls > 0) {
+      o.status = 'pending_cancel';
+      this.hang[o.id] = this.cancelHangPolls;
+    } else {
+      o.status = 'canceled';
+    }
     return {};
   }
 
