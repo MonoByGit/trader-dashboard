@@ -1,0 +1,49 @@
+### PR 46 head 34531926a0420758542fb64991e1b47eb33abb91 run 2026-11-01 14:51 CET
+### 1a run-momentum5 (QLD only)
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 339.0% | QQQ 377.1% | excess -38.1 pp | MaxDD 41.1% | Sharpe 0.69 | trades 38
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 339.0% | SPY 234.3% | excess 104.7 pp | MaxDD 41.1% | Sharpe 0.69 | trades 38
+### 1b run-momentum5 MOMENTUM5_TQQQ=1
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 339.0% | QQQ 377.1% | excess -38.1 pp | MaxDD 41.1% | Sharpe 0.69 | trades 38
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 339.0% | SPY 234.3% | excess 104.7 pp | MaxDD 41.1% | Sharpe 0.69 | trades 38
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-tqqq vs QQQ ===
+OOS 2017-11-20 .. 2018-12-17 (3 vensters, sleeve gehalt op 2018-11-09 (blijft gehalt))
+Return -22.1% | QQQ 3.1% | excess -25.2 pp | MaxDD 41.9% | Sharpe -0.78 | trades 11
+
+=== m5-nasdaq-tqqq vs SPY ===
+OOS 2017-11-20 .. 2018-12-17 (3 vensters, sleeve gehalt op 2018-11-09 (blijft gehalt))
+Return -22.1% | SPY 0.2% | excess -22.2 pp | MaxDD 41.9% | Sharpe -0.78 | trades 11
+### 2 run-momentum6
+BTC bars: 2131 (2021-01-01 .. 2026-11-01)
+
+=== m6-btc-breakout vs BTC ===
+OOS 2021-01-21 .. 2022-01-15 (4 vensters, sleeve gehalt op 2021-11-16 (blijft gehalt))
+Return -15.7% | BTC 39.7% | excess -55.4 pp | MaxDD 38.7% | Sharpe -0.13 | trades 26 | costs ~6.8% budget
+### 3 npm test
+PASS src/crypto/enforce-scan-resilience.test.ts
+PASS src/crypto/postmortem-symbol-match.test.ts
+PASS src/backtest/order-qty.test.ts
+PASS src/backtest/intraday-brackets.test.ts
+PASS src/asset-classes/classify.test.ts
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Test Suites: 104 passed, 104 total
+Tests:       354 passed, 354 total
+Snapshots:   0 total
+Time:        4.362 s
+Ran all test suites.

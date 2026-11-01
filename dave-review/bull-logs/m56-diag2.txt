@@ -1,0 +1,242 @@
+   2017-11-21 buy QLD 1122.0000 @8.91 QQQ boven band / fresh up
+   2018-10-25 sell QLD 1122.0000 @10.05 regime naar cash pnl 1277
+   2018-10-25 buy BIL 147.0000 @74.33 QQQ onder band / wacht op up
+   2018-11-08 sell BIL 147.0000 @74.38 regime naar risico pnl 6
+   2018-11-08 buy QLD 1041.0000 @10.83 QQQ boven band / fresh up
+   2018-11-13 sell QLD 1041.0000 @9.88 regime naar cash pnl -992
+   2018-11-13 buy BIL 137.0000 @74.40 QQQ onder band / wacht op up
+   2019-03-13 sell BIL 137.0000 @74.94 regime naar risico pnl 73
+   2019-03-13 buy QLD 966.0000 @10.72 QQQ boven band / fresh up
+   2019-06-04 sell QLD 966.0000 @10.07 regime naar cash pnl -632
+   2019-06-04 buy BIL 126.0000 @75.35 QQQ onder band / wacht op up
+   2019-06-07 sell BIL 126.0000 @75.34 regime naar risico pnl -0
+   2019-06-07 buy QLD 898.0000 @10.83 QQQ boven band / fresh up
+   2020-02-27 sell QLD 898.0000 @14.01 trailing stop pnl 2858
+   2020-02-28 buy BIL 164.0000 @76.34 QQQ onder band / wacht op up
+   2020-03-11 sell BIL 164.0000 @76.40 regime naar risico pnl 11
+   2020-03-11 buy QLD 978.0000 @12.87 QQQ boven band / fresh up
+   2020-03-13 sell QLD 978.0000 @11.16 regime naar cash pnl -1677
+   2020-03-13 buy BIL 128.0000 @76.47 QQQ onder band / wacht op up
+   2020-03-16 buy BIL 14.0000 @76.49 QQQ onder band / wacht op up
+   2020-04-15 sell BIL 142.0000 @76.43 regime naar risico pnl -5
+   2020-04-15 buy QLD 828.0000 @13.17 QQQ boven band / fresh up
+   2020-09-18 sell QLD 828.0000 @20.43 trailing stop pnl 6006
+   2020-09-21 buy BIL 221.0000 @76.46 QQQ onder band / wacht op up
+   2023-02-02 sell BIL 221.0000 @77.66 regime naar risico pnl 267
+   2023-02-02 buy QLD 749.0000 @22.94 QQQ boven band / fresh up
+   2024-08-05 sell QLD 749.0000 @38.42 trailing stop pnl 11593
+   2024-08-06 buy BIL 343.0000 @83.83 QQQ onder band / wacht op up
+   2024-08-07 sell BIL 343.0000 @83.81 regime naar risico pnl -5
+   2024-08-07 buy QLD 675.0000 @42.58 QQQ boven band / fresh up
+   2025-03-10 sell QLD 675.0000 @45.08 trailing stop pnl 1689
+   2025-03-11 buy BIL 353.0000 @86.15 QQQ onder band / wacht op up
+   2025-05-13 sell BIL 353.0000 @86.73 regime naar risico pnl 207
+   2025-05-13 buy QLD 607.0000 @50.46 QQQ boven band / fresh up
+   2026-03-27 sell QLD 607.0000 @59.70 regime naar cash pnl 5607
+   2026-03-27 buy BIL 404.0000 @89.77 QQQ onder band / wacht op up
+   2026-04-10 sell BIL 404.0000 @89.86 regime naar risico pnl 38
+   2026-04-10 buy QLD 531.0000 @68.31 QQQ boven band / fresh up
+   worst DD 41.1% 2020-02-19->2020-03-12 peak 16716 trough 9840; end eq 43902; defers 0; final pending 0
+   per-year 2017:2% 2018:-2% 2019:31% 2020:21% 2021:-0% 2022:1% 2023:65% 2024:33% 2025:18% 2026:3%
+m5-nasdaq-trend vs QQQ                           2017-11-20..2026-10-30 ret 339.0% CAGR 18.0% | bench 377.1% CAGR 19.1% | DD 41.1% vs bench 35.0% | Sh 0.69 | tr 38 win 12/18 (67%) | costs 1.4%
+m5-nasdaq-trend vs SPY                           2017-11-20..2026-10-30 ret 339.0% CAGR 18.0% | bench 234.3% CAGR 14.5% | DD 41.1% vs bench 33.8% | Sh 0.69 | tr 38 win 12/18 (67%) | costs 1.4%
+m5-nasdaq-trend no losslimit vs QQQ              2017-11-20..2026-10-30 ret 339.0% CAGR 18.0% | bench 377.1% CAGR 19.1% | DD 41.1% vs bench 35.0% | Sh 0.69 | tr 38 win 12/18 (67%) | costs 1.4%
+m5-nasdaq-trend no trail vs QQQ                  2017-11-20..2026-10-30 ret 640.5% CAGR 25.1% | bench 377.1% CAGR 19.1% | DD 44.9% vs bench 35.0% | Sh 0.81 | tr 34 win 10/16 (63%) | costs 1.5%
+m5-nasdaq-trend no trail no losslimit vs QQQ     2017-11-20..2026-10-30 ret 640.5% CAGR 25.1% | bench 377.1% CAGR 19.1% | DD 44.9% vs bench 35.0% | Sh 0.81 | tr 34 win 10/16 (63%) | costs 1.5%
+   2017-11-21 buy TQQQ 558.0000 @5.37 QQQ boven band / fresh up
+   2018-02-06 sell TQQQ 558.0000 @5.40 trailing stop pnl 17
+   2018-02-07 buy BIL 41.0000 @73.45 QQQ onder band / wacht op up
+   2018-10-17 sell BIL 41.0000 @74.27 regime naar risico pnl 33
+   2018-10-17 buy TQQQ 416.0000 @7.32 QQQ boven band / fresh up
+   2018-10-25 sell TQQQ 416.0000 @6.06 regime naar cash pnl -523
+   2018-10-25 buy BIL 32.0000 @74.33 QQQ onder band / wacht op up
+   2018-10-26 buy BIL 2.0000 @74.35 QQQ onder band / wacht op up
+   2018-11-08 sell BIL 34.0000 @74.38 regime naar risico pnl 1
+   2018-11-08 buy TQQQ 375.0000 @6.74 QQQ boven band / fresh up
+   2018-11-12 sell TQQQ 375.0000 @6.23 versie dicht: verliesgrens 20% geraakt op 2018-11-09 pnl -192
+   worst DD 41.9% 2018-01-26->2018-11-12 peak 4019 trough 2337; end eq 2337; defers 0; final pending 0
+   per-year 2017:2% 2018:-27%
+m5-nasdaq-tqqq vs QQQ                            2017-11-20..2018-12-17 ret -22.1% CAGR -20.8% | bench 3.1% CAGR 2.9% | DD 41.9% vs bench 15.5% | Sh -0.78 | tr 11 win 3/5 (60%) | costs 0.2% | HALT 2018-11-09
+m5-nasdaq-tqqq vs SPY                            2017-11-20..2018-12-17 ret -22.1% CAGR -20.8% | bench 0.2% CAGR 0.1% | DD 41.9% vs bench 12.7% | Sh -0.78 | tr 11 win 3/5 (60%) | costs 0.2% | HALT 2018-11-09
+m5-nasdaq-tqqq no losslimit vs QQQ               2017-11-20..2026-10-30 ret 727.3% CAGR 26.7% | bench 377.1% CAGR 19.1% | DD 47.9% vs bench 35.0% | Sh 0.81 | tr 60 win 19/29 (66%) | costs 3.6%
+m5-nasdaq-tqqq no trail vs QQQ                   2017-11-20..2020-05-22 ret -11.1% CAGR -4.6% | bench 52.4% CAGR 18.4% | DD 60.8% vs bench 28.6% | Sh 0.20 | tr 19 win 4/9 (44%) | costs 0.4% | HALT 2020-03-12
+m5-nasdaq-tqqq no trail no losslimit vs QQQ      2017-11-20..2026-10-30 ret 1070.1% CAGR 31.7% | bench 377.1% CAGR 19.1% | DD 60.8% vs bench 35.0% | Sh 0.79 | tr 35 win 10/16 (63%) | costs 2.0%
+   2021-02-06 buy BTC/USD 0.1301 @38433.54 20d breakout
+   2021-02-17 sell BTC/USD 0.1301 @49030.66 10 dagen vast pnl 1379
+   2021-02-18 buy BTC/USD 0.0956 @52303.24 20d breakout
+   2021-02-24 sell BTC/USD 0.0956 @48743.04 12% trail vanaf peak close pnl -340
+   2021-03-12 buy BTC/USD 0.0862 @57981.04 20d breakout
+   2021-03-23 sell BTC/USD 0.0862 @53942.90 10 dagen vast pnl -348
+   2021-04-06 buy BTC/USD 0.0843 @59280.42 20d breakout
+   2021-04-17 sell BTC/USD 0.0843 @61258.55 10 dagen vast pnl 167
+   2021-05-09 buy BTC/USD 0.0846 @59098.85 20d breakout
+   2021-05-13 sell BTC/USD 0.0846 @49366.35 onder 10d low pnl -823
+   2021-06-15 buy BTC/USD 0.1230 @40648.49 20d breakout
+   2021-06-20 sell BTC/USD 0.1230 @35393.18 onder 10d low pnl -646
+   2021-07-26 buy BTC/USD 0.1236 @35500.49 20d breakout
+   2021-08-06 sell BTC/USD 0.1236 @40773.30 10 dagen vast pnl 652
+   2021-08-07 buy BTC/USD 0.1163 @42981.86 20d breakout
+   2021-08-18 sell BTC/USD 0.1163 @44575.77 10 dagen vast pnl 185
+   2021-08-21 buy BTC/USD 0.1010 @49494.53 20d breakout
+   2021-09-01 sell BTC/USD 0.1010 @46992.84 10 dagen vast pnl -253
+   2021-09-04 buy BTC/USD 0.0991 @50161.66 20d breakout
+   2021-09-08 sell BTC/USD 0.0991 @46744.67 onder 10d low pnl -339
+   2021-10-05 buy BTC/USD 0.0939 @49357.80 20d breakout
+   2021-10-16 sell BTC/USD 0.0939 @61526.55 10 dagen vast pnl 1142
+   2021-10-19 buy BTC/USD 0.0804 @62183.51 20d breakout
+   2021-10-21 sell BTC/USD 0.0804 @49612.49 hard stop pnl -1011
+   2021-11-09 buy BTC/USD 0.0703 @67752.02 20d breakout
+   2021-11-17 sell BTC/USD 0.0703 @59940.26 versie dicht: verliesgrens 15% geraakt op 2021-11-16 pnl -549
+   worst DD 38.7% 2021-02-21->2021-11-17 peak 6873 trough 4215; end eq 4215; defers 0; final pending 0
+   per-year 2021:-16% 2022:0%
+m6-btc-breakout vs BTC                           2021-01-21..2022-01-15 ret -15.7% CAGR -16.0% | bench 39.7% CAGR 40.5% | DD 38.7% vs bench 53.2% | Sh -0.13 | tr 26 win 5/13 (38%) | costs 6.8% | HALT 2021-11-16
+   2021-02-06 buy BTC/USD 0.1301 @38433.54 20d breakout
+   2021-02-17 sell BTC/USD 0.1301 @49030.66 10 dagen vast pnl 1379
+   2021-02-18 buy BTC/USD 0.0956 @52303.24 20d breakout
+   2021-02-24 sell BTC/USD 0.0956 @48743.04 12% trail vanaf peak close pnl -340
+   2021-03-12 buy BTC/USD 0.0862 @57981.04 20d breakout
+   2021-03-23 sell BTC/USD 0.0862 @53942.90 10 dagen vast pnl -348
+   2021-04-06 buy BTC/USD 0.0843 @59280.42 20d breakout
+   2021-04-17 sell BTC/USD 0.0843 @61258.55 10 dagen vast pnl 167
+   2021-05-09 buy BTC/USD 0.0846 @59098.85 20d breakout
+   2021-05-13 sell BTC/USD 0.0846 @49366.35 onder 10d low pnl -823
+   2021-06-15 buy BTC/USD 0.1230 @40648.49 20d breakout
+   2021-06-20 sell BTC/USD 0.1230 @35393.18 onder 10d low pnl -646
+   2021-07-26 buy BTC/USD 0.1236 @35500.49 20d breakout
+   2021-08-06 sell BTC/USD 0.1236 @40773.30 10 dagen vast pnl 652
+   2021-08-07 buy BTC/USD 0.1163 @42981.86 20d breakout
+   2021-08-18 sell BTC/USD 0.1163 @44575.77 10 dagen vast pnl 185
+   2021-08-21 buy BTC/USD 0.1010 @49494.53 20d breakout
+   2021-09-01 sell BTC/USD 0.1010 @46992.84 10 dagen vast pnl -253
+   2021-09-04 buy BTC/USD 0.0991 @50161.66 20d breakout
+   2021-09-08 sell BTC/USD 0.0991 @46744.67 onder 10d low pnl -339
+   2021-10-05 buy BTC/USD 0.0939 @49357.80 20d breakout
+   2021-10-16 sell BTC/USD 0.0939 @61526.55 10 dagen vast pnl 1142
+   2021-10-19 buy BTC/USD 0.0804 @62183.51 20d breakout
+   2021-10-21 sell BTC/USD 0.0804 @49612.49 hard stop pnl -1011
+   2021-11-09 buy BTC/USD 0.0703 @67752.02 20d breakout
+   2021-11-17 sell BTC/USD 0.0703 @59940.26 onder 10d low pnl -549
+   2022-02-07 buy BTC/USD 0.0991 @42518.47 20d breakout
+   2022-02-18 sell BTC/USD 0.0991 @40435.84 10 dagen vast pnl -206
+   2022-03-24 buy BTC/USD 0.0932 @43015.33 20d breakout
+   2022-04-04 sell BTC/USD 0.0932 @46298.26 10 dagen vast pnl 306
+   2022-05-31 buy BTC/USD 0.1356 @31805.48 20d breakout
+   2022-06-11 sell BTC/USD 0.1356 @28983.47 10 dagen vast pnl -383
+   2022-07-08 buy BTC/USD 0.1814 @21678.03 20d breakout
+   2022-07-19 sell BTC/USD 0.1814 @22373.24 10 dagen vast pnl 126
+   2022-07-20 buy BTC/USD 0.1730 @23455.34 20d breakout
+   2022-07-31 sell BTC/USD 0.1730 @23586.33 10 dagen vast pnl 23
+   2022-08-11 buy BTC/USD 0.1698 @24029.20 20d breakout
+   2022-08-20 sell BTC/USD 0.1698 @20776.54 onder 10d low pnl -552
+   2022-09-11 buy BTC/USD 0.1625 @21710.05 20d breakout
+   2022-09-16 sell BTC/USD 0.1625 @19652.19 12% trail vanaf peak close pnl -334
+   2022-10-05 buy BTC/USD 0.1565 @20401.02 20d breakout
+   2022-10-16 sell BTC/USD 0.1565 @19020.32 10 dagen vast pnl -216
+   2022-10-27 buy BTC/USD 0.1429 @20830.60 20d breakout
+   2022-11-07 sell BTC/USD 0.1429 @20852.34 10 dagen vast pnl 3
+   2022-12-09 buy BTC/USD 0.1726 @17271.01 20d breakout
+   2022-12-17 sell BTC/USD 0.1726 @16586.63 onder 10d low pnl -118
+   2023-01-07 buy BTC/USD 0.1685 @16990.60 20d breakout
+   2023-01-18 sell BTC/USD 0.1685 @21074.80 10 dagen vast pnl 688
+   2023-01-21 buy BTC/USD 0.1562 @22734.06 20d breakout
+   2023-02-01 sell BTC/USD 0.1562 @23062.99 10 dagen vast pnl 51
+   2023-02-16 buy BTC/USD 0.1477 @24393.28 20d breakout
+   2023-02-26 sell BTC/USD 0.1477 @23101.92 onder 10d low pnl -191
+   2023-03-15 buy BTC/USD 0.1376 @24795.19 20d breakout
+   2023-03-26 sell BTC/USD 0.1376 @27416.24 10 dagen vast pnl 361
+   2023-03-30 buy BTC/USD 0.1326 @28436.17 20d breakout
+   2023-04-10 sell BTC/USD 0.1326 @28270.51 10 dagen vast pnl -22
+   2023-04-11 buy BTC/USD 0.1261 @29734.08 20d breakout
+   2023-04-21 sell BTC/USD 0.1261 @28191.21 onder 10d low pnl -195
+   2023-06-21 buy BTC/USD 0.1252 @28390.67 20d breakout
+   2023-07-02 sell BTC/USD 0.1252 @30503.16 10 dagen vast pnl 265
+   2023-07-04 buy BTC/USD 0.1222 @31245.79 20d breakout
+   2023-07-07 sell BTC/USD 0.1222 @29819.50 onder 10d low pnl -174
+   2023-07-14 buy BTC/USD 0.1155 @31572.25 20d breakout
+   2023-07-18 sell BTC/USD 0.1155 @30063.35 onder 10d low pnl -174
+   2023-10-02 buy BTC/USD 0.1236 @28074.02 20d breakout
+   2023-10-12 sell BTC/USD 0.1236 @26787.68 onder 10d low pnl -159
+   2023-10-17 buy BTC/USD 0.1158 @28608.91 20d breakout
+   2023-10-28 sell BTC/USD 0.1158 @33812.83 10 dagen vast pnl 602
+   2023-10-30 buy BTC/USD 0.1130 @34644.22 20d breakout
+   2023-11-10 sell BTC/USD 0.1130 @36602.48 10 dagen vast pnl 221
+   2023-11-11 buy BTC/USD 0.1105 @37431.21 20d breakout
+   2023-11-22 sell BTC/USD 0.1105 @35651.16 10 dagen vast pnl -197
+   2023-12-02 buy BTC/USD 0.1015 @38818.11 20d breakout
+   2023-12-13 sell BTC/USD 0.1015 @41368.92 10 dagen vast pnl 259
+   2024-01-02 buy BTC/USD 0.0947 @44311.32 20d breakout
+   2024-01-12 sell BTC/USD 0.0947 @35353.34 hard stop pnl -849
+   2024-02-08 buy BTC/USD 0.0753 @44480.01 20d breakout
+   2024-02-19 sell BTC/USD 0.0753 @52019.17 10 dagen vast pnl 568
+   2024-02-21 buy BTC/USD 0.0747 @52434.64 20d breakout
+   2024-03-03 sell BTC/USD 0.0747 @61837.50 10 dagen vast pnl 702
+   2024-03-04 buy BTC/USD 0.0730 @63309.52 20d breakout
+   2024-03-15 sell BTC/USD 0.0730 @71233.61 10 dagen vast pnl 578
+   2024-04-09 buy BTC/USD 0.0696 @71865.39 20d breakout
+   2024-04-14 sell BTC/USD 0.0696 @63827.15 onder 10d low pnl -559
+   2024-05-16 buy BTC/USD 0.0698 @66458.61 20d breakout
+   2024-05-27 sell BTC/USD 0.0698 @68273.17 10 dagen vast pnl 127
+   2024-07-16 buy BTC/USD 0.0733 @64980.76 20d breakout
+   2024-07-27 sell BTC/USD 0.0733 @67778.66 10 dagen vast pnl 205
+   2024-07-29 buy BTC/USD 0.0726 @68437.83 20d breakout
+   2024-08-01 sell BTC/USD 0.0726 @64413.96 onder 10d low pnl -292
+   2024-08-24 buy BTC/USD 0.0728 @64285.48 20d breakout
+   2024-09-01 sell BTC/USD 0.0728 @58797.79 onder 10d low pnl -399
+   2024-09-19 buy BTC/USD 0.0690 @61965.76 20d breakout
+   2024-09-30 sell BTC/USD 0.0690 @65399.76 10 dagen vast pnl 237
+   2024-10-15 buy BTC/USD 0.0681 @66288.90 20d breakout
+   2024-10-26 sell BTC/USD 0.0681 @66422.97 10 dagen vast pnl 9
+   2024-10-29 buy BTC/USD 0.0645 @70157.26 20d breakout
+   2024-11-09 sell BTC/USD 0.0645 @76343.62 10 dagen vast pnl 399
+   2024-11-10 buy BTC/USD 0.0640 @76956.31 20d breakout
+   2024-11-21 sell BTC/USD 0.0640 @94092.85 10 dagen vast pnl 1096
+   2024-11-22 buy BTC/USD 0.0506 @98780.50 20d breakout
+   2024-12-03 sell BTC/USD 0.0506 @95601.41 10 dagen vast pnl -161
+   2024-12-07 buy BTC/USD 0.0499 @100224.97 20d breakout
+   2024-12-18 sell BTC/USD 0.0499 @105843.61 10 dagen vast pnl 280
+   2025-01-18 buy BTC/USD 0.0479 @104459.57 20d breakout
+   2025-01-29 sell BTC/USD 0.0479 @101063.24 10 dagen vast pnl -163
+   2025-04-22 buy BTC/USD 0.0570 @87788.54 20d breakout
+   2025-05-03 sell BTC/USD 0.0570 @96716.58 10 dagen vast pnl 508
+   2025-05-08 buy BTC/USD 0.0513 @97375.66 20d breakout
+   2025-05-19 sell BTC/USD 0.0513 @106145.12 10 dagen vast pnl 450
+   2025-05-21 buy BTC/USD 0.0466 @107211.25 20d breakout
+   2025-05-30 sell BTC/USD 0.0466 @105354.64 onder 10d low pnl -87
+   2025-07-03 buy BTC/USD 0.0458 @109098.27 20d breakout
+   2025-07-14 sell BTC/USD 0.0458 @118835.96 10 dagen vast pnl 446
+   2025-07-15 buy BTC/USD 0.0416 @120149.91 20d breakout
+   2025-07-26 sell BTC/USD 0.0416 @117414.32 10 dagen vast pnl -114
+   2025-08-13 buy BTC/USD 0.0415 @120451.19 20d breakout
+   2025-08-19 sell BTC/USD 0.0415 @115887.26 onder 10d low pnl -189
+   2025-09-13 buy BTC/USD 0.0429 @116464.44 20d breakout
+   2025-09-22 sell BTC/USD 0.0429 @114962.32 onder 10d low pnl -64
+   2025-10-02 buy BTC/USD 0.0420 @118929.58 20d breakout
+   2025-10-11 sell BTC/USD 0.0420 @112690.81 onder 10d low pnl -262
+   2026-01-04 buy BTC/USD 0.0550 @90873.65 20d breakout
+   2026-01-15 sell BTC/USD 0.0550 @96687.64 10 dagen vast pnl 320
+   2026-03-05 buy BTC/USD 0.0686 @72899.92 20d breakout
+   2026-03-16 sell BTC/USD 0.0686 @72624.86 10 dagen vast pnl -19
+   2026-03-17 buy BTC/USD 0.0666 @75096.28 20d breakout
+   2026-03-22 sell BTC/USD 0.0666 @68729.13 onder 10d low pnl -424
+   2026-04-08 buy BTC/USD 0.0693 @72139.55 20d breakout
+   2026-04-19 sell BTC/USD 0.0693 @75538.54 10 dagen vast pnl 236
+   2026-04-23 buy BTC/USD 0.0637 @78432.43 20d breakout
+   2026-05-04 sell BTC/USD 0.0637 @78345.28 10 dagen vast pnl -6
+   2026-05-05 buy BTC/USD 0.0625 @80062.33 20d breakout
+   2026-05-16 sell BTC/USD 0.0625 @78843.70 10 dagen vast pnl -76
+   2026-07-15 buy BTC/USD 0.0767 @65189.74 20d breakout
+   2026-07-26 sell BTC/USD 0.0767 @64135.02 10 dagen vast pnl -81
+   2026-08-20 buy BTC/USD 0.0719 @69510.82 20d breakout
+   2026-08-31 sell BTC/USD 0.0719 @77457.92 10 dagen vast pnl 572
+   2026-09-04 buy BTC/USD 0.0614 @81483.21 20d breakout
+   2026-09-11 sell BTC/USD 0.0614 @76326.29 onder 10d low pnl -316
+   2026-09-22 buy BTC/USD 0.0576 @86819.40 20d breakout
+   2026-10-03 sell BTC/USD 0.0576 @84281.18 10 dagen vast pnl -146
+   worst DD 58.5% 2021-02-21->2023-01-07 peak 6873 trough 2853; end eq 6725; defers 0; final pending 0
+   per-year 2021:-16% 2022:-32% 2023:47% 2024:46% 2025:9% 2026:1%
+m6-btc-breakout no losslimit vs BTC              2021-01-21..2026-11-01 ret 34.5% CAGR 5.3% | bench 152.3% CAGR 17.4% | DD 58.5% vs bench 76.7% | Sh 0.32 | tr 142 win 32/71 (45%) | costs 34.1%
+m6-btc-breakout no losslimit floating vs BTC     2021-01-21..2026-11-01 ret 22.0% CAGR 3.5% | bench 152.3% CAGR 17.4% | DD 62.8% vs bench 76.7% | Sh 0.28 | tr 142 win 32/71 (45%) | costs 35.7%
+m6-btc-breakout no losslimit floating fee8 vs BTC 2021-01-21..2026-11-01 ret 54.8% CAGR 7.9% | bench 152.3% CAGR 17.4% | DD 59.9% vs bench 76.7% | Sh 0.40 | tr 142 win 33/71 (46%) | costs 15.1%
+m6-btc-breakout no disaster stop vs BTC          2021-01-21..2022-07-14 ret -16.3% CAGR -11.3% | bench -33.3% CAGR -24.0% | DD 39.1% vs bench 72.0% | Sh -0.14 | tr 34 win 6/17 (35%) | costs 9.0% | HALT 2022-07-12
+m6-btc-breakout no disaster stop, no losslimit vs BTC 2021-01-21..2026-11-01 ret 76.2% CAGR 10.3% | bench 152.3% CAGR 17.4% | DD 50.2% vs bench 76.7% | Sh 0.49 | tr 142 win 32/71 (45%) | costs 36.8%
+m6-btc-breakout no disaster stop, no losslimit, floating, fee8 vs BTC 2021-01-21..2026-11-01 ret 127.4% CAGR 15.3% | bench 152.3% CAGR 17.4% | DD 51.3% vs bench 76.7% | Sh 0.61 | tr 142 win 33/71 (46%) | costs 20.0%

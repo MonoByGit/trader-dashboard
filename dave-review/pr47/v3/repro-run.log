@@ -1,0 +1,131 @@
+
+> trader-agent@0.1.0 test
+> node --experimental-vm-modules node_modules/.bin/jest web/lib/momentum2/__dave
+
+(node:945486) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:945499) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:945505) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:945485) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-crypto-m1.test.ts
+PASS web/lib/momentum2/__dave/dave-pr47-flip.test.ts
+(node:945511) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-misc.test.ts
+(node:945493) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-broker.test.ts
+(node:945492) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-mode.test.ts
+  ● Console
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=api.alpaca.markets is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=paper-api.alpaca.markets.evil.io is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+    console.error
+      [alpaca] ORDER BLOCKED: host= is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+PASS web/lib/momentum2/__dave/dave-pr47-a2.test.ts
+PASS web/lib/momentum2/__dave/dave-pr47-live.test.ts
+FAIL web/lib/momentum2/__dave/dave-pr47-int.test.ts
+  ● Console
+
+    console.log
+      P1 {"pos":20,"orders":[["stop","sell","20","pending_cancel"]],"book":{"qty":20,"entryPrice":50,"entryDate":"2024-05-01","highWater":60},"pending":[{"symbol":"QLD","side":"sell","qty":20,"reason":"regime"}],"stopMissing":{"QLD":"2024-06-03"}}
+
+
+    console.log
+      P3 {"pos":20,"orders":[["market","buy","20","filled"]],"book":null,"pending":[{"symbol":"QLD","side":"buy","notionalUsd":1000,"reason":"in"}]}
+
+
+    console.log
+      P3b {"pos":40,"book":20,"stopQty":20}
+
+
+  ● PR47 v3 integratie (echte broker, Daves Alpaca) › I3 (=N3) M1 heeft 0,04 BTC, M6 koopt 0,06 (fee 0,25%): M6-stop dekt nooit M1-stukken
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 0.059850001
+    Received:    0.06
+
+      127 |     const m6Real = r9(fa.pos['BTC/USD']! - 0.04);
+      128 |     expect(fa.stopQty('BTC/USD')).toBeGreaterThan(0);
+    > 129 |     expect(fa.stopQty('BTC/USD')).toBeLessThanOrEqual(m6Real + 1e-9);
+          |                                   ^
+      130 |   });
+      131 |
+      132 |   it('I4 (=L8) deels gevulde stop over twee runs: boek één keer bijgewerkt, één stop op de rest', async () => {
+
+
+  ● PR47 v3 integratie (echte broker, Daves Alpaca) › P1 exit terwijl Alpaca de stop-cancel in pending_cancel houdt (>3s): na de run is de positie verkocht OF heeft ze een stop
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      159 |     fa.settle(); // de cancel gaat alsnog door, de volgende run is pas morgen
+      160 |     const pos = fa.pos.QLD ?? 0;
+    > 161 |     expect(pos === 0 || fa.stopQty('QLD') >= pos).toBe(true);
+          |                                                   ^
+      162 |   });
+      163 |
+      164 |   it('P2 stop verhogen terwijl de stop nog "accepted" is (buiten sessie): oude stop blijft staan, nooit een gat', async () => {
+
+
+  ● PR47 v3 integratie (echte broker, Daves Alpaca) › P3 buy gevuld maar GET /orders faalt tijdelijk (503) tijdens pollen: geen positie zonder boek+stop, geen tweede buy
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 20
+    Received: 40
+
+      180 |     await executeDay({ date: '2024-06-04', cfgs: [m5!], hooks: m5Hooks, lastPrice: { QLD: 50 }, barsBySymbol: qldBars, broker: makeAlpacaPaperBroker(fa, noSleep), store: mem.store, expectReal: true }).catch(() => {});
+      181 |     console.log('P3b', JSON.stringify({ pos: fa.pos.QLD, book: mem.book().positions.QLD?.qty ?? null, stopQty: fa.stopQty('QLD') }));
+    > 182 |     expect(fa.pos.QLD).toBe(20);
+          |                        ^
+      183 |     const protectedNow = (mem.book().positions.QLD?.qty ?? 0) === 20 && fa.stopQty('QLD') === 20;
+      184 |     expect(protectedNow).toBe(true);
+      185 |   });
+
+
+Test Suites: 1 failed, 7 passed, 8 total
+Tests:       3 failed, 41 passed, 44 total
+Snapshots:   0 total
+Time:        4.932 s, estimated 5 s
+Ran all test suites matching /web\/lib\/momentum2\/__dave/i.

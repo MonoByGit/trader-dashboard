@@ -1,0 +1,49 @@
+### PR 46 head 2be439dc8fccd462785d16d3ff36e13c0990caf9 run 2026-11-01 14:56 CET
+### 1a run-momentum5 (QLD only)
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 755.0% | QQQ 377.1% | excess 377.9 pp | MaxDD 35.9% | Sharpe 0.87 | trades 29
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 755.0% | SPY 234.3% | excess 520.7 pp | MaxDD 35.9% | Sharpe 0.87 | trades 29
+### 1b run-momentum5 MOMENTUM5_TQQQ=1
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 755.0% | QQQ 377.1% | excess 377.9 pp | MaxDD 35.9% | Sharpe 0.87 | trades 29
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 755.0% | SPY 234.3% | excess 520.7 pp | MaxDD 35.9% | Sharpe 0.87 | trades 29
+QQQ bars: 2448 (2017-02-06 .. 2026-10-30)
+
+=== m5-nasdaq-tqqq vs QQQ ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 484.9% | QQQ 377.1% | excess 107.7 pp | MaxDD 60.5% | Sharpe 0.67 | trades 44
+
+=== m5-nasdaq-tqqq vs SPY ===
+OOS 2017-11-20 .. 2026-10-30 (25 vensters)
+Return 484.9% | SPY 234.3% | excess 250.5 pp | MaxDD 60.5% | Sharpe 0.67 | trades 44
+### 2 run-momentum6
+BTC bars: 2131 (2021-01-01 .. 2026-11-01)
+
+=== m6-btc-breakout vs BTC ===
+OOS 2021-01-21 .. 2022-10-12 (7 vensters, sleeve gehalt op 2022-09-15 (blijft gehalt))
+Return -16.1% | BTC -37.9% | excess 21.8 pp | MaxDD 42.2% | Sharpe -0.08 | trades 40 | costs ~11.7% budget
+### 3 npm test
+PASS src/guards/eod-clock.test.ts
+PASS src/guards/guard-state-merge.test.ts
+PASS src/security/health-payload.test.ts
+PASS src/alpaca/symbol-path.test.ts
+PASS src/strategy/content.test.ts
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Test Suites: 105 passed, 105 total
+Tests:       358 passed, 358 total
+Snapshots:   0 total
+Time:        4.039 s
+Ran all test suites.

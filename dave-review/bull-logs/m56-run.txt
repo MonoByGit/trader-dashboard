@@ -1,0 +1,77 @@
+### PR 46 head 4d9f5428c39b501ceb4f47aa8f2c68a56390482f run 2026-11-01 14:43 CET
+### 1a run-momentum5 (QLD only)
+QQQ bars: 1575 (2020-07-27 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2021-05-12 .. 2026-09-25 (15 vensters)
+Return 43.1% | QQQ 134.9% | excess -91.8 pp | MaxDD 25.8% | Sharpe 0.47 | trades 51
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2021-05-11 .. 2026-09-24 (15 vensters)
+Return 42.3% | SPY 85.2% | excess -43.0 pp | MaxDD 25.8% | Sharpe 0.46 | trades 51
+### 1b run-momentum5 MOMENTUM5_TQQQ=1
+QQQ bars: 1575 (2020-07-27 .. 2026-10-30)
+
+=== m5-nasdaq-trend vs QQQ ===
+OOS 2021-05-12 .. 2026-09-25 (15 vensters)
+Return 43.1% | QQQ 134.9% | excess -91.8 pp | MaxDD 25.8% | Sharpe 0.47 | trades 51
+
+=== m5-nasdaq-trend vs SPY ===
+OOS 2021-05-11 .. 2026-09-24 (15 vensters)
+Return 42.3% | SPY 85.2% | excess -43.0 pp | MaxDD 25.8% | Sharpe 0.46 | trades 51
+QQQ bars: 1575 (2020-07-27 .. 2026-10-30)
+
+=== m5-nasdaq-tqqq vs QQQ ===
+OOS 2021-05-12 .. 2026-09-25 (15 vensters)
+Return 209.7% | QQQ 134.9% | excess 74.8 pp | MaxDD 34.9% | Sharpe 0.94 | trades 73
+
+=== m5-nasdaq-tqqq vs SPY ===
+OOS 2021-05-11 .. 2026-09-24 (15 vensters)
+Return 206.7% | SPY 85.2% | excess 121.5 pp | MaxDD 35.6% | Sharpe 0.92 | trades 71
+### 2 run-momentum6
+BTC bars: 2131 (2021-01-01 .. 2026-11-01)
+
+=== m6-btc-breakout vs BTC ===
+OOS 2021-01-21 .. 2022-10-12 (7 vensters, halt 2022-07-25)
+Return -15.7% | BTC -37.9% | excess 22.2 pp | MaxDD 38.7% | Sharpe -0.13 | trades 36 | costs ~9.6% budget
+### 3 npm test
+PASS src/indicators/rsi.test.ts
+PASS src/integration/scheduler-tick-lock-migration.test.ts
+PASS src/crypto/postmortem-symbol-match.test.ts
+PASS src/backtest/indicators.test.ts
+PASS src/backtest/guards-integration.test.ts
+PASS src/trading/strategy-tags.test.ts
+PASS src/ai-cost/pricing.test.ts
+PASS src/guards/crypto-soft-start.test.ts
+PASS src/backtest/order-qty.test.ts
+PASS src/asset-classes/classify.test.ts
+PASS src/crypto/stop-storage-key.test.ts
+PASS src/backtest/session-guards.test.ts
+PASS src/dates/trading-date.test.ts
+PASS src/crypto/enforce-scan-resilience.test.ts
+PASS src/guards/guard-state-merge.test.ts
+PASS src/volatility/vixy-stress.test.ts
+PASS src/ai/news-json.test.ts
+PASS src/backtest/backtest-dates.test.ts
+PASS src/security/health-payload.test.ts
+PASS src/strategy/lesson-patch.test.ts
+PASS src/trading/eod-flatten.test.ts
+PASS src/scheduler/routine-lock.test.ts
+PASS src/lessons/gate.test.ts
+PASS src/trading/eod-close-retry.test.ts
+PASS src/momentum2/order-tag.test.ts
+PASS web/lib/crypto/exit-crypto-position.test.ts
+PASS src/sizing/guard-cap.test.ts
+PASS src/security/manual-orders.test.ts
+PASS src/guards/consecutive-losses.test.ts
+PASS src/alpaca/stock-bars-range.test.ts
+PASS src/guards/daily-trades.test.ts
+PASS web/lib/crypto/repro-204.test.ts
+PASS web/lib/crypto/repro-close-flat-qty-available.test.ts
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Test Suites: 100 passed, 100 total
+Tests:       342 passed, 342 total
+Snapshots:   0 total
+Time:        4.948 s
+Ran all test suites.

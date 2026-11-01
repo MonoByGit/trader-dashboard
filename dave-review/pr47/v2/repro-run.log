@@ -1,0 +1,259 @@
+
+> trader-agent@0.1.0 test
+> node --experimental-vm-modules node_modules/.bin/jest web/lib/momentum2/__dave
+
+(node:901244) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS web/lib/momentum2/__dave/dave-pr47-mode.test.ts
+  ● Console
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=api.alpaca.markets is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+    console.error
+      [alpaca] ORDER BLOCKED: host=paper-api.alpaca.markets.evil.io is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+    console.error
+      [alpaca] ORDER BLOCKED: host= is not paper-api.alpaca.markets. Set ALPACA_BASE_URL to paper or unset it.
+
+      42 |   const { host, isPaper } = alpacaPaperModeFromBaseUrl(baseUrl);
+      43 |   if (!isPaper) {
+    > 44 |     console.error(
+         |             ^
+      45 |       `[alpaca] ORDER BLOCKED: host=${host} is not ${ALPACA_PAPER_HOST}. Set ALPACA_BASE_URL to paper or unset it.`,
+      46 |     );
+      47 |     throw new AlpacaLiveTradingBlockedError(host);
+
+
+PASS web/lib/momentum2/__dave/dave-pr47-misc.test.ts
+PASS web/lib/momentum2/__dave/dave-pr47-crypto-m1.test.ts
+(node:901246) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:901253) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:901231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:901247) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL web/lib/momentum2/__dave/dave-pr47-flip.test.ts
+  ● F2 terug naar schaduw (DRY_RUN weer 1) met een echt boek: schaduwkoop komt niet als echte positie in het real boek
+
+    expect(received).not.toEqual(expected) // deep equality
+
+    Expected: not {"QLD": 20, "real": true}
+
+      40 |   };
+      41 |   await executeDay({ date: '2026-11-03', cfgs: [cfg!], hooks: m5Hooks, lastPrice: { QLD: 50 }, broker: shadowBroker({ QLD: 50 }), store: store as never });
+    > 42 |   expect({ real: saved.real, QLD: saved.positions.QLD?.qty ?? 0 }).not.toEqual({ real: true, QLD: 20 });
+         |                                                                        ^
+      43 | });
+      44 |
+
+
+(node:901232) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL web/lib/momentum2/__dave/dave-pr47-broker.test.ts
+  ● PR47 alpacaPaperBroker › N2 stop verhogen (trailing) bij volle positie: plaats-dan-cancel moet slagen onder Alpaca reservering
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Object {
+    -   "err": null,
+    +   "err": "Error: Alpaca 403 insufficient qty available for order (requested: 20, available: 0)",
+        "stops": Array [
+    -     "20@35",
+    +     "20@30",
+        ],
+      }
+
+      89 |     let err: unknown = null;
+      90 |     await b.setStop({ versionId: 'm5-nasdaq-trend', symbol: 'QLD', qty: 20, stopPrice: 35, stopClientPrefix: P5 }).catch((e) => { err = e; });
+    > 91 |     expect({ err: err ? String(err) : null, stops: open().map((o) => `${o.qty}@${o.stop_price}`) }).toEqual({ err: null, stops: ['20@35'] });
+         |                                                                                                     ^
+      92 |   });
+      93 |
+      94 |   it('N2b positionQty geeft qty_available: met open stop 0 i.p.v. 20', async () => {
+
+
+  ● PR47 alpacaPaperBroker › N2b positionQty geeft qty_available: met open stop 0 i.p.v. 20
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 20
+    Received: 0
+
+      94 |   it('N2b positionQty geeft qty_available: met open stop 0 i.p.v. 20', async () => {
+      95 |     const { b } = await load([{ id: 'a', client_order_id: `${P5}QLD-20-3000-1`, symbol: 'QLD', side: 'sell', qty: '20', stop_price: '30', status: 'new', type: 'stop' }], { heldModel: true, posQty: { QLD: 20 } });
+    > 96 |     expect(await b.positionQty!({ symbol: 'QLD' })).toBe(20);
+         |                                                     ^
+      97 |   });
+      98 |
+      99 |   it('N5 plaats-dan-cancel: hoeveel eigen stops staan er even tegelijk open (positie 30, stop 10 -> 20)', async () => {
+
+
+  ● PR47 alpacaPaperBroker › N5 plaats-dan-cancel: hoeveel eigen stops staan er even tegelijk open (positie 30, stop 10 -> 20)
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "eindOpen": 1,
+    -   "piekTegelijk": 1,
+    +   "piekTegelijk": 2,
+      }
+
+      100 |     const { b, open, peak } = await load([{ id: 'a', client_order_id: `${P5}QLD-10-3000-1`, symbol: 'QLD', side: 'sell', qty: '10', stop_price: '30', status: 'new', type: 'stop' }], { heldModel: true, posQty: { QLD: 30 } });
+      101 |     await b.setStop({ versionId: 'm5-nasdaq-trend', symbol: 'QLD', qty: 20, stopPrice: 30, stopClientPrefix: P5 });
+    > 102 |     expect({ eindOpen: open().length, piekTegelijk: peak.n }).toEqual({ eindOpen: 1, piekTegelijk: 1 });
+          |                                                               ^
+      103 |   });
+      104 | });
+      105 |
+
+
+FAIL web/lib/momentum2/__dave/dave-pr47-live.test.ts
+  ● PR47 executeDay met nep-rekening › L1 setStop faalt na een buy-fill: de fill moet in het boek blijven (anders positie zonder stop en dubbele buy)
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 8
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "notionalUsd": 1000,
+    +     "reason": "in",
+    +     "side": "buy",
+    +     "symbol": "QLD",
+    +   },
+    + ]
+
+       98 |     await executeDay({ date: '2024-06-01', cfgs: [m5!], hooks: m5Hooks, lastPrice: { QLD: 50 }, barsBySymbol: qldBars, broker: acc.b, store: mem.store }).catch(() => {});
+       99 |     expect(acc.pos.QLD).toBe(20);
+    > 100 |     expect(mem.pending().filter((o) => o.side === 'buy')).toEqual([]);
+          |                                                           ^
+      101 |   });
+      102 |
+      103 |   it('L2 crypto fee: M6-stop qty mag niet groter zijn dan de echte positie na fee (anders weigert Alpaca de stop)', async () => {
+
+
+  ● PR47 nieuw op a6fcc52 › N1 exit met openstaande eigen stop (normale situatie): positie wordt verkocht
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 3
+
+      Object {
+    -   "boek": 0,
+    -   "broker": 0,
+    -   "log": Array [
+    -     "cancel QLD",
+    -     "sell QLD 20",
+    -   ],
+    +   "boek": 20,
+    +   "broker": 20,
+    +   "log": Array [],
+      }
+
+      204 |     acc.setStops([{ symbol: 'QLD', qty: 20, stopPrice: 35, clientOrderId: `${momentumStopClientPrefix(m5!)}QLD-20-3500-0`, orderId: 'x0', status: 'new', filledQty: 0 }]);
+      205 |     await executeDay({ date: '2024-06-01', cfgs: [m5!], hooks: m5Hooks, lastPrice: { QLD: 55 }, barsBySymbol: qldBars, broker: acc.b, store: mem.store });
+    > 206 |     expect({ broker: acc.pos.QLD, boek: mem.book()!.positions.QLD?.qty ?? 0, log: acc.log }).toEqual({ broker: 0, boek: 0, log: ['cancel QLD', 'sell QLD 20'] });
+          |                                                                                              ^
+      207 |   });
+      208 |
+      209 |   it('N1b stop verhogen via executeDay bij open stop: nieuwe hogere stop staat er', async () => {
+
+
+  ● PR47 nieuw op a6fcc52 › N1b stop verhogen via executeDay bij open stop: nieuwe hogere stop staat er
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 1
+    Received:   1
+
+      216 |     const live = acc.stops().filter((s) => s.status === 'new');
+      217 |     expect(live.length).toBe(1);
+    > 218 |     expect(live[0]!.stopPrice).toBeGreaterThan(1);
+          |                                ^
+      219 |   });
+      220 |
+      221 |   it('N3 M1 heeft al 0,04 BTC: M6 koopt 0,06 en zet stop + boek op 0,06, niet op 0,1', async () => {
+
+
+  ● PR47 nieuw op a6fcc52 › N3 M1 heeft al 0,04 BTC: M6 koopt 0,06 en zet stop + boek op 0,06, niet op 0,1
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "boek": 0.06,
+        "stops": Array [
+    -     0.06,
+    +     0.1,
+        ],
+      }
+
+      226 |     await executeDay({ date: '2024-06-01', cfgs: [m6], hooks: m6Hooks, lastPrice: { 'BTC/USD': 50000 }, barsBySymbol: { 'BTC/USD': makeBars(60, 50000, 0.001, 0.02) }, broker: acc.b, store: mem.store });
+      227 |     const st = acc.stops().filter((s) => s.status === 'new').map((s) => s.qty);
+    > 228 |     expect({ stops: st, boek: mem.book()!.positions['BTC/USD']?.qty }).toEqual({ stops: [0.06], boek: 0.06 });
+          |                                                                        ^
+      229 |   });
+      230 |
+      231 |   it('L8 blijvend gedeeltelijk gevulde stop (8 van 20) over twee runs: boek 12 en stop blijft staan', async () => {
+
+
+  ● PR47 nieuw op a6fcc52 › L8 blijvend gedeeltelijk gevulde stop (8 van 20) over twee runs: boek 12 en stop blijft staan
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Object {
+    -   "boek": 12,
+    -   "openStops": 1,
+    +   "boek": 4,
+    +   "openStops": 2,
+      }
+
+      240 |       await reconcileDisasterStops({ date: d, cfgs: [m6], books: { [m6.id]: mem.book() }, hooks: m6Hooks, barsBySymbol: bars, broker: acc.b }).catch(() => {});
+      241 |     }
+    > 242 |     expect({ boek: mem.book()!.positions['BTC/USD']?.qty ?? 0, openStops: acc.stops().filter((s) => ['new', 'partially_filled'].includes(s.status)).length }).toEqual({ boek: 12, openStops: 1 });
+          |                                                                                                                                                               ^
+      243 |   });
+      244 | });
+      245 |
+
+
+Test Suites: 3 failed, 3 passed, 6 total
+Tests:       9 failed, 25 passed, 34 total
+Snapshots:   0 total
+Time:        2.622 s
+Ran all test suites matching /web\/lib\/momentum2\/__dave/i.

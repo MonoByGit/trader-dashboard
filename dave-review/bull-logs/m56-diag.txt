@@ -1,0 +1,590 @@
+##### feed=iex adj=split floatingBudget=false
+QQQ: 1575 bars 2020-07-27..2026-10-30
+QLD: 1575 bars 2020-07-27..2026-10-30
+TQQQ: 1575 bars 2020-07-27..2026-10-30
+BIL: 1561 bars 2020-07-27..2026-10-30
+SPY: 1576 bars 2018-11-01..2026-10-30
+
+=== m5-nasdaq-trend vs QQQ === OOS 2021-05-12..2026-09-25 (15 win)
+Return 43.1% (CAGR 6.9%) | QQQ 134.9% (CAGR 17.2%) | MaxDD 25.8% vs QQQ 35.6% | Sharpe 0.47 | trades 51 | sells 25 win 32% (8/25) | costs 0.8%
+reasons {"buy:QQQ boven band / fresh up":18,"sell:trailing stop":17,"buy:QQQ onder band / wacht op up":8,"sell:regime naar risico":8}
+   2021-05-12..2021-09-17 ret 34.9% trades 1 eq 13490 pos QLD cash 14
+   2021-09-20..2022-01-26 ret -7.3% trades 6 eq 11950 pos BIL cash 1985
+   2022-01-27..2022-06-06 ret 0.0% trades 0 eq 11951 pos BIL cash 1985
+   2022-06-07..2022-10-13 ret 0.1% trades 0 eq 11960 pos BIL cash 1985
+   2022-10-14..2023-02-23 ret -1.3% trades 2 eq 11801 pos QLD cash 9985
+   2023-02-24..2023-07-05 ret 6.6% trades 4 eq 12508 pos QLD cash 9985
+   2023-07-06..2023-11-09 ret -6.4% trades 8 eq 11673 pos QLD cash 9921
+   2023-11-10..2024-03-21 ret 5.5% trades 0 eq 12398 pos QLD cash 9921
+   2024-03-22..2024-07-31 ret 17.2% trades 4 eq 14538 pos QLD cash 4255
+   2024-08-01..2024-12-06 ret -5.1% trades 8 eq 13295 pos QLD cash 10009
+   2024-12-09..2025-04-21 ret -5.9% trades 6 eq 12460 pos BIL cash 2472
+   2025-04-22..2025-08-28 ret 4.9% trades 2 eq 13075 pos QLD cash 10021
+   2025-08-29..2026-01-07 ret 10.6% trades 2 eq 14372 pos QLD cash 3188
+   2026-01-08..2026-05-18 ret -2.0% trades 4 eq 13953 pos QLD cash 9984
+   2026-05-19..2026-09-25 ret 2.9% trades 4 eq 14307 pos QLD cash 3356
+   2021-05-13 buy QLD 339 @29.46 QQQ boven band / fresh up
+   2021-10-04 sell QLD 339 @35.41 trailing stop pnl 2019
+   2021-10-05 buy QLD 279 @35.82 QQQ boven band / fresh up
+   2022-01-10 sell QLD 279 @39.45 trailing stop pnl 1014
+   2022-01-11 buy QLD 247 @40.47 QQQ boven band / fresh up
+   2022-01-21 sell QLD 247 @36.09 trailing stop pnl -1081
+   2022-01-24 buy BIL 109 @91.44 QQQ onder band / wacht op up
+   2023-02-02 sell BIL 109 @91.42 regime naar risico pnl -2
+   2023-02-02 buy QLD 85 @23.12 QQQ boven band / fresh up
+   2023-02-24 sell QLD 85 @20.40 trailing stop pnl -232
+   2023-02-27 buy BIL 109 @91.71 QQQ onder band / wacht op up
+   2023-03-06 sell BIL 109 @91.50 regime naar risico pnl -23
+   2023-03-06 buy QLD 78 @21.92 QQQ boven band / fresh up
+   2023-08-17 sell QLD 78 @30.03 trailing stop pnl 632
+   2023-08-18 buy QLD 340 @29.39 QQQ boven band / fresh up
+   2023-09-27 sell QLD 340 @28.58 trailing stop pnl -274
+   2023-09-28 buy QLD 345 @28.95 QQQ boven band / fresh up
+   2023-10-26 sell QLD 345 @27.31 trailing stop pnl -566
+   2023-10-27 buy BIL 108 @91.82 QQQ onder band / wacht op up
+   2023-10-31 sell BIL 108 @91.81 regime naar risico pnl -2
+   2023-10-31 buy QLD 56 @27.94 QQQ boven band / fresh up
+   2024-04-19 sell QLD 56 @38.11 trailing stop pnl 570
+   2024-04-22 buy QLD 260 @38.42 QQQ boven band / fresh up
+   2024-07-24 sell QLD 260 @46.75 trailing stop pnl 2166
+   2024-07-25 buy QLD 215 @46.36 QQQ boven band / fresh up
+   2024-08-05 sell QLD 215 @38.60 trailing stop pnl -1668
+   2024-08-06 buy BIL 109 @91.50 QQQ onder band / wacht op up
+   2024-08-07 sell BIL 109 @91.48 regime naar risico pnl -3
+   2024-08-07 buy QLD 60 @42.90 QQQ boven band / fresh up
+   2024-09-06 sell QLD 60 @42.65 trailing stop pnl -15
+   2024-09-09 buy BIL 109 @91.55 QQQ onder band / wacht op up
+   2024-09-10 sell BIL 109 @91.53 regime naar risico pnl -2
+   2024-09-10 buy QLD 57 @44.30 QQQ boven band / fresh up
+   2025-02-27 sell QLD 57 @51.20 trailing stop pnl 393
+   2025-02-28 buy BIL 108 @91.75 QQQ onder band / wacht op up
+   2025-03-03 sell BIL 108 @91.43 regime naar risico pnl -34
+   2025-03-03 buy QLD 56 @53.38 QQQ boven band / fresh up
+   2025-03-10 sell QLD 56 @45.47 trailing stop pnl -443
+   2025-03-11 buy BIL 109 @91.55 QQQ onder band / wacht op up
+   2025-05-13 sell BIL 109 @91.53 regime naar risico pnl -2
+   2025-05-13 buy QLD 48 @50.57 QQQ boven band / fresh up
+   2025-11-20 sell QLD 48 @65.16 trailing stop pnl 700
+   2025-11-21 buy QLD 154 @64.68 QQQ boven band / fresh up
+   2026-03-19 sell QLD 154 @63.75 trailing stop pnl -143
+   2026-03-20 buy BIL 109 @91.58 QQQ onder band / wacht op up
+   2026-04-10 sell BIL 109 @91.47 regime naar risico pnl -12
+   2026-04-10 buy QLD 44 @68.38 QQQ boven band / fresh up
+   2026-06-09 sell QLD 44 @85.81 trailing stop pnl 767
+   2026-06-10 buy QLD 112 @88.60 QQQ boven band / fresh up
+   2026-07-17 sell QLD 112 @84.60 trailing stop pnl -447
+   2026-07-20 buy QLD 113 @88.11 QQQ boven band / fresh up
+
+=== m5-nasdaq-trend vs SPY === OOS 2021-05-11..2026-09-24 (15 win)
+Return 42.3% (CAGR 6.8%) | SPY 85.2% (CAGR 12.2%) | MaxDD 25.8% vs SPY 25.4% | Sharpe 0.46 | trades 51 | sells 25 win 32% (8/25) | costs 0.8%
+reasons {"buy:QQQ boven band / fresh up":18,"sell:trailing stop":17,"buy:QQQ onder band / wacht op up":8,"sell:regime naar risico":8}
+
+=== m5-nasdaq-tqqq vs QQQ === OOS 2021-05-12..2026-09-25 (15 win)
+Return 209.7% (CAGR 23.4%) | QQQ 134.9% (CAGR 17.2%) | MaxDD 34.9% vs QQQ 35.6% | Sharpe 0.94 | trades 73 | sells 36 win 33% (12/36) | costs 1.4%
+reasons {"buy:QQQ boven band / fresh up":32,"sell:trailing stop":31,"buy:QQQ onder band / wacht op up":5,"sell:regime naar risico":5}
+   2021-05-12..2021-09-17 ret 56.9% trades 1 eq 4707 pos TQQQ cash 6
+   2021-09-20..2022-01-26 ret -5.7% trades 12 eq 4151 pos BIL cash 1226
+   2022-01-27..2022-06-06 ret 0.0% trades 0 eq 4151 pos BIL cash 1226
+   2022-06-07..2022-10-13 ret 0.1% trades 0 eq 4154 pos BIL cash 1226
+   2022-10-14..2023-02-23 ret -9.0% trades 6 eq 3780 pos BIL cash 846
+   2023-02-24..2023-07-05 ret 13.7% trades 6 eq 4299 pos TQQQ cash 2937
+   2023-07-06..2023-11-09 ret -5.1% trades 8 eq 4048 pos TQQQ cash 648
+   2023-11-10..2024-03-21 ret 45.1% trades 0 eq 6209 pos TQQQ cash 648
+   2024-03-22..2024-07-31 ret 1.4% trades 6 eq 6313 pos TQQQ cash 3172
+   2024-08-01..2024-12-06 ret 31.7% trades 4 eq 8015 pos TQQQ cash 3717
+   2024-12-09..2025-04-21 ret -10.7% trades 8 eq 7067 pos BIL cash 4135
+   2025-04-22..2025-08-28 ret 16.3% trades 2 eq 8220 pos TQQQ cash 4096
+   2025-08-29..2026-01-07 ret 4.9% trades 6 eq 8467 pos TQQQ cash 5102
+   2026-01-08..2026-05-18 ret 11.4% trades 6 eq 9366 pos TQQQ cash 4910
+   2026-05-19..2026-09-25 ret 0.0% trades 8 eq 9291 pos TQQQ cash 5471
+   2021-05-13 buy TQQQ 132 @22.68 QQQ boven band / fresh up
+   2021-09-20 sell TQQQ 132 @32.46 trailing stop pnl 1291
+   2021-09-21 buy TQQQ 88 @33.91 QQQ boven band / fresh up
+   2021-10-01 sell TQQQ 88 @30.28 trailing stop pnl -319
+   2021-10-04 buy TQQQ 95 @31.28 QQQ boven band / fresh up
+   2021-12-01 sell TQQQ 95 @38.95 trailing stop pnl 729
+   2021-12-02 buy TQQQ 78 @38.25 QQQ boven band / fresh up
+   2021-12-20 sell TQQQ 78 @36.19 trailing stop pnl -160
+   2021-12-21 buy TQQQ 79 @37.56 QQQ boven band / fresh up
+   2022-01-06 sell TQQQ 79 @36.75 trailing stop pnl -64
+   2022-01-07 buy TQQQ 80 @37.18 QQQ boven band / fresh up
+   2022-01-18 sell TQQQ 80 @33.12 trailing stop pnl -325
+   2022-01-19 buy BIL 32 @91.44 QQQ onder band / wacht op up
+   2023-02-02 sell BIL 32 @91.42 regime naar risico pnl -1
+   2023-02-02 buy TQQQ 94 @12.98 QQQ boven band / fresh up
+   2023-02-10 sell TQQQ 94 @11.65 trailing stop pnl -125
+   2023-02-13 buy TQQQ 248 @12.07 QQQ boven band / fresh up
+   2023-02-22 sell TQQQ 248 @11.08 trailing stop pnl -246
+   2023-02-23 buy BIL 32 @91.69 QQQ onder band / wacht op up
+   2023-03-06 sell BIL 32 @91.50 regime naar risico pnl -6
+   2023-03-06 buy TQQQ 71 @11.89 QQQ boven band / fresh up
+   2023-03-10 sell TQQQ 71 @10.39 trailing stop pnl -106
+   2023-03-13 buy BIL 32 @91.64 QQQ onder band / wacht op up
+   2023-03-15 sell BIL 32 @91.63 regime naar risico pnl -0
+   2023-03-15 buy TQQQ 66 @11.06 QQQ boven band / fresh up
+   2023-08-08 sell TQQQ 66 @20.02 trailing stop pnl 591
+   2023-08-09 buy TQQQ 145 @20.57 QQQ boven band / fresh up
+   2023-08-18 sell TQQQ 145 @17.74 trailing stop pnl -410
+   2023-08-21 buy TQQQ 162 @18.43 QQQ boven band / fresh up
+   2023-09-21 sell TQQQ 162 @18.27 trailing stop pnl -27
+   2023-09-22 buy TQQQ 165 @18.07 QQQ boven band / fresh up
+   2023-10-20 sell TQQQ 165 @17.01 trailing stop pnl -175
+   2023-10-23 buy TQQQ 178 @16.84 QQQ boven band / fresh up
+   2024-04-17 sell TQQQ 178 @27.24 trailing stop pnl 1850
+   2024-04-18 buy TQQQ 111 @26.95 QQQ boven band / fresh up
+   2024-07-18 sell TQQQ 111 @36.19 trailing stop pnl 1027
+   2024-07-19 buy TQQQ 82 @36.39 QQQ boven band / fresh up
+   2024-07-25 sell TQQQ 82 @31.91 trailing stop pnl -367
+   2024-07-26 buy TQQQ 92 @32.44 QQQ boven band / fresh up
+   2024-08-02 sell TQQQ 92 @29.80 trailing stop pnl -242
+   2024-08-05 buy TQQQ 122 @24.51 QQQ boven band / fresh up
+   2024-09-03 sell TQQQ 122 @31.08 trailing stop pnl 801
+   2024-09-04 buy TQQQ 98 @30.59 QQQ boven band / fresh up
+   2024-12-20 sell TQQQ 98 @39.52 trailing stop pnl 876
+   2024-12-23 buy TQQQ 71 @41.74 QQQ boven band / fresh up
+   2025-01-10 sell TQQQ 71 @37.84 trailing stop pnl -277
+   2025-01-13 buy TQQQ 81 @37.03 QQQ boven band / fresh up
+   2025-02-25 sell TQQQ 81 @38.72 trailing stop pnl 137
+   2025-02-26 buy TQQQ 76 @39.29 QQQ boven band / fresh up
+   2025-03-04 sell TQQQ 76 @34.18 trailing stop pnl -388
+   2025-03-05 buy BIL 32 @91.49 QQQ onder band / wacht op up
+   2025-05-13 sell BIL 32 @91.53 regime naar risico pnl 1
+   2025-05-13 buy TQQQ 89 @33.35 QQQ boven band / fresh up
+   2025-11-07 sell TQQQ 89 @51.56 trailing stop pnl 1621
+   2025-11-10 buy TQQQ 54 @55.22 QQQ boven band / fresh up
+   2025-11-18 sell TQQQ 54 @48.18 trailing stop pnl -380
+   2025-11-19 buy TQQQ 60 @49.33 QQQ boven band / fresh up
+   2025-11-21 sell TQQQ 60 @45.48 trailing stop pnl -231
+   2025-11-24 buy TQQQ 61 @48.71 QQQ boven band / fresh up
+   2026-02-04 sell TQQQ 61 @49.30 trailing stop pnl 36
+   2026-02-05 buy TQQQ 62 @48.37 QQQ boven band / fresh up
+   2026-03-19 sell TQQQ 62 @44.62 trailing stop pnl -233
+   2026-03-20 buy BIL 32 @91.58 QQQ onder band / wacht op up
+   2026-04-10 sell BIL 32 @91.47 regime naar risico pnl -4
+   2026-04-10 buy TQQQ 60 @49.39 QQQ boven band / fresh up
+   2026-06-05 sell TQQQ 60 @74.85 trailing stop pnl 1528
+   2026-06-08 buy TQQQ 39 @76.79 QQQ boven band / fresh up
+   2026-06-24 sell TQQQ 39 @72.32 trailing stop pnl -174
+   2026-06-25 buy TQQQ 38 @77.96 QQQ boven band / fresh up
+   2026-07-17 sell TQQQ 38 @66.37 trailing stop pnl -440
+   2026-07-20 buy TQQQ 43 @69.37 QQQ boven band / fresh up
+   2026-07-28 sell TQQQ 43 @60.93 trailing stop pnl -363
+   2026-07-29 buy TQQQ 48 @61.51 QQQ boven band / fresh up
+
+=== m5-nasdaq-tqqq vs SPY === OOS 2021-05-11..2026-09-24 (15 win)
+Return 206.7% (CAGR 23.2%) | SPY 85.2% (CAGR 12.2%) | MaxDD 35.6% vs SPY 25.4% | Sharpe 0.92 | trades 71 | sells 35 win 34% (12/35) | costs 1.4%
+reasons {"buy:QQQ boven band / fresh up":32,"sell:trailing stop":31,"buy:QQQ onder band / wacht op up":4,"sell:regime naar risico":4}
+
+=== m6-btc-breakout haltPersists=true vs BTC === OOS 2021-01-21..2022-10-12 (7 win, HALT 2022-07-25)
+Return -15.7% (CAGR -9.5%) | BTC -37.9% (CAGR -24.2%) | MaxDD 38.7% vs BTC 72.7% | Sharpe -0.13 | trades 36 | sells 18 win 33% (6/18) | costs 9.6%
+reasons {"buy:20d breakout":18,"sell:10 dagen vast":7,"sell:trailing stop":11}
+   2021-01-21..2021-04-20 ret 22.4% trades 8 eq 6118 pos - cash 6118
+   2021-04-21..2021-07-19 ret -18.1% trades 4 eq 5010 pos - cash 5010
+   2021-07-20..2021-10-17 ret 20.1% trades 10 eq 6020 pos - cash 6020
+   2021-10-18..2022-01-15 ret -13.3% trades 4 eq 5218 pos - cash 5218
+   2022-01-16..2022-04-15 ret 2.1% trades 4 eq 5328 pos - cash 5328
+   2022-04-16..2022-07-14 ret -16.5% trades 4 eq 4449 pos - cash 4449
+   2022-07-15..2022-10-12 ret -5.3% trades 2 eq 4214 pos - cash 4214 HALT
+
+=== m6-btc-breakout haltPersists=false vs BTC === OOS 2021-01-21..2026-09-21 (23 win)
+Return -15.7% (CAGR -3.0%) | BTC 180.8% (CAGR 20.0%) | MaxDD 38.7% vs BTC 76.7% | Sharpe -0.07 | trades 36 | sells 0 win 33% (0/0) | costs 9.6%
+reasons {}
+##### feed=sip adj=split floatingBudget=false
+QQQ: 2441 bars 2017-02-15..2026-10-30
+QLD: 2441 bars 2017-02-15..2026-10-30
+TQQQ: 2441 bars 2017-02-15..2026-10-30
+BIL: 2441 bars 2017-02-15..2026-10-30
+SPY: 2441 bars 2017-02-15..2026-10-30
+
+=== m5-nasdaq-trend vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 228.5% (CAGR 14.8%) | QQQ 358.5% (CAGR 19.4%) | MaxDD 35.0% vs QQQ 35.6% | Sharpe 0.76 | trades 95 | sells 47 win 36% (17/47) | costs 1.8%
+reasons {"buy:QQQ boven band / fresh up":35,"sell:trailing stop":31,"buy:QQQ onder band / wacht op up":13,"sell:regime naar risico":13,"sell:regime naar cash":3}
+
+=== m5-nasdaq-trend vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 228.5% (CAGR 14.8%) | SPY 181.4% (CAGR 12.8%) | MaxDD 35.0% vs SPY 34.2% | Sharpe 0.76 | trades 95 | sells 47 win 36% (17/47) | costs 1.8%
+reasons {"buy:QQQ boven band / fresh up":35,"sell:trailing stop":31,"buy:QQQ onder band / wacht op up":13,"sell:regime naar risico":13,"sell:regime naar cash":3}
+
+=== m5-nasdaq-tqqq vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 406.7% (CAGR 20.8%) | QQQ 358.5% (CAGR 19.4%) | MaxDD 29.7% vs QQQ 35.6% | Sharpe 0.87 | trades 149 | sells 74 win 39% (29/74) | costs 2.9%
+reasons {"buy:QQQ boven band / fresh up":65,"sell:trailing stop":62,"buy:QQQ onder band / wacht op up":10,"sell:regime naar risico":10,"sell:regime naar cash":2}
+
+=== m5-nasdaq-tqqq vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 406.7% (CAGR 20.8%) | SPY 181.4% (CAGR 12.8%) | MaxDD 29.7% vs SPY 34.2% | Sharpe 0.87 | trades 149 | sells 74 win 39% (29/74) | costs 2.9%
+reasons {"buy:QQQ boven band / fresh up":65,"sell:trailing stop":62,"buy:QQQ onder band / wacht op up":10,"sell:regime naar risico":10,"sell:regime naar cash":2}
+
+=== m6-btc-breakout haltPersists=true vs BTC === OOS 2021-01-21..2022-10-12 (7 win, HALT 2022-07-25)
+Return -15.7% (CAGR -9.5%) | BTC -37.9% (CAGR -24.2%) | MaxDD 38.7% vs BTC 72.7% | Sharpe -0.13 | trades 36 | sells 18 win 33% (6/18) | costs 9.6%
+reasons {"buy:20d breakout":18,"sell:10 dagen vast":7,"sell:trailing stop":11}
+
+=== m6-btc-breakout haltPersists=false vs BTC === OOS 2021-01-21..2026-09-21 (23 win)
+Return -15.7% (CAGR -3.0%) | BTC 180.8% (CAGR 20.0%) | MaxDD 38.7% vs BTC 76.7% | Sharpe -0.07 | trades 36 | sells 0 win 33% (0/0) | costs 9.6%
+reasons {}
+##### feed=sip adj=all floatingBudget=false
+QQQ: 2441 bars 2017-02-15..2026-10-30
+QLD: 2441 bars 2017-02-15..2026-10-30
+TQQQ: 2441 bars 2017-02-15..2026-10-30
+BIL: 2441 bars 2017-02-15..2026-10-30
+SPY: 2441 bars 2017-02-15..2026-10-30
+
+=== m5-nasdaq-trend vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 162.1% (CAGR 11.9%) | QQQ 386.9% (CAGR 20.2%) | MaxDD 33.2% vs QQQ 35.0% | Sharpe 0.63 | trades 97 | sells 48 win 52% (25/48) | costs 1.7%
+reasons {"buy:QQQ boven band / fresh up":36,"sell:trailing stop":32,"buy:QQQ onder band / wacht op up":13,"sell:regime naar risico":13,"sell:regime naar cash":3}
+   2017-11-30..2018-04-11 ret -9.7% trades 7 eq 9029 pos QLD cash 0
+   2018-04-12..2018-08-17 ret 21.3% trades 0 eq 11205 pos QLD cash 0
+   2018-08-20..2018-12-27 ret -8.0% trades 10 eq 10296 pos BIL cash 300
+   2018-12-28..2019-05-08 ret 0.7% trades 2 eq 10370 pos QLD cash 10052
+   2019-05-09..2019-09-16 ret 8.8% trades 6 eq 11278 pos QLD cash 355
+   2019-09-17..2020-01-24 ret 31.8% trades 0 eq 15007 pos QLD cash 355
+   2020-01-27..2020-06-03 ret -18.8% trades 14 eq 11702 pos QLD cash 9938
+   2020-06-04..2020-10-09 ret 13.9% trades 2 eq 13294 pos QLD cash 2381
+   2020-10-12..2021-02-19 ret 21.2% trades 2 eq 16923 pos QLD cash 2419
+   2021-02-22..2021-06-29 ret 4.0% trades 6 eq 16817 pos QLD cash 4550
+   2021-06-30..2021-11-04 ret 14.8% trades 2 eq 19254 pos QLD cash 6619
+   2021-11-05..2022-03-16 ret -15.4% trades 6 eq 16303 pos BIL cash 6377
+   2022-03-17..2022-07-26 ret 0.1% trades 0 eq 16315 pos BIL cash 6377
+   2022-07-27..2022-12-01 ret 0.6% trades 0 eq 16407 pos BIL cash 6377
+   2022-12-02..2023-04-13 ret -0.1% trades 6 eq 16398 pos QLD cash 9988
+   2023-04-14..2023-08-22 ret 12.0% trades 2 eq 18330 pos QLD cash 7885
+   2023-08-23..2023-12-29 ret 4.8% trades 6 eq 19550 pos QLD cash 9992
+   2024-01-02..2024-05-09 ret 7.6% trades 2 eq 20697 pos QLD cash 9615
+   2024-05-10..2024-09-18 ret -0.2% trades 10 eq 20716 pos QLD cash 10095
+   2024-09-19..2025-01-29 ret 6.8% trades 0 eq 22709 pos QLD cash 10095
+   2025-01-30..2025-06-09 ret -5.8% trades 6 eq 21494 pos QLD cash 10709
+   2025-06-10..2025-10-16 ret 11.8% trades 0 eq 24195 pos QLD cash 10709
+   2025-10-17..2026-02-26 ret -0.9% trades 2 eq 24156 pos QLD cash 13629
+   2026-02-27..2026-07-08 ret 8.8% trades 6 eq 26211 pos QLD cash 16027
+   2017-12-01 buy QLD 1128 @8.86 QQQ boven band / fresh up
+   2018-02-06 sell QLD 1128 @9.01 trailing stop pnl 171
+   2018-02-07 buy QLD 1029 @9.71 QQQ boven band / fresh up
+   2018-02-09 sell QLD 1029 @8.43 trailing stop pnl -1318
+   2018-02-12 buy QLD 962 @9.20 QQQ boven band / fresh up
+   2018-03-23 sell QLD 962 @9.60 trailing stop pnl 391
+   2018-03-26 buy QLD 961 @9.62 QQQ boven band / fresh up
+   2018-10-10 sell QLD 961 @10.76 trailing stop pnl 1095
+   2018-10-11 buy BIL 134 @74.28 QQQ onder band / wacht op up
+   2018-10-17 sell BIL 134 @74.27 regime naar risico pnl -3
+   2018-10-17 buy QLD 33 @11.36 QQQ boven band / fresh up
+   2018-10-25 sell QLD 33 @10.05 regime naar cash pnl -43
+   2018-10-25 buy BIL 134 @74.33 QQQ onder band / wacht op up
+   2018-11-08 sell BIL 134 @74.38 regime naar risico pnl 5
+   2018-11-08 buy QLD 30 @10.83 QQQ boven band / fresh up
+   2018-11-13 sell QLD 30 @9.88 regime naar cash pnl -29
+   2018-11-13 buy BIL 134 @74.40 QQQ onder band / wacht op up
+   2019-03-13 sell BIL 134 @74.94 regime naar risico pnl 71
+   2019-03-13 buy QLD 27 @10.72 QQQ boven band / fresh up
+   2019-05-29 sell QLD 27 @10.61 trailing stop pnl -3
+   2019-05-30 buy BIL 132 @75.33 QQQ onder band / wacht op up
+   2019-06-07 sell BIL 132 @75.34 regime naar risico pnl 3
+   2019-06-07 buy QLD 36 @10.83 QQQ boven band / fresh up
+   2019-08-05 sell QLD 36 @11.01 trailing stop pnl 7
+   2019-08-06 buy QLD 888 @11.25 QQQ boven band / fresh up
+   2020-02-25 sell QLD 888 @15.88 trailing stop pnl 4112
+   2020-02-26 buy QLD 645 @15.50 QQQ boven band / fresh up
+   2020-02-28 sell QLD 645 @13.01 trailing stop pnl -1610
+   2020-03-02 buy QLD 696 @14.35 QQQ boven band / fresh up
+   2020-03-06 sell QLD 696 @13.45 trailing stop pnl -626
+   2020-03-09 buy QLD 820 @12.19 QQQ boven band / fresh up
+   2020-03-10 sell QLD 820 @13.13 regime naar cash pnl 767
+   2020-03-10 buy BIL 29 @76.44 QQQ onder band / wacht op up
+   2020-03-11 sell BIL 29 @76.40 regime naar risico pnl -1
+   2020-03-11 buy QLD 776 @12.87 QQQ boven band / fresh up
+   2020-03-12 sell QLD 776 @10.73 trailing stop pnl -1664
+   2020-03-13 buy BIL 130 @76.47 QQQ onder band / wacht op up
+   2020-04-15 sell BIL 130 @76.43 regime naar risico pnl -4
+   2020-04-15 buy QLD 105 @13.17 QQQ boven band / fresh up
+   2020-09-04 sell QLD 105 @23.15 trailing stop pnl 1048
+   2020-09-08 buy QLD 457 @21.85 QQQ boven band / fresh up
+   2020-10-28 sell QLD 457 @21.96 trailing stop pnl 48
+   2020-10-29 buy QLD 460 @21.73 QQQ boven band / fresh up
+   2021-02-23 sell QLD 460 @27.97 trailing stop pnl 2867
+   2021-02-24 buy QLD 342 @29.21 QQQ boven band / fresh up
+   2021-03-05 sell QLD 342 @25.72 trailing stop pnl -1194
+   2021-03-08 buy QLD 367 @27.18 QQQ boven band / fresh up
+   2021-05-12 sell QLD 367 @28.38 trailing stop pnl 441
+   2021-05-13 buy QLD 344 @29.02 QQQ boven band / fresh up
+   2021-10-04 sell QLD 344 @35.07 trailing stop pnl 2083
+   2021-10-05 buy QLD 284 @35.20 QQQ boven band / fresh up
+   2021-12-20 sell QLD 284 @39.78 trailing stop pnl 1302
+   2021-12-21 buy QLD 242 @41.18 QQQ boven band / fresh up
+   2022-01-10 sell QLD 242 @38.81 trailing stop pnl -573
+   2022-01-11 buy QLD 249 @40.04 QQQ boven band / fresh up
+   2022-01-21 sell QLD 249 @35.86 trailing stop pnl -1040
+   2022-01-24 buy BIL 130 @76.37 QQQ onder band / wacht op up
+   2023-02-02 sell BIL 130 @77.66 regime naar risico pnl 169
+   2023-02-02 buy QLD 277 @22.94 QQQ boven band / fresh up
+   2023-02-24 sell QLD 277 @20.26 trailing stop pnl -744
+   2023-02-27 buy BIL 128 @77.91 QQQ onder band / wacht op up
+   2023-03-06 sell BIL 128 @77.94 regime naar risico pnl 5
+   2023-03-06 buy QLD 264 @21.76 QQQ boven band / fresh up
+   2023-08-17 sell QLD 264 @29.85 trailing stop pnl 2136
+   2023-08-18 buy QLD 342 @29.20 QQQ boven band / fresh up
+   2023-09-27 sell QLD 342 @28.39 trailing stop pnl -275
+   2023-09-28 buy QLD 347 @28.79 QQQ boven band / fresh up
+   2023-10-26 sell QLD 347 @27.12 trailing stop pnl -579
+   2023-10-27 buy BIL 124 @80.53 QQQ onder band / wacht op up
+   2023-10-31 sell BIL 124 @80.50 regime naar risico pnl -3
+   2023-10-31 buy QLD 253 @27.76 QQQ boven band / fresh up
+   2024-04-19 sell QLD 253 @37.94 trailing stop pnl 2576
+   2024-04-22 buy QLD 261 @38.22 QQQ boven band / fresh up
+   2024-07-24 sell QLD 261 @46.56 trailing stop pnl 2178
+   2024-07-25 buy QLD 216 @46.21 QQQ boven band / fresh up
+   2024-08-05 sell QLD 216 @38.42 trailing stop pnl -1682
+   2024-08-06 buy BIL 119 @83.83 QQQ onder band / wacht op up
+   2024-08-07 sell BIL 119 @83.81 regime naar risico pnl -2
+   2024-08-07 buy QLD 234 @42.58 QQQ boven band / fresh up
+   2024-09-06 sell QLD 234 @42.55 trailing stop pnl -6
+   2024-09-09 buy BIL 118 @84.25 QQQ onder band / wacht op up
+   2024-09-10 sell BIL 118 @84.21 regime naar risico pnl -4
+   2024-09-10 buy QLD 227 @43.96 QQQ boven band / fresh up
+   2025-02-27 sell QLD 227 @51.09 trailing stop pnl 1619
+   2025-02-28 buy QLD 196 @50.86 QQQ boven band / fresh up
+   2025-03-10 sell QLD 196 @45.45 trailing stop pnl -1061
+   2025-03-11 buy BIL 116 @86.15 QQQ onder band / wacht op up
+   2025-05-13 sell BIL 116 @86.73 regime naar risico pnl 68
+   2025-05-13 buy QLD 198 @50.46 QQQ boven band / fresh up
+   2025-11-20 sell QLD 198 @65.05 trailing stop pnl 2890
+   2025-11-21 buy QLD 154 @64.68 QQQ boven band / fresh up
+   2026-03-19 sell QLD 154 @63.70 trailing stop pnl -152
+   2026-03-20 buy BIL 111 @89.72 QQQ onder band / wacht op up
+   2026-04-10 sell BIL 111 @89.86 regime naar risico pnl 16
+   2026-04-10 buy QLD 146 @68.31 QQQ boven band / fresh up
+   2026-06-09 sell QLD 146 @85.91 trailing stop pnl 2569
+   2026-06-10 buy QLD 113 @88.46 QQQ boven band / fresh up
+
+=== m5-nasdaq-trend vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 162.1% (CAGR 11.9%) | SPY 220.8% (CAGR 14.5%) | MaxDD 33.2% vs SPY 33.8% | Sharpe 0.63 | trades 97 | sells 48 win 52% (25/48) | costs 1.7%
+reasons {"buy:QQQ boven band / fresh up":36,"sell:trailing stop":32,"buy:QQQ onder band / wacht op up":13,"sell:regime naar risico":13,"sell:regime naar cash":3}
+
+=== m5-nasdaq-tqqq vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 401.7% (CAGR 20.6%) | QQQ 386.9% (CAGR 20.2%) | MaxDD 29.7% vs QQQ 35.0% | Sharpe 0.86 | trades 157 | sells 78 win 44% (34/78) | costs 3.1%
+reasons {"buy:QQQ boven band / fresh up":67,"sell:trailing stop":65,"buy:QQQ onder band / wacht op up":12,"sell:regime naar risico":12,"sell:regime naar cash":1}
+   2017-11-30..2018-04-11 ret 14.5% trades 11 eq 3434 pos TQQQ cash 348
+   2018-04-12..2018-08-17 ret 28.4% trades 2 eq 4546 pos TQQQ cash 311
+   2018-08-20..2018-12-27 ret -17.7% trades 12 eq 3736 pos BIL cash 752
+   2018-12-28..2019-05-08 ret 3.4% trades 2 eq 3862 pos TQQQ cash 3000
+   2019-05-09..2019-09-16 ret 5.0% trades 8 eq 4042 pos TQQQ cash 645
+   2019-09-17..2020-01-24 ret 43.6% trades 2 eq 5869 pos TQQQ cash 675
+   2020-01-27..2020-06-03 ret 7.4% trades 18 eq 5957 pos TQQQ cash 2177
+   2020-06-04..2020-10-09 ret 18.8% trades 16 eq 6983 pos TQQQ cash 3191
+   2020-10-12..2021-02-19 ret 8.7% trades 8 eq 7977 pos TQQQ cash 4638
+   2021-02-22..2021-06-29 ret 11.5% trades 6 eq 8605 pos TQQQ cash 4567
+   2021-06-30..2021-11-04 ret 11.6% trades 4 eq 9580 pos TQQQ cash 5539
+   2021-11-05..2022-03-16 ret -9.5% trades 8 eq 8685 pos BIL cash 5707
+   2022-03-17..2022-07-26 ret 0.0% trades 0 eq 8689 pos BIL cash 5707
+   2022-07-27..2022-12-01 ret 0.3% trades 0 eq 8717 pos BIL cash 5707
+   2022-12-02..2023-04-13 ret 1.1% trades 12 eq 8811 pos TQQQ cash 5066
+   2023-04-14..2023-08-22 ret 15.9% trades 4 eq 10192 pos TQQQ cash 7114
+   2023-08-23..2023-12-29 ret 10.7% trades 4 eq 11448 pos TQQQ cash 6912
+   2024-01-02..2024-05-09 ret 7.5% trades 2 eq 12062 pos TQQQ cash 8793
+   2024-05-10..2024-09-18 ret 9.4% trades 8 eq 13221 pos TQQQ cash 10007
+   2024-09-19..2025-01-29 ret 3.5% trades 4 eq 13942 pos TQQQ cash 10622
+   2025-01-30..2025-06-09 ret -4.4% trades 10 eq 13368 pos TQQQ cash 10014
+   2025-06-10..2025-10-16 ret 8.9% trades 0 eq 14623 pos TQQQ cash 10014
+   2025-10-17..2026-02-26 ret -3.4% trades 8 eq 14209 pos TQQQ cash 11124
+   2026-02-27..2026-07-08 ret 6.2% trades 8 eq 15051 pos TQQQ cash 12293
+   2017-12-01 buy TQQQ 564 @5.32 QQQ boven band / fresh up
+   2018-02-05 sell TQQQ 564 @6.12 trailing stop pnl 453
+   2018-02-06 buy TQQQ 554 @5.41 QQQ boven band / fresh up
+   2018-02-08 sell TQQQ 554 @5.31 trailing stop pnl -57
+   2018-02-09 buy TQQQ 560 @5.35 QQQ boven band / fresh up
+   2018-03-19 sell TQQQ 560 @6.40 trailing stop pnl 591
+   2018-03-20 buy TQQQ 457 @6.56 QQQ boven band / fresh up
+   2018-03-23 sell TQQQ 457 @5.73 trailing stop pnl -380
+   2018-03-26 buy TQQQ 508 @5.89 QQQ boven band / fresh up
+   2018-03-28 sell TQQQ 508 @5.37 trailing stop pnl -265
+   2018-03-29 buy TQQQ 547 @5.48 QQQ boven band / fresh up
+   2018-04-24 sell TQQQ 547 @5.41 trailing stop pnl -37
+   2018-04-25 buy TQQQ 550 @5.45 QQQ boven band / fresh up
+   2018-10-08 sell TQQQ 550 @7.40 trailing stop pnl 1072
+   2018-10-09 buy TQQQ 397 @7.55 QQQ boven band / fresh up
+   2018-10-10 sell TQQQ 397 @6.61 trailing stop pnl -373
+   2018-10-11 buy BIL 40 @74.28 QQQ onder band / wacht op up
+   2018-10-17 sell BIL 40 @74.27 regime naar risico pnl -1
+   2018-10-17 buy TQQQ 141 @7.32 QQQ boven band / fresh up
+   2018-10-23 sell TQQQ 141 @6.23 trailing stop pnl -154
+   2018-10-24 buy BIL 40 @74.33 QQQ onder band / wacht op up
+   2018-11-08 sell BIL 40 @74.38 regime naar risico pnl 2
+   2018-11-08 buy TQQQ 130 @6.74 QQQ boven band / fresh up
+   2018-11-12 sell TQQQ 130 @5.78 trailing stop pnl -125
+   2018-11-13 buy BIL 40 @74.40 QQQ onder band / wacht op up
+   2019-03-13 sell BIL 40 @74.94 regime naar risico pnl 21
+   2019-03-13 buy TQQQ 117 @6.40 QQQ boven band / fresh up
+   2019-05-10 sell TQQQ 117 @6.86 trailing stop pnl 54
+   2019-05-13 buy TQQQ 446 @6.71 QQQ boven band / fresh up
+   2019-05-29 sell TQQQ 446 @6.24 trailing stop pnl -213
+   2019-05-30 buy BIL 39 @75.33 QQQ onder band / wacht op up
+   2019-06-07 sell BIL 39 @75.34 regime naar risico pnl 1
+   2019-06-07 buy TQQQ 101 @6.42 QQQ boven band / fresh up
+   2019-08-05 sell TQQQ 101 @6.88 trailing stop pnl 47
+   2019-08-06 buy TQQQ 444 @6.74 QQQ boven band / fresh up
+   2019-10-02 sell TQQQ 444 @6.82 trailing stop pnl 33
+   2019-10-03 buy TQQQ 442 @6.78 QQQ boven band / fresh up
+   2020-02-24 sell TQQQ 442 @11.45 trailing stop pnl 2064
+   2020-02-25 buy TQQQ 257 @11.64 QQQ boven band / fresh up
+   2020-02-27 sell TQQQ 257 @9.78 trailing stop pnl -478
+   2020-02-28 buy TQQQ 368 @8.13 QQQ boven band / fresh up
+   2020-03-06 sell TQQQ 368 @8.65 trailing stop pnl 188
+   2020-03-09 buy TQQQ 410 @7.32 QQQ boven band / fresh up
+   2020-03-10 sell TQQQ 410 @8.08 regime naar cash pnl 313
+   2020-03-10 buy BIL 31 @76.44 QQQ onder band / wacht op up
+   2020-03-11 sell BIL 31 @76.40 regime naar risico pnl -1
+   2020-03-11 buy TQQQ 383 @7.82 QQQ boven band / fresh up
+   2020-03-12 sell TQQQ 383 @5.88 trailing stop pnl -743
+   2020-03-13 buy BIL 39 @76.47 QQQ onder band / wacht op up
+   2020-04-15 sell BIL 39 @76.43 regime naar risico pnl -1
+   2020-04-15 buy TQQQ 280 @7.24 QQQ boven band / fresh up
+   2020-04-21 sell TQQQ 280 @6.88 trailing stop pnl -102
+   2020-04-22 buy TQQQ 413 @7.26 QQQ boven band / fresh up
+   2020-05-14 sell TQQQ 413 @7.89 trailing stop pnl 263
+   2020-05-15 buy TQQQ 367 @8.17 QQQ boven band / fresh up
+   2020-06-11 sell TQQQ 367 @10.03 trailing stop pnl 682
+   2020-06-12 buy TQQQ 285 @10.50 QQQ boven band / fresh up
+   2020-06-29 sell TQQQ 285 @10.37 trailing stop pnl -38
+   2020-06-30 buy TQQQ 273 @10.98 QQQ boven band / fresh up
+   2020-07-14 sell TQQQ 273 @12.72 trailing stop pnl 475
+   2020-07-15 buy TQQQ 219 @13.66 QQQ boven band / fresh up
+   2020-07-24 sell TQQQ 219 @12.43 trailing stop pnl -271
+   2020-07-27 buy TQQQ 232 @12.91 QQQ boven band / fresh up
+   2020-09-03 sell TQQQ 232 @17.75 trailing stop pnl 1123
+   2020-09-04 buy TQQQ 173 @17.28 QQQ boven band / fresh up
+   2020-09-08 sell TQQQ 173 @14.86 trailing stop pnl -420
+   2020-09-09 buy TQQQ 195 @15.34 QQQ boven band / fresh up
+   2020-09-11 sell TQQQ 195 @13.98 trailing stop pnl -266
+   2020-09-14 buy TQQQ 198 @15.10 QQQ boven band / fresh up
+   2020-09-18 sell TQQQ 198 @13.68 trailing stop pnl -281
+   2020-09-21 buy TQQQ 226 @13.22 QQQ boven band / fresh up
+   2020-10-22 sell TQQQ 226 @16.04 trailing stop pnl 636
+   2020-10-23 buy TQQQ 181 @16.57 QQQ boven band / fresh up
+   2020-10-30 sell TQQQ 181 @14.14 trailing stop pnl -440
+   2020-11-02 buy TQQQ 210 @14.24 QQQ boven band / fresh up
+   2020-11-10 sell TQQQ 210 @16.00 trailing stop pnl 369
+   2020-11-11 buy TQQQ 182 @16.42 QQQ boven band / fresh up
+   2021-01-29 sell TQQQ 182 @21.23 trailing stop pnl 875
+   2021-02-01 buy TQQQ 134 @22.24 QQQ boven band / fresh up
+   2021-02-23 sell TQQQ 134 @21.82 trailing stop pnl -57
+   2021-02-24 buy TQQQ 135 @22.17 QQQ boven band / fresh up
+   2021-03-04 sell TQQQ 135 @19.89 trailing stop pnl -308
+   2021-03-05 buy TQQQ 153 @19.57 QQQ boven band / fresh up
+   2021-05-11 sell TQQQ 153 @21.54 trailing stop pnl 300
+   2021-05-12 buy TQQQ 138 @21.64 QQQ boven band / fresh up
+   2021-09-20 sell TQQQ 138 @30.89 trailing stop pnl 1276
+   2021-09-21 buy TQQQ 93 @32.20 QQQ boven band / fresh up
+   2021-10-01 sell TQQQ 93 @28.81 trailing stop pnl -315
+   2021-10-04 buy TQQQ 100 @29.76 QQQ boven band / fresh up
+   2021-12-01 sell TQQQ 100 @37.05 trailing stop pnl 730
+   2021-12-02 buy TQQQ 82 @36.49 QQQ boven band / fresh up
+   2021-12-20 sell TQQQ 82 @34.45 trailing stop pnl -167
+   2021-12-21 buy TQQQ 83 @35.72 QQQ boven band / fresh up
+   2022-01-06 sell TQQQ 83 @34.95 trailing stop pnl -63
+   2022-01-07 buy TQQQ 84 @35.42 QQQ boven band / fresh up
+   2022-01-18 sell TQQQ 84 @31.51 trailing stop pnl -328
+   2022-01-19 buy BIL 39 @76.38 QQQ onder band / wacht op up
+   2023-02-02 sell BIL 39 @77.66 regime naar risico pnl 50
+   2023-02-02 buy TQQQ 241 @12.41 QQQ boven band / fresh up
+   2023-02-10 sell TQQQ 241 @11.15 trailing stop pnl -304
+   2023-02-13 buy TQQQ 259 @11.54 QQQ boven band / fresh up
+   2023-02-22 sell TQQQ 259 @10.61 trailing stop pnl -243
+   2023-02-23 buy BIL 38 @77.90 QQQ onder band / wacht op up
+   2023-02-24 sell BIL 38 @77.87 regime naar risico pnl -1
+   2023-02-24 buy TQQQ 288 @10.40 QQQ boven band / fresh up
+   2023-03-10 sell TQQQ 288 @9.94 trailing stop pnl -132
+   2023-03-13 buy BIL 38 @78.08 QQQ onder band / wacht op up
+   2023-03-15 sell BIL 38 @78.05 regime naar risico pnl -1
+   2023-03-15 buy TQQQ 282 @10.60 QQQ boven band / fresh up
+   2023-08-08 sell TQQQ 282 @19.33 trailing stop pnl 2460
+   2023-08-09 buy TQQQ 151 @19.85 QQQ boven band / fresh up
+   2023-08-18 sell TQQQ 151 @17.12 trailing stop pnl -413
+   2023-08-21 buy TQQQ 168 @17.78 QQQ boven band / fresh up
+   2023-09-21 sell TQQQ 168 @17.69 trailing stop pnl -16
+   2023-09-22 buy TQQQ 171 @17.49 QQQ boven band / fresh up
+   2023-10-20 sell TQQQ 171 @16.48 trailing stop pnl -174
+   2023-10-23 buy TQQQ 184 @16.30 QQQ boven band / fresh up
+   2024-04-17 sell TQQQ 184 @26.51 trailing stop pnl 1879
+   2024-04-18 buy TQQQ 114 @26.30 QQQ boven band / fresh up
+   2024-07-18 sell TQQQ 114 @35.46 trailing stop pnl 1045
+   2024-07-19 buy TQQQ 84 @35.67 QQQ boven band / fresh up
+   2024-07-25 sell TQQQ 84 @31.27 trailing stop pnl -369
+   2024-07-26 buy TQQQ 94 @31.85 QQQ boven band / fresh up
+   2024-08-02 sell TQQQ 94 @29.20 trailing stop pnl -248
+   2024-08-05 buy TQQQ 124 @24.16 QQQ boven band / fresh up
+   2024-09-03 sell TQQQ 124 @30.45 trailing stop pnl 779
+   2024-09-04 buy TQQQ 100 @29.91 QQQ boven band / fresh up
+   2024-12-20 sell TQQQ 100 @38.84 trailing stop pnl 894
+   2024-12-23 buy TQQQ 72 @41.15 QQQ boven band / fresh up
+   2025-01-10 sell TQQQ 72 @37.32 trailing stop pnl -275
+   2025-01-13 buy TQQQ 82 @36.52 QQQ boven band / fresh up
+   2025-02-25 sell TQQQ 82 @38.17 trailing stop pnl 136
+   2025-02-26 buy TQQQ 77 @38.75 QQQ boven band / fresh up
+   2025-03-04 sell TQQQ 77 @33.70 trailing stop pnl -388
+   2025-03-05 buy BIL 34 @86.09 QQQ onder band / wacht op up
+   2025-03-06 sell BIL 34 @86.07 regime naar risico pnl -0
+   2025-03-06 buy TQQQ 88 @33.73 QQQ boven band / fresh up
+   2025-03-10 sell TQQQ 88 @29.53 trailing stop pnl -369
+   2025-03-11 buy BIL 34 @86.15 QQQ onder band / wacht op up
+   2025-05-13 sell BIL 34 @86.73 regime naar risico pnl 20
+   2025-05-13 buy TQQQ 91 @32.97 QQQ boven band / fresh up
+   2025-11-07 sell TQQQ 91 @51.19 trailing stop pnl 1659
+   2025-11-10 buy TQQQ 54 @54.82 QQQ boven band / fresh up
+   2025-11-18 sell TQQQ 54 @47.89 trailing stop pnl -374
+   2025-11-19 buy TQQQ 61 @48.97 QQQ boven band / fresh up
+   2025-11-21 sell TQQQ 61 @45.16 trailing stop pnl -232
+   2025-11-24 buy TQQQ 62 @48.35 QQQ boven band / fresh up
+   2026-02-04 sell TQQQ 62 @49.01 trailing stop pnl 41
+   2026-02-05 buy TQQQ 62 @48.12 QQQ boven band / fresh up
+   2026-03-19 sell TQQQ 62 @44.35 trailing stop pnl -234
+   2026-03-20 buy BIL 33 @89.72 QQQ onder band / wacht op up
+   2026-04-10 sell BIL 33 @89.86 regime naar risico pnl 5
+   2026-04-10 buy TQQQ 61 @49.16 QQQ boven band / fresh up
+   2026-06-05 sell TQQQ 61 @74.55 trailing stop pnl 1549
+   2026-06-08 buy TQQQ 39 @76.56 QQQ boven band / fresh up
+   2026-06-24 sell TQQQ 39 @72.02 trailing stop pnl -177
+   2026-06-25 buy TQQQ 38 @77.83 QQQ boven band / fresh up
+
+=== m5-nasdaq-tqqq vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 401.7% (CAGR 20.6%) | SPY 220.8% (CAGR 14.5%) | MaxDD 29.7% vs SPY 33.8% | Sharpe 0.86 | trades 157 | sells 78 win 44% (34/78) | costs 3.1%
+reasons {"buy:QQQ boven band / fresh up":67,"sell:trailing stop":65,"buy:QQQ onder band / wacht op up":12,"sell:regime naar risico":12,"sell:regime naar cash":1}
+
+=== m6-btc-breakout haltPersists=true vs BTC === OOS 2021-01-21..2022-10-12 (7 win, HALT 2022-07-25)
+Return -15.7% (CAGR -9.5%) | BTC -37.9% (CAGR -24.2%) | MaxDD 38.7% vs BTC 72.7% | Sharpe -0.13 | trades 36 | sells 18 win 33% (6/18) | costs 9.6%
+reasons {"buy:20d breakout":18,"sell:10 dagen vast":7,"sell:trailing stop":11}
+   2021-01-21..2021-04-20 ret 22.4% trades 8 eq 6118 pos - cash 6118
+   2021-04-21..2021-07-19 ret -18.1% trades 4 eq 5010 pos - cash 5010
+   2021-07-20..2021-10-17 ret 20.1% trades 10 eq 6020 pos - cash 6020
+   2021-10-18..2022-01-15 ret -13.3% trades 4 eq 5218 pos - cash 5218
+   2022-01-16..2022-04-15 ret 2.1% trades 4 eq 5328 pos - cash 5328
+   2022-04-16..2022-07-14 ret -16.5% trades 4 eq 4449 pos - cash 4449
+   2022-07-15..2022-10-12 ret -5.3% trades 2 eq 4214 pos - cash 4214 HALT
+
+=== m6-btc-breakout haltPersists=false vs BTC === OOS 2021-01-21..2026-09-21 (23 win)
+Return -15.7% (CAGR -3.0%) | BTC 180.8% (CAGR 20.0%) | MaxDD 38.7% vs BTC 76.7% | Sharpe -0.07 | trades 36 | sells 0 win 33% (0/0) | costs 9.6%
+reasons {}
+##### feed=sip adj=all floatingBudget=true
+QQQ: 2441 bars 2017-02-15..2026-10-30
+QLD: 2441 bars 2017-02-15..2026-10-30
+TQQQ: 2441 bars 2017-02-15..2026-10-30
+BIL: 2441 bars 2017-02-15..2026-10-30
+SPY: 2441 bars 2017-02-15..2026-10-30
+
+=== m5-nasdaq-trend vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 273.5% (CAGR 16.6%) | QQQ 386.9% (CAGR 20.2%) | MaxDD 43.8% vs QQQ 35.0% | Sharpe 0.66 | trades 95 | sells 47 win 53% (25/47) | costs 3.1%
+reasons {"buy:QQQ boven band / fresh up":36,"sell:trailing stop":32,"buy:QQQ onder band / wacht op up":12,"sell:regime naar risico":12,"sell:regime naar cash":3}
+
+=== m5-nasdaq-trend vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 273.5% (CAGR 16.6%) | SPY 220.8% (CAGR 14.5%) | MaxDD 43.8% vs SPY 33.8% | Sharpe 0.66 | trades 95 | sells 47 win 53% (25/47) | costs 3.1%
+reasons {"buy:QQQ boven band / fresh up":36,"sell:trailing stop":32,"buy:QQQ onder band / wacht op up":12,"sell:regime naar risico":12,"sell:regime naar cash":3}
+
+=== m5-nasdaq-tqqq vs QQQ === OOS 2017-11-30..2026-07-08 (24 win)
+Return 804.1% (CAGR 29.2%) | QQQ 386.9% (CAGR 20.2%) | MaxDD 49.8% vs QQQ 35.0% | Sharpe 0.78 | trades 155 | sells 77 win 44% (34/77) | costs 9.2%
+reasons {"buy:QQQ boven band / fresh up":67,"sell:trailing stop":65,"buy:QQQ onder band / wacht op up":11,"sell:regime naar risico":11,"sell:regime naar cash":1}
+
+=== m5-nasdaq-tqqq vs SPY === OOS 2017-11-30..2026-07-08 (24 win)
+Return 804.1% (CAGR 29.2%) | SPY 220.8% (CAGR 14.5%) | MaxDD 49.8% vs SPY 33.8% | Sharpe 0.78 | trades 155 | sells 77 win 44% (34/77) | costs 9.2%
+reasons {"buy:QQQ boven band / fresh up":67,"sell:trailing stop":65,"buy:QQQ onder band / wacht op up":11,"sell:regime naar risico":11,"sell:regime naar cash":1}
+
+=== m6-btc-breakout haltPersists=true vs BTC === OOS 2021-01-21..2022-07-14 (6 win, HALT 2022-07-11)
+Return -17.9% (CAGR -12.5%) | BTC -33.3% (CAGR -24.0%) | MaxDD 41.4% vs BTC 72.0% | Sharpe -0.16 | trades 34 | sells 17 win 35% (6/17) | costs 9.6%
+reasons {"buy:20d breakout":17,"sell:10 dagen vast":7,"sell:trailing stop":9,"sell:versie dicht: verliesgrens 15% geraakt op 2022-07-11":1}
+
+=== m6-btc-breakout haltPersists=false vs BTC === OOS 2021-01-21..2026-09-21 (23 win)
+Return -17.9% (CAGR -3.4%) | BTC 180.8% (CAGR 20.0%) | MaxDD 41.4% vs BTC 76.7% | Sharpe -0.08 | trades 34 | sells 0 win 35% (0/0) | costs 9.6%
+reasons {}

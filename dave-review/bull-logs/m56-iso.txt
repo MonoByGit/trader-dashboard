@@ -1,0 +1,14 @@
+M5 app as-is (sip,all)                                     2017-11-30..2026-07-08 ret 162.1% CAGR 11.9% DD 33.2% Sh 0.63 tr 97 win 52%
+M5 +floating                                               2017-11-30..2026-07-08 ret 273.5% CAGR 16.6% DD 43.8% Sh 0.66 tr 95 win 53%
+M5 +floating, no trail                                     2017-11-30..2026-07-08 ret 22.6% CAGR 2.4% DD 22.4% Sh 0.26 tr 33 win 63%
+M5 +floating, no trail, no losslimit                       2017-11-30..2026-07-08 ret 22.6% CAGR 2.4% DD 22.4% Sh 0.26 tr 33 win 63%
+M5 fixed budget, no trail                                  2017-11-30..2026-07-08 ret 110.3% CAGR 9.0% DD 22.4% Sh 0.62 tr 33 win 63%
+M5 float,no trail, ONE continuous sim 2017-11-30..2026-10-30 ret 22.0% CAGR 2.3% DD 22.4% tr 33
+M6 app as-is                                               2021-01-21..2022-10-12 ret -15.7% CAGR -9.5% DD 38.7% Sh -0.13 tr 36 win 33% HALT 2022-07-25
+M6 no losslimit                                            2021-01-21..2026-09-21 ret 6.7% CAGR 1.1% DD 53.8% Sh 0.19 tr 148 win 39%
+M6 no losslimit +floating                                  2021-01-21..2026-09-21 ret -4.6% CAGR -0.8% DD 58.5% Sh 0.13 tr 148 win 39%
+M6 no losslimit +floating fee10bps                         2021-01-21..2026-09-21 ret 22.5% CAGR 3.6% DD 55.2% Sh 0.27 tr 148 win 41%
+fixed-budget, sizing patched, 15% trail      2017-11-30..2026-07-08 ret 214.8% CAGR 14.3% DD 39.4% Sh 0.67 tr 97 win 52%
+fixed-budget, sizing patched, no trail       2017-11-30..2026-07-08 ret 306.0% CAGR 17.7% DD 42.2% Sh 0.72 tr 33 win 63%
+floating, sizing patched, 15% trail          2017-11-30..2026-07-08 ret 434.4% CAGR 21.5% DD 41.9% Sh 0.75 tr 97 win 52%
+floating, sizing patched, no trail           2017-11-30..2026-07-08 ret 706.8% CAGR 27.5% DD 44.8% Sh 0.87 tr 33 win 63%
