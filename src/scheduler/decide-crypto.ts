@@ -18,6 +18,8 @@ export const DEFAULT_CRYPTO_SCHEDULER_CONFIG: CryptoSchedulerConfig = {
   retryWindowMinutes: 45,
 };
 
+const MS_PER_HOUR = 3_600_000;
+
 export function utcDateYmd(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 10);
 }
@@ -42,7 +44,7 @@ function shouldRunCrypto(
   }
   if (last.status === 'ok' && last.finished_at) {
     const elapsed = nowMs - new Date(last.finished_at).getTime();
-    return elapsed >= cfg.tickIntervalHours * 60_000;
+    return elapsed >= cfg.tickIntervalHours * MS_PER_HOUR;
   }
   if (last.status === 'running') return false;
   return true;

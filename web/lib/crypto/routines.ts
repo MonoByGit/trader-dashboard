@@ -1,5 +1,5 @@
 import cryptoStrategy from '@/crypto-strategy.json';
-import { AiJsonParseError, claudeJson, MODELS } from '@/lib/ai';
+import { AiJsonParseError, claudeJsonArray, MODELS } from '@/lib/ai';
 import { blocksNewEntries, evaluateCryptoLimits } from '@guards/index';
 import { filterByAssetClass } from '@/lib/asset-class';
 import { alpaca } from '@/lib/alpaca';
@@ -100,10 +100,10 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   const snapshots = buildSnapshots(symbols, bars);
   let candidates: { symbol: string; action: 'buy' | 'skip'; reason: string }[];
   try {
-    candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; reason: string }[]>(
+    candidates = await claudeJsonArray<{ symbol: string; action: 'buy' | 'skip'; reason: string }>(
       MODELS.sonnet,
       `Je bent Momentum Crypto (paper sleeve). Strategie: ${cryptoStrategy.name}. Equity totaal: $${equity.toFixed(0)}. Crypto open: ${openSymbols.join(',') || 'geen'}. Max ${RULES.max_positions} crypto posities. Alleen symbolen uit de watchlist. Geen BUY voor al open.`,
-      `Marktdata:\n${JSON.stringify(snapshots)}\nGeef JSON array: [{"symbol":"BTC/USD","action":"buy"|"skip","reason":"kort"}]`,
+      `Marktdata:\n${JSON.stringify(snapshots)}\nGeef JSON-object: {"candidates":[{"symbol":"BTC/USD","action":"buy"|"skip","reason":"kort"}]}`,
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);

@@ -5,6 +5,7 @@ import {
   jsonMaxTokensFromEnv,
   parseJsonPayload,
   shouldRetryJson,
+  unwrapJsonArray,
 } from './json-response.js';
 
 describe('extractJsonPayload', () => {
@@ -20,6 +21,65 @@ describe('extractJsonPayload', () => {
 describe('parseJsonPayload', () => {
   it('parses array', () => {
     expect(parseJsonPayload('[1,2]')).toEqual([1, 2]);
+  });
+});
+
+describe('unwrapJsonArray', () => {
+  it('unwraps decisions wrapper (premarket shape)', () => {
+    const inner = [{ symbol: 'QQQ', decision: 'HOLD' }];
+    expect(unwrapJsonArray({ decisions: inner })).toEqual(inner);
+  });
+
+  it('unwraps candidates wrapper (crypto-scan shape)', () => {
+    const inner = [{ symbol: 'BTC/USD', action: 'skip' }];
+    expect(unwrapJsonArray({ candidates: inner })).toEqual(inner);
+  });
+
+  it('accepts bare array', () => {
+    expect(unwrapJsonArray([{ a: 1 }])).toEqual([{ a: 1 }]);
+  });
+
+  it('returns null for invalid object', () => {
+    expect(unwrapJsonArray({ meta: 'only' })).toBeNull();
+  });
+});
+
+/** Same normalize+validate pipeline as agentJsonArray (premarket / crypto-scan). */
+async function parseRoutineListJson(text: string): Promise<unknown[]> {
+  const { value } = await completeJsonWithRetries<unknown[]>(
+    async () => ({ text, finishReason: 'stop' }),
+    {
+      maxTokens: 1024,
+      maxRetries: 0,
+      normalize: (parsed) => unwrapJsonArray(parsed) ?? parsed,
+      validate: (parsed) => Array.isArray(parsed),
+    },
+  );
+  return value;
+}
+
+describe('premarket / crypto-scan list JSON', () => {
+  it('parses object-wrapped decisions', async () => {
+    const rows = await parseRoutineListJson(
+      '{"decisions":[{"symbol":"QQQ","decision":"NO_GO"}]}',
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('parses object-wrapped candidates', async () => {
+    const rows = await parseRoutineListJson(
+      '{"candidates":[{"symbol":"BTC/USD","action":"skip"}]}',
+    );
+    expect(rows[0]).toMatchObject({ symbol: 'BTC/USD' });
+  });
+
+  it('parses bare array (legacy)', async () => {
+    const rows = await parseRoutineListJson('[{"symbol":"SPY","decision":"HOLD"}]');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('rejects invalid non-array payload', async () => {
+    await expect(parseRoutineListJson('{"note":"no list"}')).rejects.toBeInstanceOf(AiJsonParseError);
   });
 });
 

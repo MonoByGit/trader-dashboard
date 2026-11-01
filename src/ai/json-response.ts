@@ -19,12 +19,39 @@ export type JsonRetryOptions = {
   maxTokens: number;
   maxRetries?: number;
   validate?: (parsed: unknown) => boolean;
+  /** Runs after JSON.parse, before validate (e.g. unwrap {"decisions":[...]}). */
+  normalize?: (parsed: unknown) => unknown;
   onAttempt?: (info: {
     attempt: number;
     finishReason: string | null;
     error?: string;
   }) => void;
 };
+
+export const JSON_ARRAY_WRAPPER_KEYS = ['decisions', 'candidates'] as const;
+
+/** DeepSeek json_object returns an object; unwrap list fields for for...of routines. */
+export function unwrapJsonArray(
+  parsed: unknown,
+  preferKeys: readonly string[] = JSON_ARRAY_WRAPPER_KEYS,
+): unknown[] | null {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    for (const key of preferKeys) {
+      const v = obj[key];
+      if (Array.isArray(v)) return v;
+    }
+    for (const v of Object.values(obj)) {
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return null;
+}
+
+export function isJsonArrayPayload(parsed: unknown): parsed is unknown[] {
+  return unwrapJsonArray(parsed) !== null;
+}
 
 const DEFAULT_JSON_MAX_TOKENS = 4096;
 const MAX_DEEPSEEK_TOKENS = 393216;
@@ -103,7 +130,9 @@ export async function completeJsonWithRetries<T>(
       );
     }
 
-    const validationFailed = !validate(parsed);
+    const normalized = options.normalize ? options.normalize(parsed) : parsed;
+
+    const validationFailed = !validate(normalized);
     if (validationFailed) {
       lastError = 'JSON schema/root validation failed';
       options.onAttempt?.({ attempt: attempt + 1, finishReason, error: lastError });
@@ -116,7 +145,7 @@ export async function completeJsonWithRetries<T>(
     }
 
     options.onAttempt?.({ attempt: attempt + 1, finishReason });
-    return { value: parsed as T, attempts: attempt + 1, finishReason };
+    return { value: normalized as T, attempts: attempt + 1, finishReason };
   }
 
   throw new AiJsonParseError(
