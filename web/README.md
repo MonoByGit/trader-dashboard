@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## App login
+
+Set `APP_PASSWORD` or, preferably, `APP_PASSWORD_SHA256` (lowercase hex SHA-256 of the UTF-8 password). When the hash is set, plaintext `APP_PASSWORD` is not used. Session cookies are signed with `SESSION_SECRET` if set, otherwise the hash or password. See `web/.env.example`. Cron routes use `CRON_SECRET` only (unchanged).
+
 ## Getting Started
 
 First, run the development server:

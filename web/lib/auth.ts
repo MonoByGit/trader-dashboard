@@ -1,15 +1,22 @@
-/** Sessie-cookie voor APP_PASSWORD-login (Edge + Node). */
+/** Sessie-cookie voor app-login (Edge + Node). */
 
 export const SESSION_COOKIE = 'momentum_session';
 const SESSION_DAYS = 30;
 
-function secret(): string | null {
+/** HMAC signing key: SESSION_SECRET > APP_PASSWORD_SHA256 > APP_PASSWORD */
+function sessionSigningSecret(): string | null {
+  const session = process.env.SESSION_SECRET?.trim();
+  if (session) return session;
+  const sha = process.env.APP_PASSWORD_SHA256?.trim().toLowerCase();
+  if (sha) return sha;
   const p = process.env.APP_PASSWORD?.trim();
   return p || null;
 }
 
 export function authEnabled(): boolean {
-  return !!secret();
+  const sha = process.env.APP_PASSWORD_SHA256?.trim();
+  const p = process.env.APP_PASSWORD?.trim();
+  return !!(sha || p);
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -25,6 +32,35 @@ function fromBase64Url(s: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
+async function sha256HexUtf8(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const hash = await crypto.subtle.digest('SHA-256', enc.encode(password));
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** APP_PASSWORD_SHA256 wins over APP_PASSWORD when set. */
+export async function verifyPassword(password: string): Promise<boolean> {
+  const shaExpected = process.env.APP_PASSWORD_SHA256?.trim().toLowerCase();
+  if (shaExpected) {
+    const got = await sha256HexUtf8(password);
+    const enc = new TextEncoder();
+    return timingSafeEqual(enc.encode(got), enc.encode(shaExpected));
+  }
+  const expected = process.env.APP_PASSWORD?.trim();
+  if (!expected) return false;
+  const enc = new TextEncoder();
+  return timingSafeEqual(enc.encode(password), enc.encode(expected));
 }
 
 async function hmacSign(message: string, key: string): Promise<string> {
@@ -57,7 +93,7 @@ async function hmacVerify(message: string, signatureB64: string, key: string): P
 }
 
 export async function createSessionCookieValue(): Promise<string | null> {
-  const key = secret();
+  const key = sessionSigningSecret();
   if (!key) return null;
   const exp = Date.now() + SESSION_DAYS * 86400000;
   const payload = JSON.stringify({ exp });
@@ -67,7 +103,7 @@ export async function createSessionCookieValue(): Promise<string | null> {
 }
 
 export async function verifySessionCookieValue(token: string | undefined | null): Promise<boolean> {
-  const key = secret();
+  const key = sessionSigningSecret();
   if (!key || !token) return false;
   const [payloadB64, sig] = token.split('.');
   if (!payloadB64 || !sig) return false;
