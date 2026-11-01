@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbQuery, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
-import { MOCK } from '@/lib/mock';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,5 +29,5 @@ export async function GET() {
       })),
     });
   }
-  return NextResponse.json({ proposals: MOCK.lessonProposals, demo: true });
+  return NextResponse.json({ proposals: [] });
 }

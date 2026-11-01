@@ -4,6 +4,13 @@
    Alles scoped onder .m-app zodat de desktop-shell volledig ongemoeid blijft.
    ========================================================================== */
 
+html:has(.m-app),
+html:has(.m-app) body {
+  background: var(--bg-app);
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
 .m-app {
   position: fixed;
   top: 0;
@@ -140,7 +147,7 @@
   min-height: 0; /* cruciaal: laat de flex-child krimpen i.p.v. de container uit te groeien */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px 16px 22px;
+  padding: 14px 16px calc(62px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -343,13 +350,18 @@
 
 /* ---- Bottom tab bar ------------------------------------------------------ */
 .m-tabbar {
-  flex: 0 0 auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-app);
+  border-top: 1px solid var(--border-subtle);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 30;
+}
+.m-tabbar-inner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: var(--bg-chrome);
-  border-top: 1px solid var(--border-subtle);
-  padding-bottom: env(safe-area-inset-bottom); /* strak tegen de bodem, vrij van de home-indicator */
-  z-index: 30;
 }
 .m-tab {
   display: flex;

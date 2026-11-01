@@ -1,54 +1,111 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+/** Sessie-cookie voor APP_PASSWORD-login (Edge + Node). */
+
 import { cookies } from 'next/headers';
 
-const COOKIE_NAME = 'momentum_session';
+export const SESSION_COOKIE = 'momentum_session';
+const SESSION_DAYS = 30;
 
-function sessionSecret(): string {
-  return process.env.APP_PASSWORD || process.env.CRON_SECRET || 'dev-insecure';
+function secret(): string | null {
+  const p = process.env.APP_PASSWORD?.trim();
+  return p || null;
 }
 
+export function authEnabled(): boolean {
+  return !!secret();
+}
+
+/** Alias gebruikt door guard/session routes. */
 export function authRequired(): boolean {
-  return !!process.env.APP_PASSWORD;
+  return authEnabled();
 }
 
-export function createSessionToken(): string {
-  const payload = `ok:${sessionSecret()}`;
-  const sig = createHmac('sha256', sessionSecret()).update(payload).digest('hex');
-  return Buffer.from(`${payload}:${sig}`).toString('base64url');
+function toBase64Url(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function verifySessionToken(token: string | undefined): boolean {
-  if (!authRequired()) return true;
-  if (!token) return false;
+function fromBase64Url(s: string): Uint8Array {
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function hmacSign(message: string, key: string): Promise<string> {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+  return toBase64Url(new Uint8Array(sig));
+}
+
+async function hmacVerify(message: string, signatureB64: string, key: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
   try {
-    const decoded = Buffer.from(token, 'base64url').toString('utf8');
-    const [payload, sig] = decoded.split(':');
-    if (!payload || !sig) return false;
-    const expected = createHmac('sha256', sessionSecret()).update(payload).digest('hex');
-    const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b) && payload.startsWith('ok:');
+    return await crypto.subtle.verify('HMAC', cryptoKey, new Uint8Array(fromBase64Url(signatureB64)), enc.encode(message));
   } catch {
     return false;
   }
 }
 
-export function verifyPassword(password: string): boolean {
-  const expected = process.env.APP_PASSWORD;
-  if (!expected) return true;
-  if (password.length !== expected.length) return false;
+export async function createSessionCookieValue(): Promise<string | null> {
+  const key = secret();
+  if (!key) return null;
+  const exp = Date.now() + SESSION_DAYS * 86400000;
+  const payload = JSON.stringify({ exp });
+  const payloadB64 = toBase64Url(new TextEncoder().encode(payload));
+  const sig = await hmacSign(payloadB64, key);
+  return `${payloadB64}.${sig}`;
+}
+
+export async function verifySessionCookieValue(token: string | undefined | null): Promise<boolean> {
+  const key = secret();
+  if (!key || !token) return false;
+  const [payloadB64, sig] = token.split('.');
+  if (!payloadB64 || !sig) return false;
+  if (!(await hmacVerify(payloadB64, sig, key))) return false;
   try {
-    return timingSafeEqual(Buffer.from(password), Buffer.from(expected));
+    const json = new TextDecoder().decode(fromBase64Url(payloadB64));
+    const { exp } = JSON.parse(json) as { exp?: number };
+    return typeof exp === 'number' && exp > Date.now();
   } catch {
     return false;
   }
 }
 
 export async function isAuthenticated(): Promise<boolean> {
-  if (!authRequired()) return true;
+  if (!authEnabled()) return true;
   const jar = await cookies();
-  return verifySessionToken(jar.get(COOKIE_NAME)?.value);
+  return verifySessionCookieValue(jar.get(SESSION_COOKIE)?.value);
 }
 
-export { COOKIE_NAME };
+export function sessionCookieOptions(): {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'lax';
+  path: string;
+  maxAge: number;
+} {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_DAYS * 86400,
+  };
+}

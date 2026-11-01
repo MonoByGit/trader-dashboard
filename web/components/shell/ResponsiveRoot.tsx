@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { DashboardShell } from './DashboardShell';
 import { MobileApp } from '@/components/mobile/MobileApp';
-import { AuthGate } from './AuthGate';
 
 // Eén route (/), twee weergaven. We kiezen op basis van de schermbreedte via
 // matchMedia — GEEN UA-sniffing, GEEN redirect, GEEN cookie. Tot JS de meting
@@ -23,9 +22,5 @@ export function ResponsiveRoot() {
   if (view === null) {
     return <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)' }} />;
   }
-  return (
-    <AuthGate>
-      {view === 'mobile' ? <MobileApp /> : <DashboardShell />}
-    </AuthGate>
-  );
+  return view === 'mobile' ? <MobileApp /> : <DashboardShell />;
 }

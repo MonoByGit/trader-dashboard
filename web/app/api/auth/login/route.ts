@@ -1,21 +1,20 @@
 import { NextResponse } from 'next/server';
-import { authRequired, createSessionToken, verifyPassword, COOKIE_NAME } from '@/lib/auth';
+import { authEnabled, createSessionCookieValue, sessionCookieOptions, SESSION_COOKIE } from '@/lib/auth';
 
 export async function POST(req: Request) {
-  if (!authRequired()) {
+  if (!authEnabled()) {
     return NextResponse.json({ ok: true, authDisabled: true });
   }
-  const { password } = await req.json();
-  if (!verifyPassword(String(password ?? ''))) {
-    return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
+  const { password } = await req.json().catch(() => ({ password: '' }));
+  const expected = process.env.APP_PASSWORD?.trim();
+  if (!expected || password !== expected) {
+    return NextResponse.json({ error: 'Onjuist wachtwoord' }, { status: 401 });
+  }
+  const value = await createSessionCookieValue();
+  if (!value) {
+    return NextResponse.json({ error: 'Sessie kon niet worden aangemaakt' }, { status: 500 });
   }
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, createSessionToken(), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 14,
-  });
+  res.cookies.set(SESSION_COOKIE, value, sessionCookieOptions());
   return res;
 }

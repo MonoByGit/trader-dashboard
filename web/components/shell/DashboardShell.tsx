@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Icon, BrandLogo } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Toggle } from '@/components/ui/Toggle';
@@ -8,7 +8,7 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Modal } from '@/components/ui/Modal';
 import { InfoTip } from '@/components/ui/Tooltip';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
+import { buildLivePortfolio, DEFAULT_GUARDS } from '@/lib/live-portfolio';
 import { useAccount, usePositions } from '@/hooks/useAlpaca';
 import { useUnread } from '@/hooks/useUnread';
 import { OverviewPage } from '@/components/pages/OverviewPage';
@@ -35,14 +35,6 @@ const PAGES = [
   { id: 'history', label: 'History', icon: 'history' },
 ] as const;
 
-const LAYERS = [
-  { id: 'sym-QQQ', label: 'QQQ · Open Position', dot: 'var(--pos)', section: 'Positions' },
-  { id: 'sym-XLK', label: 'XLK · Open Position', dot: 'var(--pos)', section: 'Positions' },
-  { id: 'sym-SPY', label: 'SPY · Watchlist', dot: 'var(--text-tertiary)', section: 'Watchlist' },
-  { id: 'sym-IWM', label: 'IWM · Watchlist', dot: 'var(--text-tertiary)', section: 'Watchlist' },
-  { id: 'sym-XLE', label: 'XLE · NO_GO', dot: 'var(--neg)', section: 'Watchlist' },
-];
-
 type PageId = typeof PAGES[number]['id'];
 type Decision = { id: string; symbol: string; decision: string; ts: string; agentNote?: string; rationale: string; criteria?: Record<string, string>; routine: string; orderId?: string; };
 type Position = { symbol: string; name: string; sector: string; qty: number; avgEntryPrice: number; currentPrice: number; highWatermark: number; entryAt: string; stopLoss: number; trailingStop: number; takeProfit: number; sma20: number; marketValue: number; costBasis: number; unrealizedPnl: number; unrealizedPnlPct: number; };
@@ -50,7 +42,7 @@ type Routine = { id: string; name: string; time: string; lastRun: string; summar
 type Guards = { tradingEnabled: boolean; circuitBreakerTripped: boolean; circuitBreakerReason?: string; emergencyStop?: boolean; dailyDrawdownPct: number; peakDrawdownPct: number; dailyDrawdownLimit: number; peakDrawdownLimit: number; consecLosses: number; consecLossesLimit: number; tradesLast10Min: number; tradesLast10MinLimit: number; openPositions: number; maxOpenPositions: number; dailyTrades: number; maxDailyTrades: number; cashReservePct: number; cashReserveMin: number; maxOrderSize: number; minOrderSize: number; };
 type Portfolio = { totalEquity: number; cashBalance: number; dayStartEquity: number; dailyPnl: number; dailyPnlPct: number; tradingEnabled: boolean; circuitBreakerTripped: boolean; positions: Position[]; };
 
-const TWEAK_DEFAULTS = { theme: 'dark', mode: 'active', density: 'comfortable', agentPersona: true, accent: '#0d99ff' };
+const TWEAK_DEFAULTS = { theme: 'dark', density: 'comfortable', agentPersona: true, accent: '#0d99ff' };
 
 export function DashboardShell() {
   const [tweaks, setTweaks] = useState<typeof TWEAK_DEFAULTS>(() => {
@@ -78,9 +70,7 @@ export function DashboardShell() {
   const live = useAccount(30000);
   const livePositions = usePositions(15000);
   const unread = useUnread(90000);
-  const [guards, setGuards] = useState<Guards>(MOCK.guards as Guards);
-  const [portfolio, setPortfolio] = useState<Portfolio>(() => tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio);
-  const [liveTick, setLiveTick] = useState(false);
+  const [guards, setGuards] = useState<Guards>(DEFAULT_GUARDS);
   const [pendingKickoffThread, setPendingKickoffThread] = useState<{ id: string; kind: string; title: string; tags: string[]; status: string; unread: number; createdAt: string; lastAt: string; context: null; messages: Array<{ from: string; at: string; body: string }> } | null>(null);
 
   useEffect(() => {
@@ -107,16 +97,9 @@ export function DashboardShell() {
       document.documentElement.style.setProperty('--accent', tweaks.accent);
     }
   }, [tweaks]);
-  useEffect(() => { setPortfolio(tweaks.mode === 'active' ? MOCK.portfolioActive as Portfolio : MOCK.portfolioEmpty as Portfolio); }, [tweaks.mode]);
-
   const refreshGuards = () => {
     fetch('/api/guards').then(r => r.json()).then(d => {
       setGuards(g => ({ ...g, ...d }));
-      setPortfolio(p => ({
-        ...p,
-        tradingEnabled: d.tradingEnabled,
-        circuitBreakerTripped: d.circuitBreakerTripped,
-      }));
     }).catch(() => null);
   };
 
@@ -127,32 +110,18 @@ export function DashboardShell() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const portfolio: Portfolio = useMemo(
+    () => buildLivePortfolio(live.data, livePositions.data, guards.tradingEnabled),
+    [live.data, livePositions.data, guards.tradingEnabled],
+  );
+
   useEffect(() => {
-    if (tweaks.mode !== 'active') return;
-    const interval = setInterval(() => {
-      setPortfolio(p => {
-        const updated = {
-          ...p,
-          positions: p.positions.map(pos => {
-            const drift = (Math.random() - 0.48) * 0.12;
-            const newPrice = +(pos.currentPrice + drift).toFixed(2);
-            const newHigh = Math.max(pos.highWatermark, newPrice);
-            const unrealizedPnl = +((newPrice - pos.avgEntryPrice) * pos.qty).toFixed(2);
-            const unrealizedPnlPct = +((newPrice - pos.avgEntryPrice) / pos.avgEntryPrice * 100).toFixed(2);
-            return { ...pos, currentPrice: newPrice, highWatermark: newHigh, trailingStop: +(newHigh * 0.97).toFixed(2), marketValue: +(newPrice * pos.qty).toFixed(2), unrealizedPnl, unrealizedPnlPct };
-          })
-        };
-        const newEquity = updated.cashBalance + updated.positions.reduce((s, x) => s + x.marketValue, 0);
-        updated.totalEquity = +newEquity.toFixed(2);
-        updated.dailyPnl = +(updated.totalEquity - updated.dayStartEquity).toFixed(2);
-        updated.dailyPnlPct = +((updated.dailyPnl / updated.dayStartEquity) * 100).toFixed(3);
-        return updated;
-      });
-      setLiveTick(true);
-      setTimeout(() => setLiveTick(false), 400);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, [tweaks.mode]);
+    setGuards(g => ({
+      ...g,
+      openPositions: livePositions.data.length,
+      cashReservePct: portfolio.totalEquity > 0 ? (portfolio.cashBalance / portfolio.totalEquity) * 100 : g.cashReservePct,
+    }));
+  }, [livePositions.data.length, portfolio.cashBalance, portfolio.totalEquity]);
 
   const updateTweak = (k: keyof typeof TWEAK_DEFAULTS, v: string | boolean) => setTweaks(t => ({ ...t, [k]: v }));
 
@@ -178,11 +147,8 @@ export function DashboardShell() {
       setConfirmClose(null);
       return;
     }
-    setPortfolio(prev => ({
-      ...prev,
-      positions: prev.positions.filter(x => x.symbol !== p.symbol),
-      cashBalance: +(prev.cashBalance + p.marketValue).toFixed(2)
-    }));
+    livePositions.refresh?.();
+    live.refresh?.();
     setConfirmClose(null);
     showToastMsg(`${p.symbol} gesloten op ${fmt.usd(p.currentPrice)} · ${fmt.signedUsd(p.unrealizedPnl)}.`);
   };
@@ -273,18 +239,25 @@ export function DashboardShell() {
     }
   };
 
-  const liveEquity = live.data?.equity ?? portfolio.totalEquity;
-  const liveCash = live.data?.cash ?? portfolio.cashBalance;
-  const liveDayPnl = live.data?.dayPnl ?? portfolio.dailyPnl;
-  const liveDayPnlPct = live.data?.dayPnlPct ?? portfolio.dailyPnlPct;
-  const livePositionCount = livePositions.data.length > 0 ? livePositions.data.length : portfolio.positions.length;
+  const liveEquity = portfolio.totalEquity;
+  const liveCash = portfolio.cashBalance;
+  const liveDayPnl = portfolio.dailyPnl;
+  const liveDayPnlPct = portfolio.dailyPnlPct;
+  const livePositionCount = portfolio.positions.length;
   const dayPos = liveDayPnl >= 0;
+  const accountLoading = live.loading && !live.data;
+
+  const symbolLayers = portfolio.positions.map(p => ({
+    id: `sym-${p.symbol}`,
+    label: `${p.symbol} · Open Position`,
+    dot: 'var(--pos)',
+  }));
 
   const currentPage = (() => {
     switch (page) {
-      case 'overview': return <OverviewPage portfolio={portfolio} mode={tweaks.mode} tweaks={tweaks} marketOpen={live.data?.marketOpen ?? null} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect} liveTick={liveTick}/>;
-      case 'positions': return <PositionsPage portfolio={portfolio} mode={tweaks.mode} onClose={handleClosePosition}/>;
-      case 'decisions': return <DecisionLogPage mode={tweaks.mode} onOpenDecision={setSelectedDecision}/>;
+      case 'overview': return <OverviewPage portfolio={portfolio} guards={guards} marketOpen={live.data?.marketOpen ?? null} accountLoading={accountLoading} onOpenDecision={setSelectedDecision} onTriggerRoutine={r => setConfirmRoutine(r as Routine)} onClosePosition={handleClosePosition} onOpenKillSwitch={() => setConfirmKill(true)} onKickoffSelect={handleKickoffSelect}/>;
+      case 'positions': return <PositionsPage portfolio={portfolio} onClose={handleClosePosition}/>;
+      case 'decisions': return <DecisionLogPage onOpenDecision={setSelectedDecision}/>;
       case 'conversations': return <ConversationsPage pendingThread={pendingKickoffThread} onKickoffHandled={() => setPendingKickoffThread(null)}/>;
       case 'routines': return <RoutinesPage onTrigger={r => setConfirmRoutine(r as Routine)}/>;
       case 'risk': return (
@@ -331,12 +304,6 @@ export function DashboardShell() {
           </div>
         </div>
         <div className="toolbar-right">
-          <button
-            className={`btn outline${tweaks.mode === 'active' ? ' active' : ''}`}
-            style={{fontSize:10,padding:'3px 8px',height:24,opacity: tweaks.mode === 'active' ? 1 : 0.5}}
-            title="Toggle demo data on/off"
-            onClick={() => updateTweak('mode', tweaks.mode === 'active' ? 'empty' : 'active')}
-          >DEMO</button>
           <button className={`icon-btn panel-toggle${rightOpen ? ' active' : ''}`} title="Toggle right panel (⌘])" aria-label="Toggle right panel" onClick={() => setRightOpen(v => !v)}>
             <Icon name="sidebarRight" size={14}/>
           </button>
@@ -369,8 +336,10 @@ export function DashboardShell() {
           </div>
 
           <div className="panel-section">
-            <div className="panel-header">Symbols <span className="count">{LAYERS.length}</span></div>
-            {LAYERS.map(l => (
+            <div className="panel-header">Symbols <span className="count">{symbolLayers.length}</span></div>
+            {symbolLayers.length === 0 ? (
+              <div style={{padding:'8px 24px',fontSize:11,color:'var(--text-tertiary)'}}>Geen open symbolen</div>
+            ) : symbolLayers.map(l => (
               <div key={l.id} className="layer-row">
                 <div className="caret"><Icon name="chevR" size={9}/></div>
                 <div className="dot" style={{background:l.dot}}/>
@@ -445,11 +414,11 @@ export function DashboardShell() {
           <div className="prop-group">
             <div className="prop-group-title">Agent <Pill kind="accent" dot pulse>THINKING</Pill></div>
             <div style={{fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>
-              {tweaks.mode === 'empty'
-                ? 'Premarket is klaar. Ik wacht op 09:35 om de 10 symbolen af te gaan.'
+              {accountLoading
+                ? 'Rekeninggegevens laden…'
                 : portfolio.positions.length === 0
-                  ? 'Alle posities gesloten. Geen nieuwe entries vandaag, EOD draait zo.'
-                  : 'Ik monitor QQQ en XLK. Trailing stops ademen met de hoogtepunten. Volgende volledige check: midday.'}
+                  ? 'Paper-rekening — geen open posities. De bot handelt na de cron-routines.'
+                  : `Live: ${portfolio.positions.length} open positie(s). Stops en targets staan bij Alpaca.`}
             </div>
             <div style={{marginTop:10,display:'flex',gap:6}}>
               <button className="btn outline" style={{flex:1}}><Icon name="terminal" size={11}/> Open thought log</button>
@@ -477,12 +446,12 @@ export function DashboardShell() {
             <span className="text-secondary">Market {live.data ? (live.data.marketOpen ? 'OPEN' : 'CLOSED') : 'OPEN'}</span>
             {live.data?.nextClose && <span className="text-tertiary">· closes {new Date(live.data.nextClose).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'})} ET</span>}
           </span>
-          <span>VIX 18.4</span>
-          <span>SPY {fmt.usd(MOCK.watchlist[0].price)}</span>
+          <span>VIX —</span>
+          <span>SPY —</span>
         </div>
         <div className="right">
-          <span>BP <span className="mono text-secondary">{fmt.usd(live.data?.buyingPower ?? portfolio.totalEquity * 1.95, 0)}</span></span>
-          <span title="Pattern Day Trader counter">Daytrades <span className="mono text-secondary">{live.data?.daytrades ?? 1}/3</span></span>
+          <span>BP <span className="mono text-secondary">{fmt.usd(live.data?.buyingPower ?? 0, 0)}</span></span>
+          <span title="Pattern Day Trader counter">Daytrades <span className="mono text-secondary">{live.data?.daytrades ?? 0}/3</span></span>
           <span>{livePositionCount} pos · {fmt.usd(liveEquity,0)} equity</span>
           <span>guards: <span className="text-pos">OK</span></span>
           <span>v0.1.0-paper</span>
@@ -499,9 +468,6 @@ export function DashboardShell() {
           <div className="tweaks-body">
             <div className="tweak-row"><span className="tk-label">Theme</span>
               <Segmented value={tweaks.theme} onChange={v => updateTweak('theme', v)} options={[{label:'Dark',value:'dark'},{label:'Light',value:'light'}]}/>
-            </div>
-            <div className="tweak-row"><span className="tk-label">Demo data</span>
-              <Segmented value={tweaks.mode} onChange={v => updateTweak('mode', v)} options={[{label:'On',value:'active'},{label:'Off',value:'empty'}]}/>
             </div>
             <div className="tweak-row"><span className="tk-label">Density</span>
               <Segmented value={tweaks.density} onChange={v => updateTweak('density', v)} options={[{label:'Comfy',value:'comfortable'},{label:'Compact',value:'compact'}]}/>

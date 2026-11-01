@@ -4,7 +4,6 @@ import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Segmented } from '@/components/ui/Segmented';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
 
 interface Decision {
   id: string; symbol: string; decision: string; ts: string;
@@ -13,11 +12,10 @@ interface Decision {
 }
 
 interface DecisionLogPageProps {
-  mode: string;
   onOpenDecision: (d: Decision) => void;
 }
 
-export function DecisionLogPage({ mode, onOpenDecision }: DecisionLogPageProps) {
+export function DecisionLogPage({ onOpenDecision }: DecisionLogPageProps) {
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   const [liveDecisions, setLiveDecisions] = useState<Decision[] | null>(null);
@@ -27,27 +25,22 @@ export function DecisionLogPage({ mode, onOpenDecision }: DecisionLogPageProps) 
       .then(r => r.json())
       .then((data: unknown) => {
         const arr = Array.isArray(data) ? data : [];
-        if (arr.length > 0) {
-          setLiveDecisions(arr.map((raw: unknown) => { const d = raw as Record<string, unknown>; return ({
-            id: String(d.id ?? d.symbol ?? ''),
-            symbol: String(d.symbol ?? ''),
-            decision: String(d.decision ?? ''),
-            ts: String(d.ts ?? d.created_at ?? new Date().toISOString()),
-            agentNote: String(d.agent_note ?? d.agentNote ?? ''),
-            rationale: String(d.rationale ?? ''),
-            criteria: (d.criteria as Record<string, string>) ?? undefined,
-            routine: String(d.routine ?? ''),
-            orderId: d.order_id ? String(d.order_id) : undefined,
-          }); }));
-        }
+        setLiveDecisions(arr.map((raw: unknown) => { const d = raw as Record<string, unknown>; return ({
+          id: String(d.id ?? d.symbol ?? ''),
+          symbol: String(d.symbol ?? ''),
+          decision: String(d.decision ?? ''),
+          ts: String(d.ts ?? d.created_at ?? new Date().toISOString()),
+          agentNote: String(d.agent_note ?? d.agentNote ?? ''),
+          rationale: String(d.rationale ?? ''),
+          criteria: (d.criteria as Record<string, string>) ?? undefined,
+          routine: String(d.routine ?? ''),
+          orderId: d.order_id ? String(d.order_id) : undefined,
+        }); }));
       })
-      .catch(() => null);
+      .catch(() => setLiveDecisions([]));
   }, []);
 
-  const mockAll = (mode === 'empty'
-    ? (MOCK.decisions as unknown as Decision[]).filter(d => d.routine === 'premarket')
-    : MOCK.decisions as unknown as Decision[]);
-  const all = liveDecisions ?? mockAll;
+  const all = liveDecisions ?? [];
   const filtered = all.filter(d =>
     (filter === 'all' || d.decision === filter) &&
     (q === '' || d.symbol.toLowerCase().includes(q.toLowerCase()) || d.rationale.toLowerCase().includes(q.toLowerCase()))
@@ -108,7 +101,7 @@ export function DecisionLogPage({ mode, onOpenDecision }: DecisionLogPageProps) 
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} style={{padding:32,textAlign:'center',color:'var(--text-tertiary)'}}>No entries match the filter.</td></tr>
+                <tr><td colSpan={7} style={{padding:32,textAlign:'center',color:'var(--text-tertiary)'}}>{all.length === 0 ? 'Nog geen data. Beslissingen verschijnen na de eerste cron-routines.' : 'No entries match the filter.'}</td></tr>
               )}
             </tbody>
           </table>
