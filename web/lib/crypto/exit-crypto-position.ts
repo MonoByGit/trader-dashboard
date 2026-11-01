@@ -19,7 +19,7 @@ export type ExitCryptoPositionMode = 'market_sell' | 'close_position';
 export type ExitCryptoPositionResult = {
   exited: boolean;
   orderId?: string;
-  skippedReason?: 'locked' | 'lock_lost' | 'no_qty' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
+  skippedReason?: 'locked' | 'lock_lost' | 'no_qty' | 'qty_reserved' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
 };
 
 export async function clearCryptoExitSettings(symbol: string): Promise<void> {
@@ -136,10 +136,20 @@ export async function exitCryptoPosition(
     }
     const foreign = await foreignQtyForSymbol(symbol);
     const m1Qty = m1CloseQty(positionQty, foreign);
-    const sellQty = Math.min(positionQtyAvailable(pos!), m1Qty);
-    if (!(sellQty > 0)) {
+    if (!(m1Qty > 0)) {
       await clearCryptoExitSettings(symbol);
       return { exited: false, skippedReason: 'no_qty' };
+    }
+    const sellQty = Math.min(positionQtyAvailable(pos!), m1Qty);
+    if (!(sellQty > 0)) {
+      // M1 bezit nog stukken, maar een order van een andere sleeve houdt ze vast: settings NIET wissen
+      await logGuardEvent('crypto_exit_qty_reserved', `M1 owns ${m1Qty} ${symbol} but none available`, {
+        symbol,
+        reason,
+        positionQty,
+        m1Qty,
+      });
+      return { exited: false, skippedReason: 'qty_reserved' };
     }
 
     if (mode === 'close_position' && sellQty >= positionQty - 1e-9) {

@@ -5,6 +5,7 @@ const saved: { book?: unknown } = {};
 
 jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => false,
+  dbQuery: async () => [],
 }));
 
 const { loadOrInitRealBook } = await import('./paper-run');

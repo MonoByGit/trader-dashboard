@@ -33,8 +33,13 @@ function memStore(initial?: VersionBook) {
 function trackingBroker(lastPrice: Record<string, number>) {
   const stops: OpenStopOrder[] = [];
   const positions: Record<string, number> = {};
-  const broker: Broker & { listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]>; stops: OpenStopOrder[] } = {
+  const broker: Broker & {
+    listOpenStops(o: { stopClientPrefix: string }): Promise<OpenStopOrder[]>;
+    stops: OpenStopOrder[];
+    positions: Record<string, number>;
+  } = {
     stops,
+    positions,
     marketOrder: async (o) => {
       if (o.side === 'buy') positions[o.symbol] = (positions[o.symbol] ?? 0) + o.qty;
       else positions[o.symbol] = Math.max(0, (positions[o.symbol] ?? 0) - o.qty);
@@ -105,6 +110,7 @@ describe('disaster stop safety', () => {
     book.positions['BTC/USD'] = { qty: 0.5, entryPrice: 100, entryDate: '2024-05-01', highWater: 110, signalDate: '2024-05-01' };
     mem.setBook(book);
     broker.stops.length = 0;
+    broker.positions['BTC/USD'] = 0.5;
     const btc = makeBars(80, 100, 0.005, 0.02);
     const r = await reconcileDisasterStops({
       date: '2024-06-10',
@@ -117,6 +123,23 @@ describe('disaster stop safety', () => {
     expect(r.recreated.length).toBeGreaterThan(0);
     expect(broker.stops).toHaveLength(1);
     expect(broker.stops[0]!.clientOrderId.startsWith(momentumStopClientPrefix(m6Cfg))).toBe(true);
+  });
+
+  it('reconcile zet geen stop voor stukken die niet bij de broker liggen (geen short)', async () => {
+    const broker = trackingBroker({ 'BTC/USD': 100 });
+    const book = newBook(m6Cfg, '2024-01-01', 100);
+    book.real = true;
+    book.positions['BTC/USD'] = { qty: 0.5, entryPrice: 100, entryDate: '2024-05-01', highWater: 110, signalDate: '2024-05-01' };
+    const r = await reconcileDisasterStops({
+      date: '2024-06-10',
+      cfgs: [m6Cfg],
+      books: { [m6Cfg.id]: book },
+      hooks: m6Hooks,
+      barsBySymbol: { 'BTC/USD': makeBars(80, 100, 0.005, 0.02) },
+      broker,
+    });
+    expect(broker.stops).toHaveLength(0);
+    expect(r.failed.some((x) => x.includes('geen broker-qty'))).toBe(true);
   });
 
   it('reconcile ruimt stop op zonder positie op', async () => {

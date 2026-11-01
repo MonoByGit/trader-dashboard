@@ -34,6 +34,9 @@ export function verifyCronBearer(authHeader: string | null): boolean {
   }
   const expected = `Bearer ${secret}`;
   const got = authHeader ?? '';
-  if (got.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+  // bytelengte, niet string-lengte: een niet-ASCII bearer gaf anders een RangeError (500) in timingSafeEqual
+  const a = Buffer.from(got, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

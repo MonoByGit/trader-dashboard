@@ -62,6 +62,13 @@ async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> 
   return parseJsonBody<T>(res);
 }
 
+async function patch<T>(url: string, body: unknown): Promise<T> {
+  assertAlpacaPaperTrading(BASE);
+  const res = await fetch(url, fetchInit({ method: 'PATCH', headers: headers(), body: JSON.stringify(body) }));
+  if (!res.ok) throw new AlpacaHttpError('PATCH', url, res.status, await res.text());
+  return parseJsonBody<T>(res);
+}
+
 async function getOrderByClientOrderId(clientOrderId: string): Promise<AlpacaOrder | null> {
   try {
     return await get<AlpacaOrder>(
@@ -94,6 +101,11 @@ export const alpaca = {
   cancelOrder: (orderId: string) =>
     del<unknown>(`${BASE}/v2/orders/${orderId}`, { trading: true }),
   placeOrder: (o: AlpacaOrderRequest) => placeOrderRequest(o),
+  /** Alpaca replace (PATCH /v2/orders/{id}): qty/stop wijzigen zonder extra stukken te reserveren. */
+  replaceOrder: (
+    orderId: string,
+    o: { qty?: number; stop_price?: number; limit_price?: number; client_order_id?: string },
+  ) => patch<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`, o),
   getOrderByClientOrderId,
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
   bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {

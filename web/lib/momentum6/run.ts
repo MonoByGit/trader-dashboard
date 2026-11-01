@@ -7,7 +7,7 @@ import { resolveMomentumPaperMode } from '../../../src/momentum2/mode';
 import type { Bar } from '../../../src/momentum2/types';
 import { m6Config } from '../../../src/momentum6/config';
 import { m6Hooks } from '../../../src/momentum6/plan';
-import { brokerForMode, loadOrInitRealBook, runReconcile } from '../momentum2/paper-run';
+import { brokerForMode, foreignQtyOtherSleeves, loadOrInitRealBook, runReconcile } from '../momentum2/paper-run';
 import { postgresStore } from '../momentum2/store';
 
 const toBars = (x: Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>): Bar[] =>
@@ -48,6 +48,7 @@ export async function runMomentum6(step: 'decide' | 'execute', nowMs = Date.now(
     ) {
       return { skipped: true, reason: 'BTC dagbar nog niet compleet', step, cryptoDate, todayUtc };
     }
+    if (!mode.shadow) await loadOrInitRealBook(store, cfg, btc.at(-1)?.c ?? null, cryptoDate);
     const { planned } = await decideDay({
       date: cryptoDate,
       cfgs: [cfg],
@@ -55,6 +56,7 @@ export async function runMomentum6(step: 'decide' | 'execute', nowMs = Date.now(
       barsBySymbol,
       benchmark: btc,
       store,
+      expectReal: !mode.shadow,
     });
     const out: Record<string, unknown> = { step, date: cryptoDate, shadow: mode.shadow, planned };
     if (!mode.shadow) {
@@ -68,7 +70,10 @@ export async function runMomentum6(step: 'decide' | 'execute', nowMs = Date.now(
     await loadOrInitRealBook(store, cfg, benchLast, todayEt);
   }
 
-  const r = await executeDay({ date: todayEt, cfgs: [cfg], hooks: m6Hooks, lastPrice, barsBySymbol, broker, store });
+  const r = await executeDay({
+    date: todayEt, cfgs: [cfg], hooks: m6Hooks, lastPrice, barsBySymbol, broker, store,
+    expectReal: !mode.shadow, foreignQty: foreignQtyOtherSleeves,
+  });
   const reconcile = mode.shadow
     ? undefined
     : await runReconcile({ date: todayEt, cfgs: [cfg], store, hooks: m6Hooks, barsBySymbol, broker });

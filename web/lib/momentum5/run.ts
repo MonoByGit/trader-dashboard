@@ -7,7 +7,7 @@ import { resolveMomentumPaperMode } from '../../../src/momentum2/mode';
 import type { Bar } from '../../../src/momentum2/types';
 import { m5Versions } from '../../../src/momentum5/config';
 import { m5Hooks } from '../../../src/momentum5/plan';
-import { brokerForMode, loadOrInitRealBook, runReconcile } from '../momentum2/paper-run';
+import { brokerForMode, foreignQtyOtherSleeves, loadOrInitRealBook, runReconcile } from '../momentum2/paper-run';
 import { postgresStore } from '../momentum2/store';
 
 const toBars = (x: Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>): Bar[] =>
@@ -51,9 +51,15 @@ export async function runMomentum5(step: 'decide' | 'execute', nowMs = Date.now(
     }
     const decideDate = lastBarDate;
     const out: Record<string, unknown> = { step, date: decideDate, shadow: mode.shadow };
+    if (!mode.shadow) {
+      // papier beslist alleen op een papierboek, nooit op een schaduwboek
+      const spyLast = spy.at(-1)?.c ?? null;
+      for (const cfg of cfgs) await loadOrInitRealBook(store, cfg, spyLast, decideDate);
+    }
     for (const cfg of cfgs) {
-      out[cfg.id] = (await decideDay({ date: decideDate, cfgs: [cfg], hooks: m5Hooks, barsBySymbol, benchmark: spy, store }))
-        .planned;
+      out[cfg.id] = (await decideDay({
+        date: decideDate, cfgs: [cfg], hooks: m5Hooks, barsBySymbol, benchmark: spy, store, expectReal: !mode.shadow,
+      })).planned;
     }
     if (!mode.shadow) {
       out.reconcile = await runReconcile({ date: decideDate, cfgs, store, hooks: m5Hooks, barsBySymbol, broker });
@@ -72,7 +78,10 @@ export async function runMomentum5(step: 'decide' | 'execute', nowMs = Date.now(
 
   let trades = 0;
   for (const cfg of cfgs) {
-    const r = await executeDay({ date: today, cfgs: [cfg], hooks: m5Hooks, lastPrice, barsBySymbol, broker, store });
+    const r = await executeDay({
+      date: today, cfgs: [cfg], hooks: m5Hooks, lastPrice, barsBySymbol, broker, store,
+      expectReal: !mode.shadow, foreignQty: foreignQtyOtherSleeves,
+    });
     trades += r.trades.length;
   }
   const reconcile = mode.shadow ? undefined : await runReconcile({ date: today, cfgs, store, hooks: m5Hooks, barsBySymbol, broker });

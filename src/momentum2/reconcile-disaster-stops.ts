@@ -3,6 +3,7 @@ import { alpacaSymbolsEqual } from '../alpaca/symbol-path';
 import type { StrategyHooks } from './hooks';
 import { dateOf } from './indicators';
 import type { MomentumBroker, OpenStopOrder } from './broker-types';
+import { sleeveQty, type ForeignQtyFn } from './live';
 import { momentumStopClientPrefix } from './order-tag';
 import type { Bar, VersionBook, VersionConfig } from './types';
 
@@ -22,7 +23,9 @@ export async function reconcileDisasterStops<C extends VersionConfig>(input: {
   hooks: StrategyHooks<C>;
   barsBySymbol: Record<string, Bar[]>;
   broker: BrokerWithStops;
-}): Promise<{ recreated: string[]; cancelled: string[]; deduped: string[] }> {
+  foreignQty?: ForeignQtyFn;
+}): Promise<{ recreated: string[]; cancelled: string[]; deduped: string[]; failed: string[] }> {
+  const failed: string[] = [];
   const recreated: string[] = [];
   const cancelled: string[] = [];
   const deduped: string[] = [];
@@ -53,26 +56,26 @@ export async function reconcileDisasterStops<C extends VersionConfig>(input: {
       }
 
       const cur = matches[0];
-      if (!cur) {
-        await input.broker.setStop({
-          versionId: cfg.id,
-          symbol: sym,
-          qty: pos.qty,
-          stopPrice: st.level,
-          stopClientPrefix: prefix,
-        });
-        recreated.push(`${cfg.id}:${sym}`);
-        continue;
-      }
-      if (cur.qty !== pos.qty || cur.stopPrice < st.level - 1e-6) {
-        await input.broker.setStop({
-          versionId: cfg.id,
-          symbol: sym,
-          qty: pos.qty,
-          stopPrice: st.level,
-          stopClientPrefix: prefix,
-        });
-        recreated.push(`${cfg.id}:${sym}`);
+      try {
+        // nooit stops voor stukken die deze sleeve niet bij de broker heeft (andere sleeves, short)
+        const qty = await sleeveQty(input.broker, book, sym, input.foreignQty);
+        if (!(qty > 0)) {
+          failed.push(`${cfg.id}:${sym}:geen broker-qty`);
+          continue;
+        }
+        if (!cur || cur.qty !== qty || cur.stopPrice < st.level - 1e-6) {
+          await input.broker.setStop({
+            versionId: cfg.id,
+            symbol: sym,
+            qty,
+            stopPrice: st.level,
+            stopClientPrefix: prefix,
+          });
+          recreated.push(`${cfg.id}:${sym}`);
+        }
+      } catch (e) {
+        // één symbool mag de rest van de reconcile niet blokkeren; volgende run opnieuw
+        failed.push(`${cfg.id}:${sym}:${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -89,7 +92,7 @@ export async function reconcileDisasterStops<C extends VersionConfig>(input: {
     }
   }
 
-  return { recreated, cancelled, deduped };
+  return { recreated, cancelled, deduped, failed };
 }
 
 /** Crypto stops gebruiken stop_limit; equities gewone GTC stop. */

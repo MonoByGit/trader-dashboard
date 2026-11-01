@@ -220,8 +220,8 @@ export async function runMarketOpen() {
   }
 
   const etfPositions = filterByAssetClass(positions, 'etf');
-  const { count: m1OpenCount, symbols: openSymbols } = await m1EtfOpenSymbols(positions);
-  const totalExposure = etfPositions.reduce((s, p) => s + parseFloat(p.market_value), 0);
+  // M1 telt alleen zijn eigen deel: posities van Momentum 2–6 (echte boeken) horen bij die sleeves.
+  const { count: m1OpenCount, symbols: openSymbols, exposureUsd: totalExposure } = await m1EtfOpenSymbols(positions);
   let dailyTrades = await countDailyTrades();
   const config = await getEffectiveGuardConfig();
 

@@ -223,4 +223,34 @@ describe('exitCryptoPosition', () => {
     expect(placed.side).toBe('sell');
     expect(placed.qty).toBeCloseTo(0.05, 5);
   });
+
+  it('wist M1-settings niet als een M6-stop de stukken vasthoudt (qty_reserved)', async () => {
+    store.set('crypto_stop:BTCUSD', '{"stopPrice":1,"qty":0.04}');
+    openOrders.mockResolvedValue([
+      { id: 'm6-stop', symbol: 'BTCUSD', side: 'sell', type: 'stop_limit', client_order_id: 'm6s-m6-btc-breakout-BTC/USD-0.1-8000-1' },
+    ]);
+    foreignQtyForSymbol.mockResolvedValue(0.06);
+    positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.1', qty_available: '0' }]);
+
+    const result = await exitCryptoPosition('BTCUSD', 'software_stop');
+
+    expect(result).toEqual({ exited: false, skippedReason: 'qty_reserved' });
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(store.has('crypto_stop:BTCUSD')).toBe(true);
+  });
+
+  it('verkoopt M1-deel als de M6-stop alleen het eigen deel dekt', async () => {
+    openOrders.mockResolvedValue([
+      { id: 'm6-stop', symbol: 'BTCUSD', side: 'sell', type: 'stop_limit', client_order_id: 'm6s-m6-btc-breakout-BTC/USD-0.06-8000-x' },
+    ]);
+    foreignQtyForSymbol.mockResolvedValue(0.06);
+    positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.1', qty_available: '0.04' }]);
+    getOrder.mockResolvedValue({ status: 'filled' });
+
+    const result = await exitCryptoPosition('BTCUSD', 'software_stop');
+
+    expect(result.exited).toBe(true);
+    const placed = placeOrder.mock.calls[0]?.[0] as { qty: number };
+    expect(placed.qty).toBeCloseTo(0.04, 9);
+  });
 });

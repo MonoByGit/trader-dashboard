@@ -14,7 +14,14 @@ import type {
  *  - executeDay bij de open: verwerkt gevulde stops, voert de geplande orders uit en zet/verhoogt de stops.
  * Alles loopt via Broker en Store, zodat de logica zonder netwerk te testen is.
  */
-export interface Fill { orderId: string; qty: number; price: number }
+export interface Fill {
+  orderId: string;
+  /** Cumulatieve gevulde qty van deze order. */
+  qty: number;
+  price: number;
+  /** false = order staat nog open (partial fill); undefined/true = terminaal. */
+  done?: boolean;
+}
 
 /** @deprecated alias */
 export type Broker = MomentumBroker;
@@ -38,15 +45,44 @@ export interface Store {
   logDecision(rec: DecisionRecord): Promise<void>;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Qty van `symbol` in de echte boeken van ANDERE sleeves (M1 telt niet: die heeft geen boek). */
+export type ForeignQtyFn = (symbol: string, excludeVersionId: string) => Promise<number>;
 
-async function brokerQty(broker: MomentumBroker, book: VersionBook, symbol: string): Promise<number> {
-  const pos = book.positions[symbol];
-  if (book.real && broker.positionQty) {
-    const q = await broker.positionQty({ symbol });
-    if (q != null && q >= 0) return q;
-  }
-  return pos?.qty ?? 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const roundQty = (x: number) => Math.round(x * 1e9) / 1e9;
+const MAX_FILLS_TRACKED = 200;
+
+/**
+ * Qty die deze sleeve bij de broker mag verkopen of afdekken.
+ * Account-qty (niet qty_available: de eigen stop reserveert stukken) min de boeken van andere sleeves,
+ * met het eigen boek als bovengrens. Het boek wordt hier nooit overschreven.
+ */
+export async function sleeveQty(
+  broker: MomentumBroker,
+  book: VersionBook,
+  symbol: string,
+  foreignQty?: ForeignQtyFn,
+): Promise<number> {
+  const own = book.positions[symbol]?.qty ?? 0;
+  if (own <= 0) return 0;
+  if (!book.real || !broker.positionQty) return own;
+  const acct = await broker.positionQty({ symbol });
+  if (acct == null || !Number.isFinite(acct)) return own;
+  const others = foreignQty ? Math.max(0, await foreignQty(symbol, book.versionId)) : 0;
+  return Math.max(0, roundQty(Math.min(own, acct - others)));
+}
+
+/** Nieuw deel van een cumulatieve fill dat nog niet in het boek staat. */
+function fillDelta(book: VersionBook, f: Fill): number {
+  const applied = book.fillsApplied?.[f.orderId] ?? 0;
+  return Math.max(0, roundQty(f.qty - applied));
+}
+
+function markApplied(book: VersionBook, f: Fill): void {
+  const m = (book.fillsApplied ??= {});
+  m[f.orderId] = Math.max(m[f.orderId] ?? 0, f.qty);
+  const keys = Object.keys(m);
+  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_FILLS_TRACKED))) delete m[k];
 }
 
 async function setStopWithRetry(broker: MomentumBroker, req: SetStopRequest, attempts = 3): Promise<void> {
@@ -71,14 +107,18 @@ async function placeDisasterStop(input: {
   hooks: StrategyHooks;
   stopPx: string;
   bars?: Bar[];
+  foreignQty?: ForeignQtyFn;
 }): Promise<void> {
   const { broker, book, cfg, sym, hooks, stopPx, bars: hist } = input;
-  const qty = await brokerQty(broker, book, sym);
-  if (qty <= 0) return;
   const pos = book.positions[sym];
   if (!pos) return;
   const st = hooks.stopFor(pos, cfg, hist?.length ? hist : undefined, sym);
   if (!Number.isFinite(st.level) || st.level <= 0) return;
+  const qty = await sleeveQty(broker, book, sym, input.foreignQty);
+  if (qty <= 0) {
+    if (book.real) throw new Error(`geen broker-qty voor ${sym} in boek ${book.versionId}`);
+    return;
+  }
   await setStopWithRetry(broker, {
     versionId: cfg.id,
     symbol: sym,
@@ -86,10 +126,13 @@ async function placeDisasterStop(input: {
     stopPrice: round2(st.level),
     stopClientPrefix: stopPx,
   });
-  if (book.real && broker.positionQty) {
-    const bq = await broker.positionQty({ symbol: sym });
-    if (bq != null && bq > 0 && book.positions[sym]) book.positions[sym]!.qty = bq;
-  }
+}
+
+function bookKindMismatch(book: VersionBook | null, expectReal: boolean | undefined): string | null {
+  if (expectReal === undefined) return null;
+  if (expectReal && !book?.real) return 'papiermodus zonder papierboek: niets gedaan';
+  if (!expectReal && book?.real) return 'schaduwmodus met een papierboek: schaduw schrijft nooit in het papierboek';
+  return null;
 }
 
 export async function decideDay<C extends VersionConfig = VersionConfig>(input: {
@@ -100,6 +143,8 @@ export async function decideDay<C extends VersionConfig = VersionConfig>(input: 
   benchmark: Bar[];
   store: Store;
   veto?: VetoFn;
+  /** true = papiermodus (alleen echte boeken), false = schaduw (nooit een echt boek aanraken). */
+  expectReal?: boolean;
 }): Promise<{ planned: Record<string, OrderIntent[]> }> {
   const { date, store } = input;
   const hooks = (input.hooks ?? rotationHooks) as StrategyHooks<C>;
@@ -112,7 +157,13 @@ export async function decideDay<C extends VersionConfig = VersionConfig>(input: 
       await store.logDecision({ date, versionId: cfg.id, kind: 'skip', detail: 'te weinig historie voor trendfilter' });
       continue;
     }
-    const book = (await store.loadBook(cfg.id)) ?? newBook(cfg, date, spy.c);
+    const loaded = await store.loadBook(cfg.id);
+    const mismatch = bookKindMismatch(loaded, input.expectReal);
+    if (mismatch) {
+      await store.logDecision({ date, versionId: cfg.id, kind: 'skip', detail: mismatch });
+      continue;
+    }
+    const book = loaded ?? newBook(cfg, date, spy.c);
     if (book.lastDecisionDate === date) {
       await store.logDecision({ date, versionId: cfg.id, kind: 'skip', detail: 'vandaag al beslist' });
       continue;
@@ -189,28 +240,112 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
   barsBySymbol?: Record<string, Bar[]>;
   broker: MomentumBroker;
   store: Store;
+  /** true = papiermodus (alleen echte boeken), false = schaduw (nooit een echt boek aanraken). */
+  expectReal?: boolean;
+  /** Qty van andere sleeves per symbool; nodig zodra meerdere strategieën hetzelfde symbool houden. */
+  foreignQty?: ForeignQtyFn;
 }): Promise<{ trades: TradeLogRow[] }> {
-  const { date, broker, store } = input;
+  const { date, broker, store, foreignQty } = input;
   const hooks = (input.hooks ?? rotationHooks) as StrategyHooks<C>;
   const trades: TradeLogRow[] = [];
 
   for (const cfg of input.cfgs) {
     const book = await store.loadBook(cfg.id);
+    const mismatch = bookKindMismatch(book, input.expectReal);
+    if (mismatch) {
+      await store.logDecision({ date, versionId: cfg.id, kind: 'skip', detail: mismatch });
+      continue;
+    }
     if (!book) continue;
     const stopPx = momentumStopClientPrefix(cfg);
 
-    for (const [sym, pos] of Object.entries({ ...book.positions })) {
-      const f = await broker.stopFill({ versionId: cfg.id, symbol: sym, since: pos.entryDate, stopClientPrefix: stopPx });
-      if (f) {
-        const sellQty = Math.min(pos.qty, f.qty);
-        const t = applySell(book, sym, sellQty, f.price, date, 'stop (broker)');
-        if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
-        hooks.onStopFilled?.({ book, cfg, symbol: sym, date });
-        await store.logDecision({ date, versionId: cfg.id, kind: 'stop', symbol: sym, detail: `stop gevuld @ ${f.price.toFixed(2)}` });
+    const record = async (t: TradeLogRow | null) => {
+      if (!t) return;
+      trades.push(t);
+      await store.logTrade(cfg.id, t);
+    };
+
+    /** Verwerk alleen het nieuwe deel van (partial) stop-fills, per broker-order. */
+    const processStopFills = async (sym: string): Promise<boolean> => {
+      const pos = book.positions[sym];
+      if (!pos) return false;
+      const q = { versionId: cfg.id, symbol: sym, since: pos.entryDate, stopClientPrefix: stopPx };
+      const fills = broker.stopFills
+        ? await broker.stopFills(q)
+        : [await broker.stopFill(q)].filter((x): x is Fill => !!x);
+      let any = false;
+      for (const f of fills) {
+        const delta = fillDelta(book, f);
+        if (delta <= 0) continue;
+        markApplied(book, f);
+        if (!book.positions[sym]) continue;
+        await record(applySell(book, sym, delta, f.price, date, 'stop (broker)'));
+        any = true;
+        await store.logDecision({
+          date, versionId: cfg.id, kind: 'stop', symbol: sym,
+          detail: `stop gevuld ${delta} @ ${f.price.toFixed(2)}${f.done === false ? ' (deels)' : ''}`,
+        });
+      }
+      if (any) {
+        if (!book.positions[sym]) hooks.onStopFilled?.({ book, cfg, symbol: sym, date });
         await store.saveBook(book);
+      }
+      return any;
+    };
+
+    /** Boek het nieuwe deel van een market-fill; open (partial) orders volgende run verder. */
+    const applyMarketFill = async (
+      f: Fill,
+      meta: { symbol: string; side: 'buy' | 'sell'; reason: string; signalDate?: string },
+    ) => {
+      const delta = fillDelta(book, f);
+      if (delta > 0) {
+        markApplied(book, f);
+        if (meta.side === 'buy') {
+          await record(applyBuy(book, meta.symbol, delta, f.price, date, meta.reason, {
+            signalDate: meta.signalDate, brokerFill: true,
+          }));
+        } else {
+          await record(applySell(book, meta.symbol, delta, f.price, date, meta.reason));
+        }
+      }
+      if (f.done === false) (book.openOrders ??= {})[f.orderId] = meta;
+      else if (book.openOrders) delete book.openOrders[f.orderId];
+    };
+
+    const ensureStop = async (sym: string) => {
+      if (!book.positions[sym]) return;
+      const sellOpen = Object.values(book.openOrders ?? {}).some((m) => m.symbol === sym && m.side === 'sell');
+      if (sellOpen) return; // een lopende market sell houdt de stukken vast
+      try {
+        await placeDisasterStop({
+          broker, book, cfg, sym, hooks: hooks as StrategyHooks, stopPx,
+          bars: histBars(input.barsBySymbol, sym, date), foreignQty,
+        });
+        if (book.stopMissing?.[sym]) delete book.stopMissing[sym];
+      } catch (e) {
+        (book.stopMissing ??= {})[sym] = date;
+        await store.logDecision({
+          date, versionId: cfg.id, kind: 'stop', symbol: sym,
+          detail: `stop ontbreekt: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    };
+
+    // 1. Lopende (deels gevulde) market orders van eerdere runs.
+    if (broker.orderFill) {
+      for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
+        const f = await broker.orderFill({ orderId });
+        if (f) await applyMarketFill(f, meta);
+        else delete book.openOrders![orderId];
       }
     }
 
+    // 2. Stop-fills (ook partials, maar elk stuk maar één keer).
+    for (const sym of Object.keys(book.positions)) await processStopFills(sym);
+    await store.saveBook(book);
+
+    // 3. Geplande orders.
     const pending = await store.loadPending(cfg.id);
     const remaining: OrderIntent[] = [];
 
@@ -222,39 +357,57 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       }
 
       if (o.side === 'sell') {
-        const bookQty = await brokerQty(broker, book, o.symbol);
-        const qty = Math.min(o.qty ?? 0, bookQty);
-        if (qty <= 0) continue;
+        if (!book.positions[o.symbol]) continue; // niets (meer) in dit boek
+        const target = () => Math.min(o.qty ?? Infinity, book.positions[o.symbol]?.qty ?? 0);
 
-        const hist = (input.barsBySymbol?.[o.symbol] ?? []).filter((b) => dateOf(b) < date);
-        const pos = book.positions[o.symbol];
-        const st = pos ? hooks.stopFor(pos, cfg, hist.length ? hist : undefined, o.symbol) : { level: -1, kind: 'hard' };
-        const stopBackup =
-          Number.isFinite(st.level) && st.level > 0
-            ? { qty, stopPrice: round2(st.level) }
-            : null;
-
-        await broker.cancelStop({ versionId: cfg.id, symbol: o.symbol, stopClientPrefix: stopPx });
-        const fill = await broker.marketOrder({
-          versionId: cfg.id, symbol: o.symbol, side: 'sell', qty,
-          clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 's'),
-        });
-        if (!fill) {
-          if (stopBackup) {
-            await setStopWithRetry(broker, {
-              versionId: cfg.id,
-              symbol: o.symbol,
-              qty: stopBackup.qty,
-              stopPrice: stopBackup.stopPrice,
-              stopClientPrefix: stopPx,
-            });
-          }
+        const outcome = (await broker.cancelStop({ versionId: cfg.id, symbol: o.symbol, stopClientPrefix: stopPx })) ?? 'canceled';
+        if (outcome === 'filled') {
+          await processStopFills(o.symbol);
+          if (!book.positions[o.symbol]) continue; // de stop deed de exit al
+        } else if (outcome === 'failed' || outcome === 'timeout') {
+          await store.logDecision({
+            date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+            detail: `exit uitgesteld: stop niet bevestigd geannuleerd (${outcome})`,
+          });
           remaining.push(o);
+          await ensureStop(o.symbol);
           continue;
         }
-        const sellQty = Math.min(qty, fill.qty);
-        const t = applySell(book, o.symbol, sellQty, fill.price, date, o.reason);
-        if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
+
+        const qty = Math.min(target(), await sleeveQty(broker, book, o.symbol, foreignQty));
+        if (!(qty > 0)) {
+          await store.logDecision({
+            date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+            detail: 'exit uitgesteld: broker toont geen stukken voor dit boek',
+          });
+          remaining.push(o);
+          await ensureStop(o.symbol);
+          continue;
+        }
+
+        let fill: Fill | null = null;
+        try {
+          fill = await broker.marketOrder({
+            versionId: cfg.id, symbol: o.symbol, side: 'sell', qty,
+            clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 's'),
+          });
+        } catch (e) {
+          await store.logDecision({
+            date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+            detail: `exit mislukt: ${e instanceof Error ? e.message : String(e)}`,
+          });
+        }
+        if (fill) await applyMarketFill(fill, { symbol: o.symbol, side: 'sell', reason: o.reason });
+        if (fill && fill.done === false) {
+          await store.saveBook(book);
+          continue; // rest volgt via openOrders; stukken zitten in de lopende sell
+        }
+        const left = book.positions[o.symbol];
+        if (left) {
+          // geen of gedeeltelijke fill: stop terug op wat er nu echt is, exit blijft staan
+          await ensureStop(o.symbol);
+          remaining.push(o.qty != null && fill ? { ...o, qty: Math.max(0, roundQty(o.qty - fill.qty)) || left.qty } : o);
+        }
         await store.saveBook(book);
         continue;
       }
@@ -262,52 +415,33 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
       const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
       const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
       if (qty <= 0) continue;
-      const fill = await broker.marketOrder({
-        versionId: cfg.id, symbol: o.symbol, side: 'buy', qty,
-        clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 'b'),
-      });
+      let fill: Fill | null = null;
+      try {
+        fill = await broker.marketOrder({
+          versionId: cfg.id, symbol: o.symbol, side: 'buy', qty,
+          clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 'b'),
+        });
+      } catch (e) {
+        await store.logDecision({
+          date, versionId: cfg.id, kind: 'skip', symbol: o.symbol,
+          detail: `koop mislukt: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
       if (!fill) {
         remaining.push(o);
         continue;
       }
-      const t = applyBuy(
-        book,
-        o.symbol,
-        fill.qty,
-        fill.price,
-        date,
-        o.reason,
-        o.signalDate ? { signalDate: o.signalDate } : undefined,
-      );
-      if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
+      // Een fill gaat nooit terug in pending: ook als de stop hierna mislukt (zie stopMissing).
+      await applyMarketFill(fill, { symbol: o.symbol, side: 'buy', reason: o.reason, signalDate: o.signalDate });
       await store.saveBook(book);
-
-      try {
-        await placeDisasterStop({
-          broker,
-          book,
-          cfg,
-          sym: o.symbol,
-          hooks: hooks as StrategyHooks,
-          stopPx,
-          bars: histBars(input.barsBySymbol, o.symbol, date),
-        });
-      } catch {
-        remaining.push(o);
-      }
+      await ensureStop(o.symbol);
       await store.saveBook(book);
     }
 
     await store.savePending(cfg.id, remaining);
 
-    for (const sym of Object.keys(book.positions)) {
-      const hist = histBars(input.barsBySymbol, sym, date);
-      try {
-        await placeDisasterStop({ broker, book, cfg, sym, hooks: hooks as StrategyHooks, stopPx, bars: hist });
-      } catch {
-        /* volgende run reconcile */
-      }
-    }
+    // 4. Elke positie een stop op de juiste qty en het juiste niveau.
+    for (const sym of Object.keys(book.positions)) await ensureStop(sym);
     await store.saveBook(book);
   }
   return { trades };

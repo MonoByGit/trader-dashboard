@@ -31,9 +31,10 @@ export function applyBuy(
   price: number,
   date: string,
   reason: string,
-  opts?: { signalDate?: string },
+  opts?: { signalDate?: string; /** Broker-fill: altijd boeken, ook als slippage de kas iets negatief maakt. */ brokerFill?: boolean },
 ): TradeLogRow | null {
-  if (qty <= 0 || qty * price > book.cash + 1e-9) return null;
+  if (qty <= 0) return null;
+  if (!opts?.brokerFill && qty * price > book.cash + 1e-9) return null;
   book.cash -= qty * price;
   const cur = book.positions[symbol];
   if (cur) {
