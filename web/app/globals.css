@@ -677,6 +677,7 @@ table.data .sym { font-family: var(--font-mono); font-weight: 600; }
 }
 .crit-dot.pass { background: var(--pos); }
 .crit-dot.fail { background: var(--neg); }
+.crit-dot.unknown { background: var(--text-tertiary); opacity: 0.85; }
 
 /* Status bar */
 .statusbar {

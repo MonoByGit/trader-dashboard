@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbQuery, initDb, hasDb } from '@/lib/db';
 import { alpaca } from '@/lib/alpaca';
-import { claudeJson, geminiText, MODELS } from '@/lib/ai';
+import { agentNewsLookup, claudeJson, MODELS } from '@/lib/ai';
 import strategy from '@/strategy.json';
 import { snapshotFromDailyBars } from '../../../../../src/indicators/live-snapshot';
 import { loadVolStressSnapshot } from '@/lib/vol-stress';
@@ -76,11 +76,14 @@ export async function GET() {
       })
       .filter(Boolean);
 
-    let newsCtx = '{}';
-    try {
-      const r = await geminiText(MODELS.flash, `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${strategy.symbols.join(',')}: any major risks today? JSON {"QQQ":"safe/risky",...}`);
-      const m = r.match(/\{[\s\S]*\}/); if (m) newsCtx = m[0];
-    } catch {}
+    const newsResult = await agentNewsLookup(
+      `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${strategy.symbols.join(',')}: any major risks today? JSON {"QQQ":"safe/risky",...}`,
+      { routine: 'kickoff-news', assetClass: 'etf' },
+    );
+    if (newsResult.error) {
+      console.error('[kickoff] news lookup failed:', newsResult.error);
+    }
+    const newsCtx = newsResult.json;
 
     const options = await claudeJson<KickoffOption[]>(
       MODELS.sonnet,
