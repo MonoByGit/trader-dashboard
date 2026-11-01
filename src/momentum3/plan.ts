@@ -9,9 +9,13 @@ import { currentRsi, entryCandidates } from './signals';
 
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
-/** Dagplan: eerst uitstappen (RSI hersteld, te lang vast, versie dicht), daarna nieuwe instappen op vrije plekken. */
-export function planM3(input: { barsBySymbol: Record<string, Bar[]>; book: VersionBook; cfg: M3Config }): { orders: OrderIntent[] } {
-  const { barsBySymbol, book, cfg } = input;
+export function planM3(input: {
+  barsBySymbol: Record<string, Bar[]>;
+  book: VersionBook;
+  cfg: M3Config;
+  calendarDates?: string[];
+}): { orders: OrderIntent[] } {
+  const { barsBySymbol, book, cfg, calendarDates } = input;
   const orders: OrderIntent[] = [];
   const today = cfg.universe.map((s) => barsBySymbol[s]?.at(-1)).find(Boolean);
   const todayStr = today ? dateOf(today) : '';
@@ -25,11 +29,16 @@ export function planM3(input: { barsBySymbol: Record<string, Bar[]>; book: Versi
 
   const held = new Set(Object.keys(book.positions));
   for (const [symbol, p] of Object.entries(book.positions)) {
-    const rsi = currentRsi(barsBySymbol[symbol]);
-    if (rsi !== null && rsi >= cfg.exitRsi) {
+    const bars = barsBySymbol[symbol];
+    const rsi = currentRsi(bars);
+    const holdDays = todayStr ? dayDiff(p.entryDate, todayStr) : 0;
+    const trailLive =
+      p.highWater >= p.entryPrice * (1 + cfg.trailActivatePct) ||
+      m3StopLevel(p, cfg, bars).kind === 'trailing';
+    if (holdDays >= cfg.minHoldDays && rsi !== null && rsi >= cfg.exitRsi && !trailLive) {
       orders.push({ symbol, side: 'sell', qty: p.qty, reason: `RSI ${rsi.toFixed(0)} hersteld` });
       held.delete(symbol);
-    } else if (todayStr && dayDiff(p.entryDate, todayStr) >= cfg.maxHoldDays) {
+    } else if (todayStr && holdDays >= cfg.maxHoldDays) {
       orders.push({ symbol, side: 'sell', qty: p.qty, reason: `${cfg.maxHoldDays} dagen vast` });
       held.delete(symbol);
     }
@@ -47,8 +56,15 @@ export function planM3(input: { barsBySymbol: Record<string, Bar[]>; book: Versi
       const last = book.lastExit?.[sym];
       return !!last && !!todayStr && dayDiff(last, todayStr) < cfg.cooldownDays;
     };
-    for (const c of entryCandidates(barsBySymbol, cfg).filter((e) => !held.has(e.symbol) && !cooled(e.symbol)).slice(0, slots)) {
-      orders.push({ symbol: c.symbol, side: 'buy', notionalUsd: base * cfg.positionPct, reason: `RSI-dip ${c.rsi.toFixed(0)} en draai` });
+    for (const c of entryCandidates(barsBySymbol, cfg, calendarDates)
+      .filter((e) => !held.has(e.symbol) && !cooled(e.symbol))
+      .slice(0, slots)) {
+      orders.push({
+        symbol: c.symbol,
+        side: 'buy',
+        notionalUsd: base * cfg.positionPct,
+        reason: `RSI-dip ${c.rsi.toFixed(0)} en draai`,
+      });
     }
   }
   orders.sort((a, b) => (a.side === b.side ? 0 : a.side === 'sell' ? -1 : 1));
@@ -56,6 +72,12 @@ export function planM3(input: { barsBySymbol: Record<string, Bar[]>; book: Versi
 }
 
 export const m3Hooks: StrategyHooks<M3Config> = {
-  stopFor: (pos, cfg) => m3StopLevel(pos, cfg),
-  plan: async (i) => ({ ...planM3(i), vetoes: [] }),
+  stopFor: (pos, cfg, bars) => m3StopLevel(pos, cfg, bars),
+  plan: async (i) => {
+    const dates = Object.values(i.barsBySymbol)
+      .flatMap((b) => b.map(dateOf))
+      .sort();
+    const calendarDates = dates.length ? [...new Set(dates)] : undefined;
+    return { ...planM3({ ...i, calendarDates }), vetoes: [] };
+  },
 };

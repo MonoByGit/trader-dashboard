@@ -15,6 +15,8 @@ export interface SimOptions {
   fillGaps?: boolean;
   hooks?: StrategyHooks<any>;
   veto?: VetoFn;
+  /** Doorlopend boek (walk-forward / live); verliesgrens blijft t.o.v. startBudgetUsd. */
+  initialBook?: VersionBook;
 }
 
 export interface SimResult {
@@ -73,13 +75,37 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
   };
 
   const startI = cfg.smaDays; // genoeg historie voor het 200d filter
-  const book = newBook(cfg, dates[startI] ?? null, data.benchmark[startI]?.c ?? null);
+  const book =
+    opts.initialBook != null
+      ? structuredClone(opts.initialBook)
+      : newBook(cfg, dates[startI] ?? null, data.benchmark[startI]?.c ?? null);
   const trades: TradeLogRow[] = [];
   const equity: EquityLogRow[] = [];
   const vetoLog: SimResult['vetoLog'] = [];
   let pending: OrderIntent[] = [];
-  let peakEq = cfg.budgetUsd;
+  let peakEq = book.peakEquity;
   let maxDd = 0;
+  const gapMiss: Record<string, { miss: number; lastClose: number }> = {};
+
+  const markPrices = (date: string): Record<string, number> => {
+    const prices: Record<string, number> = {};
+    for (const sym of Object.keys(book.positions)) {
+      const bar = barAt(sym, date);
+      if (bar) {
+        gapMiss[sym] = { miss: 0, lastClose: bar.c };
+        prices[sym] = bar.c;
+      } else {
+        const g = gapMiss[sym];
+        prices[sym] = g?.lastClose ?? book.positions[sym]!.entryPrice;
+      }
+    }
+    return prices;
+  };
+
+  let equityStart = cfg.budgetUsd;
+  if (opts.initialBook != null && dates[startI]) {
+    equityStart = equityOf(book, markPrices(dates[startI]!));
+  }
 
   for (let i = startI; i < dates.length; i++) {
     const date = dates[i]!;
@@ -104,8 +130,18 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     // 2. Stops (stand van vóór vandaag; nieuwe posities hebben hun harde stop vanaf de fill).
     for (const [sym, pos] of Object.entries(book.positions)) {
       const bar = barAt(sym, date);
-      if (!bar) continue;
-      const st = hooks.stopFor(pos, cfg);
+      if (!bar) {
+        const g = gapMiss[sym] ?? { miss: 0, lastClose: pos.entryPrice };
+        g.miss += 1;
+        gapMiss[sym] = g;
+        if (g.miss >= 3) {
+          pending.push({ symbol: sym, side: 'sell', qty: pos.qty, reason: 'datagat: te lang geen bar' });
+        }
+        continue;
+      }
+      gapMiss[sym] = { miss: 0, lastClose: bar.c };
+      const hist = upTo(date)[sym];
+      const st = hooks.stopFor(pos, cfg, hist);
       const r = checkStopLevel(st.level, st.kind, bar);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
@@ -116,9 +152,9 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
     }
 
     // 3. Waardering, drawdown, verliesgrens.
-    const prices: Record<string, number> = {};
-    for (const sym of Object.keys(book.positions)) prices[sym] = barAt(sym, date)?.c ?? book.positions[sym]!.entryPrice;
+    const prices = markPrices(date);
     const eq = equityOf(book, prices);
+    book.peakEquity = Math.max(book.peakEquity, eq);
     peakEq = Math.max(peakEq, eq);
     maxDd = Math.max(maxDd, (peakEq - eq) / peakEq);
     equity.push(logRow(book, date, prices, data.benchmark[i]!.c));
@@ -138,8 +174,11 @@ export async function simulateVersion<C extends VersionConfig>(cfg: C, data: Sim
   }
 
   const last = equity[equity.length - 1];
-  const ret = last ? (last.equity / cfg.budgetUsd - 1) * 100 : 0;
-  const spyRet = last ? (last.spyEquity / cfg.budgetUsd - 1) * 100 : 0;
+  const spyStart = dates[startI] ? data.benchmark[startI]!.c : null;
+  const spyEnd = last ? data.benchmark.find((b) => dateOf(b) === last.date)?.c ?? null : null;
+  const ret = last ? (last.equity / equityStart - 1) * 100 : 0;
+  const spyRet =
+    spyStart && spyEnd && spyStart > 0 ? (spyEnd / spyStart - 1) * 100 : last ? (last.spyEquity / book.startBudgetUsd - 1) * 100 : 0;
   return {
     versionId: cfg.id,
     trades,

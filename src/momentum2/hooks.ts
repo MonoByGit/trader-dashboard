@@ -4,7 +4,7 @@ import type { OrderIntent, Position, VersionBook, VersionConfig, VetoFn, VetoVer
 
 /** Wat een strategie anders doet dan de basis: stopniveau en dagplan. Boek, risico en logs zijn gedeeld. */
 export interface StrategyHooks<C extends VersionConfig = VersionConfig> {
-  stopFor(pos: Position, cfg: C): { level: number; kind: string };
+  stopFor(pos: Position, cfg: C, bars?: import('./types').Bar[]): { level: number; kind: string };
   plan(input: {
     barsBySymbol: Record<string, import('./types').Bar[]>;
     book: VersionBook;

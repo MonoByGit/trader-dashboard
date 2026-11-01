@@ -4,7 +4,9 @@
  * Usage: npx tsx scripts/run-momentum3.ts --start=2022-01-01 --end=2026-10-30 [--train=365 --test=90]
  * Vereist ALPACA_API_KEY en ALPACA_SECRET_KEY (alleen marktdata, geen orders).
  */
+import { dateOf } from '../src/momentum2/indicators.js';
 import { m3Grid, m3Versions } from '../src/momentum3/config.js';
+import { recentBarCoverage } from '../src/momentum3/signals.js';
 import { walkForward } from '../src/momentum3/walkforward.js';
 import type { Bar } from '../src/momentum2/types.js';
 
@@ -36,25 +38,44 @@ async function fetchBars(kind: 'stocks' | 'crypto', symbols: string[], start: st
   return out;
 }
 
+function printSummary(label: string, w: Awaited<ReturnType<typeof walkForward>>, bench: string) {
+  console.log(`\n=== ${label} ===`);
+  console.log(`Out-of-sample ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${w.haltedOn ? `, verliesgrens ${w.haltedOn}` : ''})`);
+  console.log(
+    `Return ${w.oosReturnPct.toFixed(1)}% | ${bench} ${w.oosBenchmarkPct.toFixed(1)}% | excess ${w.oosExcessPct.toFixed(1)} pp`,
+  );
+  console.log(
+    `MaxDD ${w.oosMaxDrawdownPct.toFixed(1)}% | Sharpe ${w.oosSharpe.toFixed(2)} | trades ${w.oosTradeCount} | win ${w.oosWinRatePct.toFixed(0)}% | costs ~${w.oosCostsPctOfBudget.toFixed(1)}% of budget`,
+  );
+}
+
 async function main() {
   const end = arg('end') ?? new Date().toISOString().slice(0, 10);
   const start = arg('start') ?? '2022-01-01';
   const trainDays = Number(arg('train') ?? 365), testDays = Number(arg('test') ?? 90);
   const warm = new Date(new Date(start).getTime() - 330 * 86400000).toISOString().slice(0, 10);
   const [crypto, etf] = m3Versions();
-  
 
   const cb = await fetchBars('crypto', [...crypto!.universe], warm, end);
   const eb = await fetchBars('stocks', Array.from(new Set(['SPY', ...etf!.universe])), warm, end);
+  const btcDates = cb['BTC/USD']!.map(dateOf);
+  for (const s of crypto!.universe) {
+    const n = cb[s]?.length ?? 0;
+    const cov = recentBarCoverage(cb[s] ?? [], btcDates);
+    console.log(`crypto ${s}: ${n} bars, dekking vs BTC-kalender ${(cov * 100).toFixed(1)}%`);
+  }
+
   const runs = [
     { cfg: crypto!, data: { barsBySymbol: cb, benchmark: cb['BTC/USD']! }, bench: 'BTC' },
     { cfg: etf!, data: { barsBySymbol: eb, benchmark: eb.SPY! }, bench: 'SPY' },
   ];
   for (const r of runs) {
     const w = await walkForward({ cfg: r.cfg, data: r.data, grid: m3Grid(r.cfg), trainDays, testDays });
-    console.log(`\n${r.cfg.id}: out-of-sample ${w.oosReturnPct.toFixed(1)}% | ${r.bench} ${w.oosBenchmarkPct.toFixed(1)}% | verschil ${w.oosExcessPct.toFixed(1)} pp | ${w.windows.length} vensters${w.haltedOn ? ` | verliesgrens geraakt ${w.haltedOn}, daarna uit` : ''}`);
+    printSummary(`${r.cfg.id} vs ${r.bench}`, w, r.bench);
     for (const x of w.windows) {
-      console.log(`  ${x.testStart}..${x.testEnd}  ${JSON.stringify(x.chosen)}  test ${x.testReturnPct.toFixed(1)}% vs ${x.testBenchmarkPct.toFixed(1)}%  maxDD ${x.testMaxDrawdownPct.toFixed(1)}%  trades ${x.testTrades}`);
+      console.log(
+        `  ${x.testStart}..${x.testEnd}  ${JSON.stringify(x.chosen)}  test ${x.testReturnPct.toFixed(1)}% vs ${x.testBenchmarkPct.toFixed(1)}%  maxDD ${x.testMaxDrawdownPct.toFixed(1)}%  trades ${x.testTrades}`,
+      );
     }
   }
 }

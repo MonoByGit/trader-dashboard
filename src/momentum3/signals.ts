@@ -1,5 +1,5 @@
 import { rsiWilder } from '../indicators/rsi';
-import { closesOf, sma } from '../momentum2/indicators';
+import { closesOf, dateOf, sma } from '../momentum2/indicators';
 import type { Bar } from '../momentum2/types';
 import type { M3Config } from './config';
 
@@ -15,29 +15,66 @@ export function rsiSeries(closes: number[], lastN: number): Array<number | null>
   return out;
 }
 
+/** Aandeel van `calendarDates` waar symbool een dagbar heeft (laatste `lookback` dagen). */
+export function recentBarCoverage(
+  bars: Bar[],
+  calendarDates: string[],
+  lookback = 30,
+): number {
+  if (calendarDates.length === 0) return 0;
+  const slice = calendarDates.slice(-lookback);
+  const have = new Set(bars.map(dateOf));
+  const hit = slice.filter((d) => have.has(d)).length;
+  return hit / slice.length;
+}
+
+function roundTripCostPct(cfg: Pick<M3Config, 'feeBps'>, slippageBps = 2): number {
+  return ((cfg.feeBps ?? 0) + slippageBps) * 2 / 10000;
+}
+
 /**
- * Mean-reversion instap: de RSI zat de afgelopen armDays onder de trigger én vandaag draait de koers
- * (slot boven het slot van gisteren, of de RSI kruist terug boven de trigger). ETF: alleen boven het 200d gemiddelde.
- * Gerangschikt op diepste RSI.
+ * Mean-reversion instap: RSI onder trigger in arm-periode, vandaag draai, voldoende dip vs. kosten,
+ * en voldoende bar-dekking. ETF: alleen boven het 200d gemiddelde.
  */
 export function entryCandidates(
   barsBySymbol: Record<string, Bar[]>,
-  cfg: Pick<M3Config, 'universe' | 'rsiTrigger' | 'armDays' | 'requireTrend' | 'smaDays'>,
+  cfg: Pick<
+    M3Config,
+    | 'universe'
+    | 'rsiTrigger'
+    | 'armDays'
+    | 'requireTrend'
+    | 'smaDays'
+    | 'minDipPct'
+    | 'minRecentBarCoverage'
+    | 'minEdgeCostMultiple'
+    | 'feeBps'
+    | 'hardStopPct'
+  >,
+  calendarDates?: string[],
 ): Entry[] {
   const out: Entry[] = [];
+  const minMove = roundTripCostPct(cfg) * cfg.minEdgeCostMultiple;
   for (const symbol of cfg.universe) {
-    const closes = closesOf(barsBySymbol[symbol] ?? []);
+    const bars = barsBySymbol[symbol] ?? [];
+    const closes = closesOf(bars);
     if (closes.length < Math.max(16, cfg.smaDays) + 1) continue;
-    const series = rsiSeries(closes, cfg.armDays + 1); // [.., gisteren, vandaag]
+    if (calendarDates && recentBarCoverage(bars, calendarDates) < cfg.minRecentBarCoverage) continue;
+    const series = rsiSeries(closes, cfg.armDays + 1);
     const today = series[series.length - 1];
     const yday = series[series.length - 2];
     if (today == null || yday == null) continue;
     const window = series.slice(0, -1).filter((x): x is number => x != null);
-    if (window.length === 0 || Math.min(...window) >= cfg.rsiTrigger) continue; // niet bewapend
+    if (window.length === 0 || Math.min(...window) >= cfg.rsiTrigger) continue;
     const last = closes[closes.length - 1]!;
     const prev = closes[closes.length - 2]!;
     const turned = last > prev || (yday < cfg.rsiTrigger && today >= cfg.rsiTrigger);
     if (!turned) continue;
+    const armSlice = closes.slice(-(cfg.armDays + 5), -1);
+    const peak = armSlice.length ? Math.max(...armSlice) : prev;
+    const dip = peak > 0 ? (peak - Math.min(...armSlice, last)) / peak : 0;
+    if (dip < Math.max(cfg.minDipPct, minMove)) continue;
+    if (dip < cfg.hardStopPct * 0.35) continue;
     if (cfg.requireTrend) {
       const s = sma(closes, cfg.smaDays);
       if (s === null || last <= s) continue;
