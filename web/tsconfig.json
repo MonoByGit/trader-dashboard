@@ -28,7 +28,8 @@
       "@ai-cost/pricing": ["../src/ai-cost/pricing.ts"],
       "@backtest/*": ["../src/backtest/*"],
       "@backtest/engine": ["../src/backtest/engine.ts"],
-      "@backtest/types": ["../src/backtest/types.ts"]
+      "@backtest/types": ["../src/backtest/types.ts"],
+      "@backtest/intraday-brackets": ["../src/backtest/intraday-brackets.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

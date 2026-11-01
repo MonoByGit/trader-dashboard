@@ -10,9 +10,13 @@ export interface DailyBar {
 
 export type FillMode = 'next_open' | 'same_close';
 
+export type BarMode = 'daily' | 'hourly';
+
 export interface BacktestParams {
   initialCapital: number;
   fillMode: FillMode;
+  /** Daily (default) or hourly bars for intraday bracket simulation. */
+  barMode?: BarMode;
   /** Slippage in basis points applied against the trader (buy worse, sell worse). */
   slippageBps: number;
   /** Commission per share (USD). */
@@ -35,6 +39,8 @@ export interface StrategyRulesLike {
 export interface BacktestEngineInput {
   tradingDates: string[]; // YYYY-MM-DD sorted
   barsBySymbol: Record<string, DailyBar[]>;
+  /** When barMode is hourly: raw hourly bars per symbol for bracket walks. */
+  hourlyBarsBySymbol?: Record<string, DailyBar[]>;
   spyBars: DailyBar[];
   vixBars?: DailyBar[];
   symbols: string[];

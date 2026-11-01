@@ -12,10 +12,13 @@ import { openOrAppendThread } from '@/lib/threads';
 import {
   checkOrderAgainstLimits,
   countDailyTrades,
+  getEffectiveGuardConfig,
   logGuardEvent,
   refreshCircuitBreaker,
 } from '@/lib/guards/service';
 import { blocksNewEntries, planEodClose, loadGuardConfig } from '@guards/index';
+import { getActiveStrategyContent } from '@/lib/strategy-versions';
+import type { StrategyContent } from '../../src/strategy/content';
 import {
   checkLessonsForBuy,
   getActiveLessons,
@@ -27,7 +30,13 @@ import { cancelOpenStopTakeProfitForSymbol, isStopFill, isTakeProfitFill } from 
 import { runWeeklyReview } from '@/lib/weekly-review';
 import strategy from '@/strategy.json';
 
-const WATCHLIST = strategy.symbols;
+async function liveStrategy(): Promise<StrategyContent> {
+  try {
+    return await getActiveStrategyContent();
+  } catch {
+    return strategy as StrategyContent;
+  }
+}
 
 // Detect filled stop-loss legs today and ping Telegram once per order.
 // Dedup uses the settings table (key = notified:<orderId>) so midday and eod
@@ -58,10 +67,12 @@ async function notifyStopFills() {
 }
 
 async function runPremarket() {
+  const strat = await liveStrategy();
+  const watchlist = strat.symbols;
   const accountEarly = await alpaca.account();
   await refreshCircuitBreaker(parseFloat(accountEarly.equity));
   const [barsData, account, positions, clock] = await Promise.all([
-    alpaca.bars(WATCHLIST, '1Day', 30),
+    alpaca.bars(watchlist, '1Day', 30),
     alpaca.account(),
     alpaca.positions(),
     alpaca.clock(),
@@ -71,7 +82,7 @@ async function runPremarket() {
   const equity = parseFloat(account.equity);
   const openSymbols = positions.map(p => p.symbol);
 
-  const snapshots = WATCHLIST.map(symbol => {
+  const snapshots = watchlist.map(symbol => {
     const b = bars[symbol] ?? [];
     if (b.length < 5) return null;
     const closes = b.slice(-20).map((x: { c: number }) => x.c);
@@ -92,16 +103,16 @@ async function runPremarket() {
 
   let news = '{}';
   try {
-    const r = await geminiText(MODELS.flash, `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${WATCHLIST.join(',')}: any earnings risks or major negative news TODAY? JSON: {"QQQ":"safe/risky: reason",...}`);
+    const r = await geminiText(MODELS.flash, `Today ${new Date().toISOString().split('T')[0]}. For ETFs ${watchlist.join(',')}: any earnings risks or major negative news TODAY? JSON: {"QQQ":"safe/risky: reason",...}`);
     const m = r.match(/\{[\s\S]*\}/);
     if (m) news = m[0];
   } catch { news = '{}'; }
 
   const decisions = await claudeJson<Record<string, unknown>[]>(
     MODELS.sonnet,
-    `Je bent Momentum. Strategie: ${strategy.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
+    `Je bent Momentum. Strategie: ${strat.name}. Equity: $${equity.toFixed(0)}. Open: ${openSymbols.join(',') || 'geen'}.
 Criteria: trend_above_sma20, momentum_rsi(50-75), volume_above_avg(>1.1), vix_below_limit, no_earnings_risk, news_sentiment.
-Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
+Max ${strat.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
     `Data:\n${JSON.stringify(snapshots)}\nNieuws:\n${news}\nGeef JSON array: [{"symbol":"QQQ","decision":"BUY"|"HOLD"|"NO_GO","criteria":{...pass/fail},"rationale":"2 zinnen","agentNote":"1 zin","confidence":0.0-1.0}]`,
     2048
   );
@@ -114,6 +125,8 @@ Max ${strategy.rules.max_positions} posities. Geen BUY voor al open symbolen.`,
 }
 
 async function runMarketOpen() {
+  const strat = await liveStrategy();
+  const watchlist = strat.symbols;
   const [account, positions, clock] = await Promise.all([
     alpaca.account(),
     alpaca.positions(),
@@ -142,18 +155,18 @@ async function runMarketOpen() {
   const openSymbols = positions.map(p => p.symbol);
   const totalExposure = positions.reduce((s, p) => s + parseFloat(p.market_value), 0);
   const dailyTrades = await countDailyTrades();
-  const config = loadGuardConfig();
+  const config = await getEffectiveGuardConfig();
 
   if (openSymbols.length >= config.maxPositions) {
     return { skipped: true, reason: 'Max positions reached' };
   }
 
-  const barsData = await alpaca.bars(WATCHLIST, '1Day', 30);
+  const barsData = await alpaca.bars(watchlist, '1Day', 30);
   const bars = barsData.bars ?? {};
 
   // Last known prices for server-side position sizing guard
   const lastPrices: Record<string, number> = {};
-  for (const s of WATCHLIST) {
+  for (const s of watchlist) {
     const b = bars[s] ?? [];
     if (b.length > 0) lastPrices[s] = b[b.length - 1].c;
   }
@@ -163,8 +176,8 @@ async function runMarketOpen() {
 
   const candidates = await claudeJson<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }[]>(
     MODELS.sonnet,
-    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strategy.rules.max_positions} posities. Position size: ${strategy.rules.position_size_pct * 100}% equity. Cash floor: ${strategy.rules.cash_floor_pct * 100}%.${lessonSuffix}`,
-    `Bars data:\n${JSON.stringify(Object.fromEntries(WATCHLIST.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
+    `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strat.rules.max_positions} posities. Position size: ${(strat.rules.position_size_pct ?? 0.25) * 100}% equity. Cash floor: ${(strat.rules.cash_floor_pct ?? 0.1) * 100}%.${lessonSuffix}`,
+    `Bars data:\n${JSON.stringify(Object.fromEntries(watchlist.map(s => [s, (bars[s] ?? []).slice(-5)])))}\nGeef JSON array van symbolen om te kopen: [{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]`,
     1024
   );
 
@@ -200,7 +213,7 @@ async function runMarketOpen() {
     const symbolExposure = positions
       .filter(p => p.symbol === c.symbol)
       .reduce((s, p) => s + parseFloat(p.market_value), 0);
-    const limits = checkOrderAgainstLimits({
+    const limits = await checkOrderAgainstLimits({
       equity,
       cash: availableCash,
       openPositionCount: openSymbols.length + orders.length,
@@ -246,8 +259,8 @@ async function runMarketOpen() {
 
     // Broker-enforced hard stop (2%) and take profit (5%) via bracket order.
     // These fire at Alpaca even if no cron runs — the hard stop is never bypassable.
-    const stopPrice = +(lastPrice * (1 - strategy.rules.hard_stop_pct)).toFixed(2);
-    const takeProfitPrice = +(lastPrice * (1 + strategy.rules.take_profit_pct)).toFixed(2);
+    const stopPrice = +(lastPrice * (1 - strat.rules.hard_stop_pct)).toFixed(2);
+    const takeProfitPrice = +(lastPrice * (1 + strat.rules.take_profit_pct)).toFixed(2);
 
     try {
       const order = await alpaca.placeOrder({
@@ -300,6 +313,7 @@ async function runMarketOpen() {
 }
 
 async function runMidday() {
+  const strat = await liveStrategy();
   const account = await alpaca.account();
   await refreshCircuitBreaker(parseFloat(account.equity));
   await notifyStopFills();
@@ -310,7 +324,7 @@ async function runMidday() {
     `Je bent Momentum. Midday check. Geef een korte update (max 2 zinnen per positie) over de status van de stops en of actie nodig is. Schrijf in het Nederlands.`,
     notes.join('\n'), 512);
   for (const p of positions) {
-    await saveDecision({ routine: 'midday', symbol: p.symbol, decision: 'HOLD', rationale: note, agentNote: `Stop: $${(parseFloat(p.current_price) * (1 - strategy.rules.trailing_stop_pct)).toFixed(2)}`, confidence: 0.9 });
+    await saveDecision({ routine: 'midday', symbol: p.symbol, decision: 'HOLD', rationale: note, agentNote: `Stop: $${(parseFloat(p.current_price) * (1 - (strat.rules.trailing_stop_pct ?? 0.03))).toFixed(2)}`, confidence: 0.9 });
   }
   return { routine: 'midday', positions: positions.length, note };
 }

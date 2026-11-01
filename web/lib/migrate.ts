@@ -252,6 +252,44 @@ async function migrate(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_backtest_equity_run ON backtest_equity_points (run_id, seq);
   `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS strategy_versions (
+      id TEXT PRIMARY KEY,
+      version TEXT NOT NULL,
+      content JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      activated_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_versions_status ON strategy_versions (status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS strategy_comparisons (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL REFERENCES strategy_versions(id),
+      active_id TEXT NOT NULL REFERENCES strategy_versions(id),
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      draft_run_id TEXT REFERENCES backtest_runs(id),
+      active_run_id TEXT REFERENCES backtest_runs(id),
+      status TEXT NOT NULL DEFAULT 'queued',
+      summary JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_comparisons_created ON strategy_comparisons (created_at DESC);
+  `);
+
+  await dbRun(`
+    ALTER TABLE lesson_proposals ADD COLUMN IF NOT EXISTS strategy_draft_id TEXT;
+    ALTER TABLE lesson_proposals ADD COLUMN IF NOT EXISTS comparison_id TEXT;
+    ALTER TABLE lesson_proposals ADD COLUMN IF NOT EXISTS rules_patch JSONB;
+  `);
+
+  await dbRun(`
+    INSERT INTO settings (key, value) VALUES ('soft_start_enabled', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
 }
 
 export function ensureSchema(): Promise<void> {

@@ -6,6 +6,7 @@ import { openOrAppendThread } from './threads';
 import { ensureSchema } from './migrate';
 import { spyBuyAndHoldReturn } from './spy-benchmark';
 import { listReports } from './reports';
+import { attachStrategyBacktestToProposal } from './lesson-strategy-loop';
 
 export async function runWeeklyReview() {
   const [account, orders] = await Promise.all([
@@ -119,6 +120,7 @@ Write a comprehensive weekly strategy review with lessons learned and adjustment
       category?: string;
       confidence?: number;
       rationale?: string;
+      rulesPatch?: Record<string, number>;
     } | null>(
       MODELS.opus,
       'Je bent Momentum. Stel HOOGSTENS een concrete, toetsbare les voor die de momentum-strategie zou verbeteren, op basis van de weekreview en de post-mortems. Wees streng: alleen voorstellen als het echt gerechtvaardigd is. Antwoord met JSON {"propose": boolean, "title": string, "description": string, "category": string, "confidence": number, "rationale": string}. Geen em-dashes.',
@@ -142,6 +144,13 @@ Write a comprehensive weekly strategy review with lessons learned and adjustment
         tags: ['#les', '#goedkeuring'],
         body: `Ik wil een nieuwe les voorstellen:\n\n${proposal.title}\n${proposal.description ?? ''}\n\nWaarom: ${proposal.rationale ?? ''}\n\nGoedkeuren maakt dit een actieve regel in mijn strategie. Wil je dit goedkeuren, afwijzen, of er eerst over praten?`,
       }).catch(() => {});
+
+      await attachStrategyBacktestToProposal({
+        proposalId: pid,
+        title: proposal.title,
+        description: proposal.description ?? '',
+        rulesPatch: proposal.rulesPatch as import('../../src/strategy/content').StrategyRulesPatch | undefined,
+      });
     }
   } catch {
     /* lesvoorstel niet kritisch */

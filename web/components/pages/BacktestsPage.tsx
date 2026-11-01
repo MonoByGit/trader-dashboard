@@ -29,6 +29,8 @@ export function BacktestsPage() {
   const [start, setStart] = useState('2025-01-02');
   const [end, setEnd] = useState('2025-06-30');
   const [toast, setToast] = useState<string | null>(null);
+  const [barMode, setBarMode] = useState<'daily' | 'hourly'>('daily');
+  const useLlmSampleDays = 0;
 
   const loadRuns = useCallback(async () => {
     const res = await fetch('/api/backtests');
@@ -87,7 +89,11 @@ export function BacktestsPage() {
     const res = await fetch('/api/backtests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodStart: start, periodEnd: end }),
+      body: JSON.stringify({
+        periodStart: start,
+        periodEnd: end,
+        params: { barMode, useLlmSampleDays: useLlmSampleDays > 0 ? useLlmSampleDays : undefined },
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -119,6 +125,17 @@ export function BacktestsPage() {
         <label>
           <span className="label">Tot</span>
           <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </label>
+        <label>
+          <span className="label">Bars</span>
+          <select value={barMode} onChange={(e) => setBarMode(e.target.value as 'daily' | 'hourly')}>
+            <option value="daily">Daily (default)</option>
+            <option value="hourly">Hourly (1Hour brackets)</option>
+          </select>
+        </label>
+        <label>
+          <span className="label">LLM sample days</span>
+          <input type="number" min={0} max={0} value={useLlmSampleDays} readOnly title="Uit by default" style={{ width: 48 }} />
         </label>
         <button type="button" className="btn primary" onClick={() => void startRun()}>
           Start backtest
