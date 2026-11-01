@@ -25,6 +25,8 @@ describe('crypto bars symbols query (shared with web/lib/alpaca-bars)', () => {
       } as Response;
     });
 
+    const prevKey = process.env.ALPACA_API_KEY;
+    const prevSecret = process.env.ALPACA_SECRET_KEY;
     process.env.ALPACA_API_KEY = 'test-key';
     process.env.ALPACA_SECRET_KEY = 'test-secret';
 
@@ -36,6 +38,10 @@ describe('crypto bars symbols query (shared with web/lib/alpaca-bars)', () => {
       });
     } finally {
       global.fetch = originalFetch;
+      if (prevKey === undefined) delete process.env.ALPACA_API_KEY;
+      else process.env.ALPACA_API_KEY = prevKey;
+      if (prevSecret === undefined) delete process.env.ALPACA_SECRET_KEY;
+      else process.env.ALPACA_SECRET_KEY = prevSecret;
     }
 
     expect(capturedUrls.length).toBeGreaterThan(0);

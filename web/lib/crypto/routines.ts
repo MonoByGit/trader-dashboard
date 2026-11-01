@@ -17,6 +17,8 @@ import { sleevesFromAlpacaLive } from '@/lib/sleeves';
 import { countCryptoBuysTodayUtc, isCryptoModuleEnabled, syncCryptoDayStart } from './state';
 import { enforceSoftwareCryptoStops, placeCryptoStopLimit, saveCryptoStop } from './stops';
 import { getCryptoSymbols } from './strategy-version';
+import { cryptoSymbolExposureUsd, hasCryptoPosition } from '../../../src/crypto/symbol-match';
+import { alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { snapshotFromDailyBars } from '../../../src/indicators/live-snapshot';
 
 const RULES = cryptoStrategy.rules as {
@@ -66,7 +68,8 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
   const bars = barsData.bars ?? {};
 
   for (const p of cryptoPositions) {
-    const b = bars[p.symbol] ?? [];
+    const barKey = symbols.find((w) => alpacaSymbolsEqual(w, p.symbol)) ?? p.symbol;
+    const b = bars[barKey] ?? [];
     const last = b.length ? b[b.length - 1].c : parseFloat(p.current_price);
     await enforceSoftwareCryptoStops(p.symbol, last);
   }
@@ -113,7 +116,13 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
 
   const orders: { symbol: string; qty: number; orderId: string }[] = [];
   for (const c of candidates) {
-    if (c.action !== 'buy' || !symbols.includes(c.symbol) || openSymbols.includes(c.symbol)) continue;
+    if (
+      c.action !== 'buy' ||
+      !symbols.includes(c.symbol) ||
+      hasCryptoPosition(cryptoPositions, c.symbol)
+    ) {
+      continue;
+    }
     if (openSymbols.length + orders.length >= RULES.max_positions) break;
 
     const b = bars[c.symbol] ?? [];
@@ -122,9 +131,7 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     const notional = equity * RULES.position_size_pct;
     const qty = Math.max(0.0001, +(notional / lastPrice).toFixed(4));
 
-    const symbolExposure = cryptoPositions
-      .filter((p) => p.symbol === c.symbol)
-      .reduce((s, p) => s + parseFloat(p.market_value), 0);
+    const symbolExposure = cryptoSymbolExposureUsd(cryptoPositions, c.symbol);
 
     const cryptoLimit = evaluateCryptoLimits(
       {
