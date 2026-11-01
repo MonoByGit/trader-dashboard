@@ -195,35 +195,14 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
     }
 
     const stopPrice = +(lastPrice * (1 - cryptoCfg.hardStopPct)).toFixed(2);
+    let order;
     try {
-      const order = await alpaca.placeOrder({
+      order = await alpaca.placeOrder({
         symbol: c.symbol,
         qty,
         side: 'buy',
         type: 'market',
         time_in_force: 'gtc',
-      });
-      let reportQty = qty;
-      try {
-        const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
-        reportQty = protection.qty;
-      } catch (e) {
-        await saveCryptoStop(c.symbol, stopPrice, qty);
-        await logGuardEvent('crypto_buy_unprotected', String(e), {
-          symbol: c.symbol,
-          orderId: order.id,
-        });
-      }
-      orders.push({ symbol: c.symbol, qty: reportQty, orderId: order.id });
-      await saveDecision({
-        routine: 'crypto-scan',
-        symbol: c.symbol,
-        decision: 'BUY',
-        rationale: c.reason || `Stop ${stopPrice}.`,
-        agentNote: 'Crypto sleeve; stop-limit GTC + tick backup. See docs/crypto-stops.md',
-        confidence: 0.75,
-        orderId: order.id,
-        asset_class: 'crypto',
       });
     } catch (e) {
       await logGuardEvent('crypto_order_fail', String(e), { symbol: c.symbol });
@@ -236,7 +215,31 @@ async function runCryptoScan(): Promise<Record<string, unknown>> {
         confidence: 0,
         asset_class: 'crypto',
       });
+      continue;
     }
+
+    let reportQty = qty;
+    try {
+      const protection = await protectCryptoPositionAfterBuy(c.symbol, order.id, stopPrice);
+      reportQty = protection.qty;
+    } catch (e) {
+      await saveCryptoStop(c.symbol, stopPrice, qty);
+      await logGuardEvent('crypto_buy_unprotected', String(e), {
+        symbol: c.symbol,
+        orderId: order.id,
+      });
+    }
+    orders.push({ symbol: c.symbol, qty: reportQty, orderId: order.id });
+    await saveDecision({
+      routine: 'crypto-scan',
+      symbol: c.symbol,
+      decision: 'BUY',
+      rationale: c.reason || `Stop ${stopPrice}.`,
+      agentNote: 'Crypto sleeve; stop-limit GTC + tick backup. See docs/crypto-stops.md',
+      confidence: 0.75,
+      orderId: order.id,
+      asset_class: 'crypto',
+    });
   }
 
   await syncRecentOrders().catch(() => {});

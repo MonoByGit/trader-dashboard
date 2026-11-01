@@ -2,62 +2,51 @@ import { jest } from '@jest/globals';
 
 const openOrders = jest.fn<() => Promise<{ id: string; symbol: string }[]>>();
 const cancelOrder = jest.fn<() => Promise<unknown>>();
+const getOrder = jest.fn<() => Promise<{ status: string }>>();
 const closePosition = jest.fn<() => Promise<{ ok: true }>>();
 
 await jest.unstable_mockModule('./alpaca', () => ({
   alpaca: {
     openOrders,
     cancelOrder,
+    getOrder,
     closePosition,
   },
 }));
 
-const { closePositionAfterCancelingOrders, ClosePositionOrdersTimeoutError } = await import(
-  './alpaca-position-close'
-);
+const { closePositionAfterCancelingOrders } = await import('./alpaca-position-close');
 
-describe('closePositionAfterCancelingOrders (M-7)', () => {
+describe('closePositionAfterCancelingOrders (M-7 equity)', () => {
   beforeEach(() => {
     openOrders.mockReset();
     cancelOrder.mockReset();
+    getOrder.mockReset();
     closePosition.mockReset();
     closePosition.mockResolvedValue({ ok: true });
+    getOrder.mockResolvedValue({ status: 'canceled' });
   });
 
   it('cancels open orders for the symbol before closing', async () => {
     openOrders
       .mockResolvedValueOnce([
-        { id: 'stop-1', symbol: 'BTCUSD' },
-        { id: 'other', symbol: 'ETHUSD' },
+        { id: 'stop-1', symbol: 'QQQ' },
+        { id: 'other', symbol: 'SPY' },
       ])
       .mockResolvedValue([]);
 
-    await closePositionAfterCancelingOrders('BTC/USD');
+    await closePositionAfterCancelingOrders('QQQ');
 
     expect(cancelOrder).toHaveBeenCalledWith('stop-1');
     expect(cancelOrder).not.toHaveBeenCalledWith('other');
-    expect(closePosition).toHaveBeenCalledWith('BTCUSD');
+    expect(closePosition).toHaveBeenCalledWith('QQQ');
   });
 
   it('throws when a cancel fails without closing', async () => {
-    openOrders.mockResolvedValue([{ id: 'stop-1', symbol: 'BTCUSD' }]);
-    cancelOrder.mockRejectedValue(new Error('422'));
+    openOrders.mockResolvedValue([{ id: 'stop-1', symbol: 'QQQ' }]);
+    cancelOrder.mockRejectedValue(new Error('network'));
+    getOrder.mockResolvedValue({ status: 'accepted' });
 
-    await expect(closePositionAfterCancelingOrders('BTC/USD')).rejects.toThrow(
-      /Failed to cancel orders/,
-    );
-    expect(closePosition).not.toHaveBeenCalled();
-  });
-
-  it('throws a explicit timeout when stops are gone but position may remain open', async () => {
-    openOrders
-      .mockResolvedValueOnce([{ id: 'stop-1', symbol: 'BTCUSD' }])
-      .mockResolvedValue([{ id: 'stop-1', symbol: 'BTCUSD' }]);
-    cancelOrder.mockResolvedValue(undefined);
-
-    await expect(closePositionAfterCancelingOrders('BTC/USD')).rejects.toBeInstanceOf(
-      ClosePositionOrdersTimeoutError,
-    );
+    await expect(closePositionAfterCancelingOrders('QQQ')).rejects.toThrow(/Failed to cancel/);
     expect(closePosition).not.toHaveBeenCalled();
   });
 });

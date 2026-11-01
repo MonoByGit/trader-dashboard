@@ -6,7 +6,7 @@ const logGuardEvent = jest.fn(async () => {});
 await jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => true,
   dbQuery: jest.fn(async (sql: string, params?: unknown[]) => {
-    if (sql.includes('ON CONFLICT') && sql.includes('RETURNING')) {
+    if (sql.includes("INTERVAL '2 minutes'")) {
       const key = params?.[0] as string;
       if (store.has(key)) return [];
       store.set(key, params?.[1] as string);
@@ -175,7 +175,8 @@ describe('enforceSoftwareCryptoStops', () => {
     cancelOrder.mockResolvedValue(undefined);
     getOrder
       .mockResolvedValueOnce({ status: 'pending_cancel', filled_qty: '0' })
-      .mockResolvedValueOnce({ status: 'canceled', filled_qty: '0' });
+      .mockResolvedValueOnce({ status: 'canceled', filled_qty: '0' })
+      .mockResolvedValue({ status: 'filled', filled_qty: '0.008' });
     positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.01', qty_available: '0.008' }]);
 
     const result = await enforceSoftwareCryptoStops('BTCUSD', 89_000);

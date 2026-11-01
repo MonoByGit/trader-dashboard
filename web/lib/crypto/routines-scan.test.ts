@@ -96,6 +96,21 @@ describe('runCryptoSoftwareStopsForPositions (M-6)', () => {
     );
     expect(enforceSoftwareCryptoStops).toHaveBeenCalledWith('BTCUSD', 89_000);
   });
+
+  it('logs crypto_software_stop_tick_fail when enforce throws', async () => {
+    const logGuardEvent = (await import('@/lib/guards/service')).logGuardEvent as jest.Mock;
+    enforceSoftwareCryptoStops.mockRejectedValueOnce(new Error('tick boom'));
+    await runCryptoSoftwareStopsForPositions(
+      [{ symbol: 'BTCUSD', current_price: '90000' } as never],
+      { 'BTC/USD': [{ c: 89_000, v: 1 }] },
+      ['BTC/USD'],
+    );
+    expect(logGuardEvent).toHaveBeenCalledWith(
+      'crypto_software_stop_tick_fail',
+      'Error: tick boom',
+      expect.objectContaining({ symbol: 'BTCUSD' }),
+    );
+  });
 });
 
 describe('crypto-scan stop order (M-6 integration)', () => {

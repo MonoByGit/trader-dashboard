@@ -1,23 +1,36 @@
 import { jest } from '@jest/globals';
 
 const store = new Map<string, string>();
+const lockRows = new Map<string, { owner: string; updatedAt: number }>();
 const logGuardEvent = jest.fn(async () => {});
 
 await jest.unstable_mockModule('@/lib/db', () => ({
   hasDb: () => true,
   dbQuery: jest.fn(async (sql: string, params?: unknown[]) => {
-    if (sql.includes('INSERT INTO settings') && sql.includes('ON CONFLICT')) {
+    if (sql.includes("INTERVAL '2 minutes'")) {
       const key = params?.[0] as string;
-      if (store.has(key)) return [];
-      store.set(key, params?.[1] as string);
+      const owner = params?.[1] as string;
+      const now = Date.now();
+      const existing = lockRows.get(key);
+      if (!existing) {
+        lockRows.set(key, { owner, updatedAt: now });
+        return [{ key }];
+      }
+      if (now - existing.updatedAt < 2 * 60 * 1000) return [];
+      lockRows.set(key, { owner, updatedAt: now });
       return [{ key }];
     }
     const key = params?.[0] as string;
     const val = store.get(key);
     return val !== undefined ? [{ value: val, key }] : [];
   }),
-  dbRun: jest.fn(async (_sql: string, params?: unknown[]) => {
+  dbRun: jest.fn(async (sql: string, params?: unknown[]) => {
     const key = params?.[0] as string;
+    if (sql.includes('AND value')) {
+      const owner = params?.[1] as string;
+      if (lockRows.get(key)?.owner === owner) lockRows.delete(key);
+      return;
+    }
     store.delete(key);
   }),
 }));
@@ -49,10 +62,13 @@ await jest.unstable_mockModule('@/lib/alpaca', () => ({
 }));
 
 const { exitCryptoPosition } = await import('./exit-crypto-position');
+const { clearInProcessExitLocksForTests } = await import('./exit-lock');
 
 describe('exitCryptoPosition', () => {
   beforeEach(() => {
     store.clear();
+    lockRows.clear();
+    clearInProcessExitLocksForTests();
     openOrders.mockReset();
     cancelOrder.mockReset();
     getOrder.mockReset();
@@ -69,6 +85,7 @@ describe('exitCryptoPosition', () => {
     store.set('crypto_stop:BTC/USD', 'legacy');
     openOrders.mockResolvedValue([]);
     positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.01', qty_available: '0.01' }]);
+    getOrder.mockResolvedValue({ status: 'filled' });
 
     const result = await exitCryptoPosition('BTC/USD', 'software_stop');
 
@@ -116,14 +133,20 @@ describe('exitCryptoPosition', () => {
     cancelOrder.mockImplementation(async () => {
       await gate;
     });
+    getOrder.mockResolvedValue({ status: 'canceled' });
     positions.mockResolvedValue([{ symbol: 'BTCUSD', qty: '0.01', qty_available: '0.01' }]);
 
     const first = exitCryptoPosition('BTCUSD', 'software_stop');
     const second = await exitCryptoPosition('BTCUSD', 'take_profit');
 
     expect(second).toEqual({ exited: false, skippedReason: 'locked' });
-    expect(placeOrder).not.toHaveBeenCalled();
+    expect(logGuardEvent).toHaveBeenCalledWith(
+      'crypto_exit_locked',
+      expect.any(String),
+      expect.objectContaining({ symbol: 'BTCUSD' }),
+    );
     unblock();
+    getOrder.mockResolvedValue({ status: 'filled' });
     await first;
   });
 });
