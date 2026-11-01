@@ -117,4 +117,5 @@ describe('backtest engine', () => {
     expect(result.equityCurve).toHaveLength(3);
     expect(result.equityCurve[2]!.spyEquity).toBeGreaterThan(result.equityCurve[0]!.spyEquity);
   });
+
 });

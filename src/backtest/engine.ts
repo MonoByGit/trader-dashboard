@@ -4,6 +4,8 @@ import { evaluatePortfolioLimits } from '../guards/portfolio-limits';
 import { blocksNewEntries } from '../guards/routine-gates';
 import { evaluateEntryRules } from './entry-rules';
 import { firstBracketHit, hourlyBarsForTradingDate } from './intraday-brackets';
+import { barOnOrBefore } from './bar-align';
+import { rollBacktestSessionGuards } from './session-guards';
 import { barIndexByDate, barTradingDate, snapshotAtIndex } from './indicators';
 import { vixyStressRatio } from '../volatility/vixy-stress';
 import { computeMetrics } from './metrics';
@@ -77,10 +79,11 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
 
   let spyShares = 0;
   let spyCash = params.initialCapital;
-  const firstSpy = getBar(spyBars, tradingDates[0]!);
-  if (firstSpy && firstSpy.o > 0) {
-    spyShares = Math.floor(spyCash / firstSpy.o);
-    spyCash -= spyShares * firstSpy.o;
+  const firstSpy = barOnOrBefore(spyBars, tradingDates[0]!) ?? spyBars[0];
+  const firstSpyOpen = firstSpy?.o ?? firstSpy?.c;
+  if (firstSpyOpen != null && firstSpyOpen > 0) {
+    spyShares = Math.floor(spyCash / firstSpyOpen);
+    spyCash -= spyShares * firstSpyOpen;
   }
 
   let pending: PendingEntry[] = [];
@@ -124,8 +127,15 @@ export function runBacktest(input: BacktestEngineInput): BacktestEngineResult {
 
   for (let di = 0; di < tradingDates.length; di++) {
     const date = tradingDates[di]!;
-    if (di === 0 || tradingDates[di - 1] !== date) {
+    const prevDate = di > 0 ? tradingDates[di - 1]! : null;
+    if (di === 0 || prevDate !== date) {
       dailyTrades = 0;
+    }
+    const sessionRoll = rollBacktestSessionGuards(prevDate, date, { dayStartEquity });
+    if (sessionRoll) {
+      consecutiveLosses = sessionRoll.consecutiveLosses ?? consecutiveLosses;
+      circuitBreakerTripped = sessionRoll.circuitBreakerTripped ?? circuitBreakerTripped;
+      sessionPeakEquity = sessionRoll.sessionPeakEquity ?? sessionPeakEquity;
     }
 
     // 1) Fill pending entries at today's open (signals from prior closes only)
