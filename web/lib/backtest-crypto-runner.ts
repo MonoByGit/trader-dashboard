@@ -1,6 +1,7 @@
 import cryptoStrategy from '@/crypto-strategy.json';
 import { dailyBarsFromHourly } from '@/lib/backtest-bars';
 import { fetchCryptoDailyBars, cryptoTradingDates } from '@/lib/backtest-crypto-bars';
+import { alignBenchmarkBarsToTradingDates } from '@backtest/bar-align';
 import { runBacktest } from '@backtest/engine';
 import type { BacktestParams, StrategyRulesLike } from '@backtest/types';
 import { DEFAULT_BACKTEST_PARAMS } from '@/lib/backtest-runner';
@@ -24,21 +25,21 @@ export async function executeCryptoBacktest(input: {
 
   let hourlyBarsBySymbol: Record<string, import('@backtest/types').DailyBar[]> | undefined;
   let barsBySymbol: Record<string, import('@backtest/types').DailyBar[]>;
+  const fetchSymbols = Array.from(new Set([...symbols, 'BTC/USD']));
   if (params.barMode === 'hourly') {
     hourlyBarsBySymbol = await fetchCryptoDailyBars(
-      [...symbols, 'BTC/USD'],
+      fetchSymbols,
       periodStart,
       periodEnd,
       '1Hour',
     );
     barsBySymbol = dailyBarsFromHourly(hourlyBarsBySymbol);
-    delete hourlyBarsBySymbol['BTC/USD'];
   } else {
-    barsBySymbol = await fetchCryptoDailyBars([...symbols, 'BTC/USD'], periodStart, periodEnd);
+    barsBySymbol = await fetchCryptoDailyBars(fetchSymbols, periodStart, periodEnd);
   }
 
-  const btcBars = barsBySymbol['BTC/USD'] ?? [];
-  delete barsBySymbol['BTC/USD'];
+  const rawBtc = barsBySymbol['BTC/USD'] ?? [];
+  const btcBars = alignBenchmarkBarsToTradingDates(tradingDates, rawBtc);
 
   return runBacktest({
     tradingDates,

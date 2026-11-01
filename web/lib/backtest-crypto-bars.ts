@@ -17,7 +17,8 @@ export async function fetchCryptoDailyBars(
   const raw = await fetchCryptoBars({ symbols, start: startYmd, end: endYmd, timeframe });
   const out: Record<string, DailyBar[]> = {};
   for (const sym of symbols) {
-    out[sym] = (raw[sym] ?? []).map(toDailyBar);
+    const compact = sym.replace('/', '');
+    out[sym] = (raw[sym] ?? raw[compact] ?? []).map(toDailyBar);
   }
   return out;
 }

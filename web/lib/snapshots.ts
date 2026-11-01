@@ -1,3 +1,4 @@
+import { baselineFromSnapshotRow } from '@snapshots/baseline';
 import { computeSnapshotSeries } from '@snapshots/returns';
 import { tradingDateEt } from '@scheduler/decide';
 import { filterByAssetClass } from '@/lib/asset-class';
@@ -69,19 +70,25 @@ export interface DailySnapshot {
 
 async function getBaseline(): Promise<{ equity: number; spyClose: number | null; btcClose: number | null }> {
   const rows = await dbQuery<{
+    equity: string;
     baseline_equity: string;
     baseline_spy_close: string | null;
     sleeves: { etf?: { baselineEquityUsd?: number }; crypto?: { baselineEquityUsd?: number; baselineBenchmarkClose?: number } } | null;
   }>(
-    `SELECT baseline_equity, baseline_spy_close, sleeves FROM daily_snapshots ORDER BY trading_date ASC LIMIT 1`,
+    `SELECT equity, baseline_equity, baseline_spy_close, sleeves
+     FROM daily_snapshots
+     WHERE equity > 0
+     ORDER BY trading_date ASC
+     LIMIT 1`,
   );
   if (rows.length) {
-    const s = rows[0].sleeves;
-    return {
-      equity: parseFloat(rows[0].baseline_equity),
-      spyClose: rows[0].baseline_spy_close != null ? parseFloat(rows[0].baseline_spy_close) : null,
-      btcClose: s?.crypto?.baselineBenchmarkClose ?? null,
-    };
+    return baselineFromSnapshotRow({
+      equity: parseFloat(rows[0].equity),
+      baseline_equity: parseFloat(rows[0].baseline_equity),
+      baseline_spy_close:
+        rows[0].baseline_spy_close != null ? parseFloat(rows[0].baseline_spy_close) : null,
+      sleeves: rows[0].sleeves,
+    });
   }
   const configured = process.env.SNAPSHOT_BASELINE_EQUITY;
   if (configured) {
@@ -357,6 +364,7 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
   const rangeStart = inputs[0]!.tradingDate;
   const rangeEnd = inputs[inputs.length - 1]!.tradingDate;
   const spyBars = await fetchSpyBarsForRange(rangeStart, rangeEnd);
+  const btcBars = await fetchBtcBarsForRange(rangeStart, rangeEnd);
 
   for (const row of inputs) {
     row.spyClose = closeForDate(row.tradingDate, spyBars);
@@ -368,16 +376,18 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
   const computed = computeSnapshotSeries(inputs, baselineEquity, baselineSpy);
 
   for (const row of computed) {
+    const btcClose = closeForDate(row.tradingDate, btcBars);
     await dbRun(
       `INSERT INTO daily_snapshots (
-        trading_date, equity, cash, positions, spy_close,
+        trading_date, equity, cash, positions, spy_close, btc_close,
         momentum_daily_return_pct, spy_daily_return_pct,
         momentum_cumulative_return_pct, spy_cumulative_return_pct,
         baseline_equity, baseline_spy_close, updated_at
-      ) VALUES ($1,$2,0,'[]'::jsonb,$3,$4,$5,$6,$7,$8,$9,NOW())
+      ) VALUES ($1,$2,0,'[]'::jsonb,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
       ON CONFLICT (trading_date) DO UPDATE SET
         equity = EXCLUDED.equity,
         spy_close = EXCLUDED.spy_close,
+        btc_close = EXCLUDED.btc_close,
         momentum_daily_return_pct = EXCLUDED.momentum_daily_return_pct,
         spy_daily_return_pct = EXCLUDED.spy_daily_return_pct,
         momentum_cumulative_return_pct = EXCLUDED.momentum_cumulative_return_pct,
@@ -389,6 +399,7 @@ export async function backfillSnapshotsFromAlpaca(opts?: {
         row.tradingDate,
         row.equity,
         row.spyClose,
+        btcClose,
         row.momentumDailyReturnPct,
         row.spyDailyReturnPct,
         row.momentumCumulativeReturnPct,
