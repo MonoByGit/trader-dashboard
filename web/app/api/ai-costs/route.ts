@@ -3,6 +3,9 @@ import { dbQuery, hasDb } from '@/lib/db';
 import { ensureSchema } from '@/lib/migrate';
 import { sumAiCostTodayEt } from '@/lib/ai-calls';
 
+const CALL_COLUMNS = `id, ts, routine, provider, model, input_tokens, output_tokens,
+  finish_reason, cost_usd::float8 AS cost_usd, asset_class, decision_id`;
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const group = searchParams.get('group') ?? 'day';
@@ -11,13 +14,21 @@ export async function GET(req: Request) {
   const assetClass = searchParams.get('asset_class');
 
   if (!hasDb()) {
-    return NextResponse.json({ todayUsd: 0, rows: [] });
+    return NextResponse.json({
+      todayUsd: 0,
+      todayByClass: { etf: 0, crypto: 0 },
+      weekUsd: 0,
+      weekByClass: { etf: 0, crypto: 0 },
+      rows: [],
+      byDay: [],
+      byWeek: [],
+    });
   }
   await ensureSchema();
 
   if (decisionId) {
     const rows = await dbQuery(
-      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, decision_id
+      `SELECT ${CALL_COLUMNS}
        FROM ai_calls WHERE decision_id = $1 ORDER BY ts DESC`,
       [decisionId],
     );
@@ -26,22 +37,48 @@ export async function GET(req: Request) {
 
   const todayUsd = await sumAiCostTodayEt();
 
+  const todayByClassRows = await dbQuery<{ asset_class: string; cost_usd: number }>(
+    `SELECT COALESCE(asset_class, 'etf') AS asset_class, SUM(cost_usd)::float8 AS cost_usd
+     FROM ai_calls
+     WHERE (ts AT TIME ZONE 'America/New_York')::date = (NOW() AT TIME ZONE 'America/New_York')::date
+     GROUP BY COALESCE(asset_class, 'etf')`,
+  );
+  const todayByClass = { etf: 0, crypto: 0 };
+  for (const r of todayByClassRows) {
+    if (r.asset_class === 'crypto') todayByClass.crypto = r.cost_usd;
+    else todayByClass.etf = r.cost_usd;
+  }
+
+  const weekByClassRows = await dbQuery<{ asset_class: string; cost_usd: number }>(
+    `SELECT COALESCE(asset_class, 'etf') AS asset_class, SUM(cost_usd)::float8 AS cost_usd
+     FROM ai_calls
+     WHERE ts >= date_trunc('week', NOW() AT TIME ZONE 'America/New_York') AT TIME ZONE 'America/New_York'
+     GROUP BY COALESCE(asset_class, 'etf')`,
+  );
+  const weekByClass = { etf: 0, crypto: 0 };
+  let weekUsd = 0;
+  for (const r of weekByClassRows) {
+    weekUsd += r.cost_usd;
+    if (r.asset_class === 'crypto') weekByClass.crypto = r.cost_usd;
+    else weekByClass.etf = r.cost_usd;
+  }
+
   if (assetClass === 'etf' || assetClass === 'crypto') {
     const rows = await dbQuery(
-      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, asset_class
+      `SELECT ${CALL_COLUMNS}
        FROM ai_calls WHERE asset_class = $1 ORDER BY ts DESC LIMIT 200`,
       [assetClass],
     );
-    return NextResponse.json({ todayUsd, rows });
+    return NextResponse.json({ todayUsd, todayByClass, weekUsd, weekByClass, rows });
   }
 
   if (routine) {
     const rows = await dbQuery(
-      `SELECT id, ts, routine, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, asset_class
+      `SELECT ${CALL_COLUMNS}
        FROM ai_calls WHERE routine = $1 ORDER BY ts DESC LIMIT 200`,
       [routine],
     );
-    return NextResponse.json({ todayUsd, rows });
+    return NextResponse.json({ todayUsd, todayByClass, weekUsd, weekByClass, rows });
   }
 
   if (group === 'routine') {
@@ -51,12 +88,75 @@ export async function GET(req: Request) {
        WHERE (ts AT TIME ZONE 'America/New_York')::date = (NOW() AT TIME ZONE 'America/New_York')::date
        GROUP BY routine ORDER BY cost_usd DESC`,
     );
-    return NextResponse.json({ todayUsd, byRoutine: rows });
+    return NextResponse.json({ todayUsd, todayByClass, weekUsd, weekByClass, byRoutine: rows });
+  }
+
+  if (group === 'week') {
+    const byWeek = await dbQuery(
+      `SELECT date_trunc('week', ts AT TIME ZONE 'America/New_York')::date AS week_start,
+              COALESCE(asset_class, 'etf') AS asset_class,
+              SUM(cost_usd)::float8 AS cost_usd
+       FROM ai_calls
+       GROUP BY 1, 2
+       ORDER BY week_start DESC
+       LIMIT 104`,
+    );
+    return NextResponse.json({ todayUsd, todayByClass, weekUsd, weekByClass, byWeek });
   }
 
   const rows = await dbQuery(
-    `SELECT (ts AT TIME ZONE 'America/New_York')::date AS day, SUM(cost_usd)::float8 AS cost_usd
-     FROM ai_calls GROUP BY day ORDER BY day DESC LIMIT 90`,
+    `SELECT ${CALL_COLUMNS}
+     FROM ai_calls ORDER BY ts DESC LIMIT 200`,
   );
-  return NextResponse.json({ todayUsd, byDay: rows });
+
+  const byDayRaw = await dbQuery<{ day: string; asset_class: string; cost_usd: number }>(
+    `SELECT (ts AT TIME ZONE 'America/New_York')::date AS day,
+            COALESCE(asset_class, 'etf') AS asset_class,
+            SUM(cost_usd)::float8 AS cost_usd
+     FROM ai_calls
+     GROUP BY day, COALESCE(asset_class, 'etf')
+     ORDER BY day DESC
+     LIMIT 180`,
+  );
+
+  const dayMap = new Map<string, { day: string; etf_usd: number; crypto_usd: number; cost_usd: number }>();
+  for (const r of byDayRaw) {
+    const key = r.day;
+    const entry = dayMap.get(key) ?? { day: key, etf_usd: 0, crypto_usd: 0, cost_usd: 0 };
+    if (r.asset_class === 'crypto') entry.crypto_usd += r.cost_usd;
+    else entry.etf_usd += r.cost_usd;
+    entry.cost_usd += r.cost_usd;
+    dayMap.set(key, entry);
+  }
+  const byDay = Array.from(dayMap.values()).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 90);
+
+  const weekMap = new Map<string, { week_start: string; etf_usd: number; crypto_usd: number; cost_usd: number }>();
+  const byWeekRaw = await dbQuery<{ week_start: string; asset_class: string; cost_usd: number }>(
+    `SELECT date_trunc('week', ts AT TIME ZONE 'America/New_York')::date AS week_start,
+            COALESCE(asset_class, 'etf') AS asset_class,
+            SUM(cost_usd)::float8 AS cost_usd
+     FROM ai_calls
+     GROUP BY 1, 2
+     ORDER BY week_start DESC
+     LIMIT 104`,
+  );
+  for (const r of byWeekRaw) {
+    const key = r.week_start;
+    const entry = weekMap.get(key) ?? { week_start: key, etf_usd: 0, crypto_usd: 0, cost_usd: 0 };
+    if (r.asset_class === 'crypto') entry.crypto_usd += r.cost_usd;
+    else entry.etf_usd += r.cost_usd;
+    entry.cost_usd += r.cost_usd;
+    weekMap.set(key, entry);
+  }
+  const byWeek = Array.from(weekMap.values()).sort((a, b) => b.week_start.localeCompare(a.week_start));
+
+  return NextResponse.json({
+    todayUsd,
+    todayByClass,
+    weekUsd,
+    weekByClass,
+    rows,
+    byDay,
+    byWeek,
+  });
 }

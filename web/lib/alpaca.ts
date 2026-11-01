@@ -3,8 +3,15 @@ import {
   fetchCryptoBars,
   fetchStockDailyBars,
 } from './alpaca-bars';
+import {
+  assertAlpacaPaperTrading,
+  alpacaTradingBaseUrl,
+} from '../../src/alpaca/paper-host';
+import { logAlpacaModeAtStartup } from './alpaca-startup';
 
-const BASE = process.env.ALPACA_BASE_URL ?? 'https://paper-api.alpaca.markets';
+logAlpacaModeAtStartup();
+
+const BASE = alpacaTradingBaseUrl();
 const DATA = 'https://data.alpaca.markets';
 
 function headers() {
@@ -21,13 +28,15 @@ async function get<T>(url: string): Promise<T> {
   return res.json();
 }
 
-async function post<T>(url: string, body: unknown): Promise<T> {
+async function post<T>(url: string, body: unknown, options?: { trading?: boolean }): Promise<T> {
+  if (options?.trading) assertAlpacaPaperTrading(BASE);
   const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`Alpaca POST ${url}: ${res.status} ${await res.text()}`);
   return res.json();
 }
 
-async function del<T>(url: string): Promise<T> {
+async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> {
+  if (options?.trading) assertAlpacaPaperTrading(BASE);
   const res = await fetch(url, { method: 'DELETE', headers: headers() });
   if (!res.ok) throw new Error(`Alpaca DELETE ${url}: ${res.status} ${await res.text()}`);
   return res.json();
@@ -36,12 +45,14 @@ async function del<T>(url: string): Promise<T> {
 export const alpaca = {
   account: () => get<AlpacaAccount>(`${BASE}/v2/account`),
   positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`),
-  closePosition: (symbol: string) => del<unknown>(`${BASE}/v2/positions/${symbol}`),
-  cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`),
+  closePosition: (symbol: string) =>
+    del<unknown>(`${BASE}/v2/positions/${symbol}`, { trading: true }),
+  cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`, { trading: true }),
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
   openOrders: (limit = 100) =>
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
-  placeOrder: (o: AlpacaOrderRequest) => post<AlpacaOrder>(`${BASE}/v2/orders`, o),
+  placeOrder: (o: AlpacaOrderRequest) =>
+    post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
   bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {
     const bars = await fetchStockDailyBars({

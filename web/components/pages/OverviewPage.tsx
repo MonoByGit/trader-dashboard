@@ -242,7 +242,7 @@ export function OverviewPage({
         <div className="kpi">
           <div className="kpi-label"><Icon name="zap" size={12}/> AI-kosten vandaag</div>
           <div className="kpi-value">{aiCostToday === null ? '…' : fmt.usd(aiCostToday, 2)}</div>
-          <div className="kpi-delta neutral">LLM · paper routines</div>
+          <div className="kpi-delta neutral">LLM · paper routines · tab AI-kosten</div>
         </div>
       </div>
 

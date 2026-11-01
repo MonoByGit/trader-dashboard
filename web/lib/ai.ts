@@ -5,8 +5,10 @@ import {
   AiJsonParseError,
   completeJsonWithRetries,
   jsonMaxTokensFromEnv,
+  unwrapJsonArray,
   type JsonCompletion,
 } from '@ai/json-response';
+import { safeNewsJsonFromText } from '../../src/ai/news-json';
 
 export { AiJsonParseError };
 
@@ -151,11 +153,16 @@ async function geminiGenerate(
   prompt: string,
   maxTokens: number,
   json = false,
+  options?: { disableThinking?: boolean },
 ): Promise<JsonCompletion> {
   const m = genai.getGenerativeModel({
     model,
     ...(system ? { systemInstruction: system } : {}),
-    generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
+    generationConfig: {
+      maxOutputTokens: maxTokens,
+      ...(json ? { responseMimeType: 'application/json' } : {}),
+      ...(options?.disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    },
   });
   const result = await m.generateContent(prompt);
   const text = result.response.text();
@@ -250,6 +257,39 @@ export async function agentText(system: string, user: string, maxTokens = 2048, 
   return generateText(system, user, maxTokens, tier);
 }
 
+export async function agentJsonArray<T>(
+  system: string,
+  user: string,
+  maxTokens?: number,
+  tier: Tier = 'fast',
+): Promise<T[]> {
+  const tokenBudget = resolveJsonMaxTokens(maxTokens);
+  const jsonSystem = system.includes('JSON')
+    ? system
+    : `${system}\n\nAntwoord uitsluitend met geldig JSON (geen markdown of uitleg erbuiten).`;
+
+  const { value } = await completeJsonWithRetries<T[]>(
+    (_attempt, tokens) => generateJsonCompletion(jsonSystem, user, tokens, tier),
+    {
+      maxTokens: tokenBudget,
+      maxRetries: 2,
+      normalize: (parsed) => unwrapJsonArray(parsed) ?? parsed,
+      validate: (parsed) => Array.isArray(parsed),
+      onAttempt: (info) => {
+        if (info.error) {
+          console.warn('[agentJsonArray] retry', {
+            provider: activeProvider(),
+            attempt: info.attempt,
+            finishReason: info.finishReason,
+            error: info.error,
+          });
+        }
+      },
+    },
+  );
+  return value;
+}
+
 export async function agentJson<T>(
   system: string,
   user: string,
@@ -298,10 +338,33 @@ export function claudeJson<T>(model: string, system: string, user: string, maxTo
   return agentJson<T>(system, user, maxTokens, tierFromLegacyModel(model));
 }
 
+export function claudeJsonArray<T>(
+  model: string,
+  system: string,
+  user: string,
+  maxTokens?: number,
+): Promise<T[]> {
+  return agentJsonArray<T>(system, user, maxTokens, tierFromLegacyModel(model));
+}
+
+export { safeNewsJsonFromText };
+
+async function geminiNewsText(model: string, prompt: string, maxTokens: number): Promise<string> {
+  const tierModel = modelForTier(tierFromLegacyModel(model));
+  const { text, finishReason } = await geminiGenerate(tierModel, '', prompt, maxTokens, false, {
+    disableThinking: true,
+  });
+  const news = safeNewsJsonFromText(text, finishReason);
+  if (news === '{}' && finishReason && finishReason !== 'STOP') {
+    console.warn('[geminiText] news fallback empty', { finishReason });
+  }
+  return news;
+}
+
 export function claudeText(model: string, system: string, user: string, maxTokens = 2048): Promise<string> {
   return agentText(system, user, maxTokens, tierFromLegacyModel(model));
 }
 
-export function geminiText(model: string, prompt: string): Promise<string> {
-  return agentText('', prompt, 1024, tierFromLegacyModel(model));
+export function geminiText(model: string, prompt: string, maxTokens = 2048): Promise<string> {
+  return geminiNewsText(model, prompt, maxTokens);
 }

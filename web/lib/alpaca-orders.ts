@@ -1,6 +1,7 @@
+import { assertAlpacaPaperTrading, alpacaTradingBaseUrl } from '../../src/alpaca/paper-host';
 import { alpaca, AlpacaOrder } from './alpaca';
 
-const BASE = process.env.ALPACA_BASE_URL ?? 'https://paper-api.alpaca.markets';
+const BASE = alpacaTradingBaseUrl();
 
 function headers() {
   return {
@@ -21,6 +22,7 @@ export async function cancelOpenStopTakeProfitForSymbol(symbol: string): Promise
     const isLeg = o.type === 'stop' || o.type === 'stop_limit' || o.type === 'limit';
     if (!isLeg) continue;
     try {
+      assertAlpacaPaperTrading(BASE);
       const res = await fetch(`${BASE}/v2/orders/${o.id}`, { method: 'DELETE', headers: headers() });
       if (res.ok) cancelled += 1;
     } catch {

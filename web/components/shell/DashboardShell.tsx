@@ -23,6 +23,7 @@ import { ReportsPage } from '@/components/pages/ReportsPage';
 import { HistoryPage } from '@/components/pages/HistoryPage';
 import { BacktestsPage } from '@/components/pages/BacktestsPage';
 import { CryptoPage } from '@/components/pages/CryptoPage';
+import { AiCostsPage } from '@/components/pages/AiCostsPage';
 
 const PAGES = [
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
@@ -35,6 +36,7 @@ const PAGES = [
   { id: 'strategy', label: 'Strategy', icon: 'strategy' },
   { id: 'lessons', label: 'Lessons', icon: 'sparkle' },
   { id: 'reports', label: 'Reports', icon: 'logs' },
+  { id: 'ai-costs', label: 'AI-kosten', icon: 'zap' },
   { id: 'history', label: 'History', icon: 'history' },
   { id: 'backtests', label: 'Backtests', icon: 'history' },
 ] as const;
@@ -293,6 +295,7 @@ export function DashboardShell() {
       case 'strategy': return <StrategyPage/>;
       case 'lessons': return <LessonsPage/>;
       case 'reports': return <ReportsPage/>;
+      case 'ai-costs': return <AiCostsPage/>;
       case 'history': return <HistoryPage/>;
       case 'backtests': return <BacktestsPage/>;
       default: return null;
