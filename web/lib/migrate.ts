@@ -209,6 +209,49 @@ async function migrate(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_alpaca_orders_submitted ON alpaca_orders (submitted_at DESC);
   `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS backtest_runs (
+      id TEXT PRIMARY KEY,
+      strategy_version TEXT NOT NULL,
+      params JSONB NOT NULL DEFAULT '{}'::jsonb,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      metrics JSONB,
+      error_message TEXT,
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_backtest_runs_created ON backtest_runs (created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS backtest_trades (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES backtest_runs(id) ON DELETE CASCADE,
+      trade_date DATE NOT NULL,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      qty NUMERIC NOT NULL,
+      price NUMERIC NOT NULL,
+      reason TEXT,
+      pnl NUMERIC,
+      seq INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_backtest_trades_run ON backtest_trades (run_id, seq);
+
+    CREATE TABLE IF NOT EXISTS backtest_equity_points (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES backtest_runs(id) ON DELETE CASCADE,
+      point_date DATE NOT NULL,
+      equity NUMERIC NOT NULL,
+      cash NUMERIC NOT NULL,
+      exposure NUMERIC NOT NULL,
+      spy_equity NUMERIC NOT NULL,
+      seq INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_backtest_equity_run ON backtest_equity_points (run_id, seq);
+  `);
 }
 
 export function ensureSchema(): Promise<void> {
