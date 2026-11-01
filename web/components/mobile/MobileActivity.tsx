@@ -41,7 +41,11 @@ export function MobileActivity({ decisions, onOpenDecision }: {
         ))}
       </div>
       {list.length === 0 ? (
-        <div className="m-empty">Geen beslissingen in deze filter.</div>
+        <div className="m-empty">
+          {decisions.length === 0
+            ? 'Nog geen data. Beslissingen verschijnen na de eerste cron-routines.'
+            : 'Geen beslissingen in deze filter.'}
+        </div>
       ) : (
         list.map(d => (
           <button key={d.id} className="m-row" onClick={() => onOpenDecision(d)}>

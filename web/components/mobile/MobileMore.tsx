@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '@/lib/format';
-import { MOCK, type Position } from '@/lib/mock';
+import type { Position } from '@/lib/mock';
+import { TRADER_ROUTINES } from '@/lib/routines-config';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { MobilePositions } from './MobilePositions';
@@ -24,8 +25,8 @@ const TILES: { id: SubView; icon: Parameters<typeof Icon>[0]['name']; title: str
   { id: 'history', icon: 'history', title: 'Historie', desc: 'Gesloten posities' },
 ];
 
-export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy, positions, onOpenPosition }: {
-  guards: Guards; onToggleKill: () => void; dummy: boolean; onToggleDummy: () => void;
+export function MobileMore({ guards, onToggleKill, positions, onOpenPosition }: {
+  guards: Guards; onToggleKill: () => void;
   positions: Position[]; onOpenPosition: (p: Position) => void;
 }) {
   const [view, setView] = useState<SubView | null>(null);
@@ -36,14 +37,14 @@ export function MobileMore({ guards, onToggleKill, dummy, onToggleDummy, positio
 
   return (
     <>
-      <button className="m-row" onClick={onToggleDummy}>
-        <span style={{ color: dummy ? 'var(--warn)' : 'var(--pos)', display: 'flex' }}><Icon name="wifi" size={18} /></span>
+      <div className="m-row" style={{ cursor: 'default' }}>
+        <span style={{ color: 'var(--pos)', display: 'flex' }}><Icon name="wifi" size={18} /></span>
         <div className="m-row-main">
           <div style={{ fontSize: 13, fontWeight: 600 }}>Databron</div>
-          <div className="m-row-sub">{dummy ? 'Dummy data (demo) · tik voor live' : 'Live · Alpaca paper · tik voor demo'}</div>
+          <div className="m-row-sub">Live · Alpaca paper</div>
         </div>
-        <Pill kind={dummy ? 'warn' : 'pos'} dot>{dummy ? 'DEMO' : 'LIVE'}</Pill>
-      </button>
+        <Pill kind="pos" dot>LIVE</Pill>
+      </div>
 
       <div className="m-more-grid">
         {TILES.map(t => (
@@ -118,14 +119,13 @@ function RiskView({ guards: g, onToggleKill }: { guards: Guards; onToggleKill: (
 }
 
 function RoutinesView() {
-  const statusKind = (s: string): 'pos' | 'accent' | 'muted' => s === 'done' ? 'pos' : s === 'next' ? 'accent' : 'muted';
   return (
     <>
-      {MOCK.routines.map(r => (
+      {TRADER_ROUTINES.map(r => (
         <div key={r.id} className="m-card">
-          <div className="m-card-title"><span style={{ color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 0, fontSize: 14, fontWeight: 600 }}>{r.name}</span><Pill kind={statusKind(r.status)} dot>{r.status === 'done' ? 'gedraaid' : r.status === 'next' ? 'volgende' : 'gepland'}</Pill></div>
+          <div className="m-card-title"><span style={{ color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 0, fontSize: 14, fontWeight: 600 }}>{r.name}</span><Pill kind="muted">gepland</Pill></div>
           <div className="m-kv"><span className="k">Gepland</span><span className="v">{r.time}</span></div>
-          <div className="m-kv"><span className="k">Laatste run</span><span className="v">{fmt.relTime(r.lastRun, MOCK.now)}</span></div>
+          <div className="m-kv"><span className="k">Laatste run</span><span className="v">—</span></div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10, lineHeight: 1.5 }}>{r.summary}</div>
         </div>
       ))}

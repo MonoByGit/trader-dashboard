@@ -12,7 +12,6 @@ interface Decision {
 }
 
 interface DecisionLogPageProps {
-  mode: string;
   onOpenDecision: (d: Decision) => void;
 }
 
