@@ -93,6 +93,35 @@ function markApplied(book: VersionBook, f: Fill): void {
   for (const k of keys.slice(0, Math.max(0, keys.length - MAX_FILLS_TRACKED))) delete m[k];
 }
 
+/**
+ * Boek het nieuwe deel van een market-fill (idempotent via fillsApplied) en houd openOrders bij.
+ * Gedeeld door executeDay en de stopwacht, zodat een fill op beide plekken precies één keer telt.
+ */
+async function applyFillToBook(
+  book: VersionBook,
+  f: Fill,
+  meta: OpenOrderMeta,
+  date: string,
+  record: (t: TradeLogRow | null) => Promise<void>,
+): Promise<void> {
+  const delta = fillDelta(book, f);
+  if (delta > 0) {
+    markApplied(book, f);
+    if (meta.side === 'buy') {
+      // crypto: de fee gaat van de coin af; het boek volgt wat er echt binnenkwam, de kas betaalt de hele fill
+      const ratio = f.received != null && f.qty > 0 ? Math.min(1, f.received / f.qty) : 1;
+      const got = roundQty(delta * ratio);
+      await record(applyBuy(book, meta.symbol, got, (f.price * delta) / got, date, meta.reason, {
+        signalDate: meta.signalDate, brokerFill: true,
+      }));
+    } else {
+      await record(applySell(book, meta.symbol, delta, f.price, date, meta.reason));
+    }
+  }
+  if (f.done === false) (book.openOrders ??= {})[f.orderId] = meta;
+  else if (book.openOrders) delete book.openOrders[f.orderId];
+}
+
 async function setStopWithRetry(broker: MomentumBroker, req: SetStopRequest, attempts = 3): Promise<void> {
   let last: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -147,15 +176,50 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
   hooks: StrategyHooks<C>;
   barsBySymbol?: Record<string, Bar[]>;
   broker: MomentumBroker;
-  store: Pick<Store, 'loadBook' | 'saveBook' | 'logDecision'>;
+  store: Pick<Store, 'loadBook' | 'saveBook' | 'logDecision' | 'logTrade'>;
   foreignQty?: ForeignQtyFn;
 }): Promise<{ repaired: string[]; failed: string[] }> {
   const repaired: string[] = [];
   const failed: string[] = [];
   for (const cfg of input.cfgs) {
     const book = await input.store.loadBook(cfg.id);
-    if (!book?.real || !book.stopMissing || !Object.keys(book.stopMissing).length) continue;
+    if (!book?.real || !bookNeedsGuard(book)) continue;
     const stopPx = momentumStopClientPrefix(cfg);
+    // Open buys en cid-markers: een fill die na de run alsnog binnenkomt komt in het boek en krijgt een stop,
+    // zonder te wachten op de volgende executeDay. Idempotent via fillsApplied (zelfde regel als executeDay).
+    // Een order die nog niet te vinden is (missing) of waarvan de status onbekend is, laat de wacht staan:
+    // executeDay beslist daarover (opnieuw plaatsen met dezelfde client_order_id), de wacht plaatst nooit een order.
+    if (input.broker.orderFill) {
+      const record = async (t: TradeLogRow | null) => {
+        if (t) await input.store.logTrade(cfg.id, t);
+      };
+      for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
+        if (meta.side !== 'buy') continue;
+        let f: Fill | null;
+        try {
+          f = await input.broker.orderFill({ orderId });
+        } catch {
+          continue; // status onbekend: volgende tick opnieuw
+        }
+        if (!f || f.missing || f.qty <= 0) {
+          // terminaal zonder fill beslist executeDay (requeue); hier niets doen
+          continue;
+        }
+        const before = book.positions[meta.symbol]?.qty ?? 0;
+        await applyFillToBook(book, f, meta, input.date, record);
+        // een cid-marker wordt vervangen door het echte order-id (of verdwijnt als de order terminaal is)
+        if (orderId !== f.orderId && book.openOrders) delete book.openOrders[orderId];
+        if ((book.positions[meta.symbol]?.qty ?? 0) > before) {
+          (book.stopMissing ??= {})[meta.symbol] = input.date; // stop moet naar de volle stand
+          await input.store.logDecision({
+            date: input.date, versionId: cfg.id, kind: 'stop', symbol: meta.symbol,
+            detail: `stopwacht: buy ${meta.symbol} gevuld (${f.qty}${f.done === false ? ', deels' : ''}), stop naar de volle stand`,
+          });
+        }
+      }
+      await input.store.saveBook(book); // fills eerst vastleggen, ook als de stop hierna faalt
+    }
+    if (!book.stopMissing) continue;
     for (const sym of Object.keys(book.stopMissing)) {
       if (!book.positions[sym]) {
         delete book.stopMissing[sym];
@@ -184,13 +248,19 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
   return { repaired, failed };
 }
 
-/** Heeft een van deze papierboeken een gemarkeerde ontbrekende stop? Goedkoop: alleen boeken lezen. */
+/** Heeft een van deze papierboeken werk voor de stopwacht? Goedkoop: alleen boeken lezen. */
 export async function hasMissingStops(cfgs: VersionConfig[], store: Pick<Store, 'loadBook'>): Promise<boolean> {
   for (const cfg of cfgs) {
     const b = await store.loadBook(cfg.id);
-    if (b?.real && b.stopMissing && Object.keys(b.stopMissing).length) return true;
+    if (b?.real && bookNeedsGuard(b)) return true;
   }
   return false;
+}
+
+/** Werk voor de stopwacht: een gemarkeerde ontbrekende stop, of een open buy / cid-marker die nog kan vullen. */
+function bookNeedsGuard(b: VersionBook): boolean {
+  if (b.stopMissing && Object.keys(b.stopMissing).length) return true;
+  return Object.values(b.openOrders ?? {}).some((m) => m.side === 'buy');
 }
 
 function bookKindMismatch(book: VersionBook | null, expectReal: boolean | undefined): string | null {
@@ -359,24 +429,7 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
     };
 
     /** Boek het nieuwe deel van een market-fill; open (partial) orders volgende run verder. */
-    const applyMarketFill = async (f: Fill, meta: OpenOrderMeta) => {
-      const delta = fillDelta(book, f);
-      if (delta > 0) {
-        markApplied(book, f);
-        if (meta.side === 'buy') {
-          // crypto: de fee gaat van de coin af; het boek volgt wat er echt binnenkwam, de kas betaalt de hele fill
-          const ratio = f.received != null && f.qty > 0 ? Math.min(1, f.received / f.qty) : 1;
-          const got = roundQty(delta * ratio);
-          await record(applyBuy(book, meta.symbol, got, (f.price * delta) / got, date, meta.reason, {
-            signalDate: meta.signalDate, brokerFill: true,
-          }));
-        } else {
-          await record(applySell(book, meta.symbol, delta, f.price, date, meta.reason));
-        }
-      }
-      if (f.done === false) (book.openOrders ??= {})[f.orderId] = meta;
-      else if (book.openOrders) delete book.openOrders[f.orderId];
-    };
+    const applyMarketFill = (f: Fill, meta: OpenOrderMeta) => applyFillToBook(book, f, meta, date, record);
 
     /** Symbolen met een order waarvan de echte status (nog) onbekend is: niets nieuws plaatsen. */
     const unresolved = new Set<string>();
@@ -432,7 +485,10 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
           });
           continue;
         }
-        if (f) await applyMarketFill(f, meta);
+        if (f) {
+          await applyMarketFill(f, meta);
+          if (orderId !== f.orderId && book.openOrders) delete book.openOrders[orderId]; // marker -> echt id
+        }
         if (f && f.qty > 0 && meta.side === 'buy') resolvedBuys.add(meta.symbol);
         if (!f || f.done !== false) {
           if (book.openOrders) delete book.openOrders[orderId];

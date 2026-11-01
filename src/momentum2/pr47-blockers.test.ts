@@ -8,7 +8,7 @@ import { m5Hooks } from '../momentum5/plan';
 import { m5Versions } from '../momentum5/config';
 import { m6Hooks } from '../momentum6/plan';
 import { m6Config } from '../momentum6/config';
-import { decideDay, executeDay, repairMissingStops, type DecisionRecord, type ForeignQtyFn, type Store } from './live';
+import { decideDay, executeDay, hasMissingStops, repairMissingStops, type DecisionRecord, type ForeignQtyFn, type Store } from './live';
 import { momentumStopClientPrefix } from './order-tag';
 import { reconcileDisasterStops } from './reconcile-disaster-stops';
 import type { StrategyHooks } from './hooks';
@@ -699,6 +699,166 @@ describe('PR 47 ronde 3 (review Dave op 9fc1954c)', () => {
     expect((await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: m5Hooks, broker, store: mem.store })).repaired).toEqual([]);
     const shadow = memStore({ ...b, real: false, stopMissing: { QLD: '2024-06-03' } });
     expect((await repairMissingStops({ date: '2024-06-03', cfgs: [m5Cfg!], hooks: m5Hooks, broker, store: shadow.store })).repaired).toEqual([]);
+    expect(fake.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
+  });
+});
+
+describe('PR 47 ronde 4 (review Dave op 27a88a2): B5 stopwacht verwerkt open buys en cid-markers', () => {
+  const guard = (cfg: VersionConfig, fake: FakeAlpaca, mem: ReturnType<typeof memStore>, date = '2024-06-03') =>
+    repairMissingStops({
+      date, cfgs: [cfg], hooks: fixedStop(m5Hooks, { v: 40 }),
+      broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store,
+    });
+  const stopQty = (fake: FakeAlpaca) => fake.openStops('QLD').reduce((s, o) => s + Number(o.qty), 0);
+
+  it('W5: buy van 20 vult 10, de rest vult na de run: de stopwacht boekt de rest en zet de stop op 20, nog dezelfde dag', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    fake.marketFillRatio = 0.5;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(mem.book().positions.QLD?.qty).toBe(10);
+    expect(stopQty(fake)).toBe(10);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(true); // open buy = werk voor de wacht
+
+    fake.fillOpenMarkets(50); // de rest vult buiten de run om
+    const r = await guard(m5Cfg!, fake, mem);
+    expect(r.failed).toEqual([]);
+    expect(fake.pos.QLD).toBe(20);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(stopQty(fake)).toBe(20);
+    expect(fake.openStops('QLD')).toHaveLength(1);
+    expect(mem.book().stopMissing?.QLD).toBeUndefined();
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(0);
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(false);
+  });
+
+  it('W5: idempotent, een tweede en derde wacht boeken niets dubbel en plaatsen geen tweede stop', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    fake.marketFillRatio = 0.5;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    fake.fillOpenMarkets(50);
+    await guard(m5Cfg!, fake, mem);
+    await guard(m5Cfg!, fake, mem);
+    await Promise.all([guard(m5Cfg!, fake, mem), guard(m5Cfg!, fake, mem)]);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(mem.book().cash).toBeCloseTo(4_000, 6);
+    expect(fake.openStops('QLD')).toHaveLength(1);
+    expect(stopQty(fake)).toBe(20);
+    // en de volgende executeDay koopt niets en boekt niets opnieuw
+    await executeDay({
+      date: '2024-06-04', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(fake.orders_.filter((o) => o.type === 'market' && o.side === 'buy')).toHaveLength(1);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(stopQty(fake)).toBe(20);
+  });
+
+  it('W5: buy nog niet gevuld bij de wacht: niets geboekt, niets geplaatst, marker blijft', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    fake.marketFillRatio = 0;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    const before = fake.calls.filter((c) => c.startsWith('place')).length;
+    await guard(m5Cfg!, fake, mem);
+    expect(fake.calls.filter((c) => c.startsWith('place')).length).toBe(before);
+    expect(mem.book().positions.QLD).toBeUndefined();
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+  });
+
+  it('timeout-variant: buy-POST time-out met lege lookup, order vult later: de wacht boekt hem en zet de stop, geen tweede buy', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    const place = fake.placeOrder.bind(fake);
+    let first = true;
+    fake.placeOrder = async (r) => {
+      const x = await place(r);
+      if (r.type === 'market' && first) { first = false; throw new Error('socket hang up (ETIMEDOUT)'); }
+      return x;
+    };
+    const byCid = fake.getOrderByClientOrderId.bind(fake);
+    let visible = false;
+    fake.getOrderByClientOrderId = async (c) => (visible ? byCid(c) : null);
+
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    // onzichtbaar: alleen een cid-marker in het boek, geen positie, geen stop
+    expect(mem.book().positions.QLD).toBeUndefined();
+    expect(Object.keys(mem.book().openOrders ?? {})[0]).toMatch(/^cid:/);
+    expect(fake.openStops('QLD')).toHaveLength(0);
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(true);
+
+    // nog onzichtbaar: de wacht doet niets en plaatst nooit een order
+    const r0 = await guard(m5Cfg!, fake, mem);
+    expect(r0.repaired).toEqual([]);
+    expect(fake.orders_.filter((o) => o.type === 'market' && o.side === 'buy')).toHaveLength(1);
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(1);
+
+    // de order wordt zichtbaar (hij was al gevuld): binnen één tick in het boek, met stop op de volle stand
+    visible = true;
+    const r1 = await guard(m5Cfg!, fake, mem);
+    expect(r1.failed).toEqual([]);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(stopQty(fake)).toBe(20);
+    expect(mem.book().stopMissing?.QLD).toBeUndefined();
+    expect(Object.keys(mem.book().openOrders ?? {})).toHaveLength(0);
+    expect(fake.orders_.filter((o) => o.type === 'market' && o.side === 'buy')).toHaveLength(1);
+
+    // en de volgende handelsdag koopt niet opnieuw
+    await executeDay({
+      date: '2024-06-04', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    expect(fake.orders_.filter((o) => o.type === 'market' && o.side === 'buy')).toHaveLength(1);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+  });
+
+  it('GET-fout op de orderstatus: de wacht slaat over en probeert het de volgende tick opnieuw', async () => {
+    const { fake, broker, mem } = setup(m5Cfg!, realBook(m5Cfg!, {}, 5_000));
+    fake.prices.QLD = 50;
+    fake.marketFillRatio = 0.5;
+    mem.setPending([{ symbol: 'QLD', side: 'buy', notionalUsd: 1000, reason: 'in' }]);
+    await executeDay({
+      date: '2024-06-03', cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 50 },
+      broker, store: mem.store, expectReal: true,
+    });
+    fake.fillOpenMarkets(50);
+    const get = fake.getOrder.bind(fake);
+    let boom = true;
+    fake.getOrder = async (id) => { if (boom) throw new Error('503 service unavailable'); return get(id); };
+    await guard(m5Cfg!, fake, mem);
+    expect(mem.book().positions.QLD?.qty).toBe(10);
+    boom = false;
+    await guard(m5Cfg!, fake, mem);
+    expect(mem.book().positions.QLD?.qty).toBe(20);
+    expect(stopQty(fake)).toBe(20);
+  });
+
+  it('stopwacht negeert een open buy in een schaduwboek', async () => {
+    const b = realBook(m5Cfg!, {});
+    b.real = false;
+    b.openOrders = { x1: { symbol: 'QLD', side: 'buy', reason: 'in' } };
+    const mem = memStore(b);
+    const fake = new FakeAlpaca();
+    expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(false);
+    await guard(m5Cfg!, fake, mem);
     expect(fake.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
   });
 });
