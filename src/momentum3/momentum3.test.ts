@@ -2,7 +2,8 @@ import { makeBars } from '../momentum2/fixtures';
 import { simulateVersion } from '../momentum2/simulate';
 import { newBook } from '../momentum2/book';
 import type { Bar } from '../momentum2/types';
-import { m3Versions, M3_BUDGET_PCT } from './config';
+import { m3Grid, m3Versions, M3_BUDGET_PCT, trailLocksProfit } from './config';
+import { fillGaps } from '../momentum2/simulate';
 import { m3Hooks, planM3 } from './plan';
 import { m3StopLevel } from './risk';
 import { entryCandidates } from './signals';
@@ -33,14 +34,24 @@ describe('config', () => {
 });
 
 describe('risk', () => {
-  it('harde stop 7% bij entry, trailing pas vanaf +5% en daarna alleen omhoog', () => {
+  it('harde stop 7% bij entry, trailing pas vanaf +9% en daarna alleen omhoog', () => {
     const p = { entryPrice: 100, highWater: 100 };
     expect(m3StopLevel(p, crypto!)).toEqual({ level: 93, kind: 'hard' });
-    expect(m3StopLevel({ ...p, highWater: 104 }, crypto!)).toEqual({ level: 93, kind: 'hard' }); // nog geen +5%
+    expect(m3StopLevel({ ...p, highWater: 108 }, crypto!)).toEqual({ level: 93, kind: 'hard' }); // nog geen +9%
     const t = m3StopLevel({ ...p, highWater: 110 }, crypto!);
     expect(t.kind).toBe('trailing');
-    expect(t.level).toBeCloseTo(104.5, 6);
+    expect(t.level).toBeCloseTo(103.4, 6);
     expect(m3StopLevel({ ...p, highWater: 120 }, crypto!).level).toBeGreaterThan(t.level);
+  });
+  it('de eerste trailing-uitstap staat altijd in de plus (geen break-even-uitstappen), ook in het hele raster', () => {
+    expect(trailLocksProfit(crypto!)).toBe(true);
+    expect(trailLocksProfit(etf!)).toBe(true);
+    expect(trailLocksProfit({ trailActivatePct: 0.05, trailingStopPct: 0.05 })).toBe(false);
+    for (const c of [crypto!, etf!]) {
+      const grid = m3Grid(c);
+      expect(grid.length).toBeGreaterThan(10);
+      for (const p of grid) expect(trailLocksProfit({ ...c, ...p })).toBe(true);
+    }
   });
 });
 
@@ -138,5 +149,60 @@ describe('walk-forward', () => {
     const manual = r.windows.reduce((a, w) => a * (1 + w.testReturnPct / 100), 1);
     expect((manual - 1) * 100).toBeCloseTo(r.oosReturnPct, 6);
     expect(r.oosExcessPct).toBeCloseTo(r.oosReturnPct - r.oosBenchmarkPct, 6);
+  });
+});
+
+describe('afkoelperiode', () => {
+  it('geen heraankoop vlak na een uitstap in hetzelfde symbool', () => {
+    const cfg = { ...crypto!, universe: ['X'], topN: 1, cooldownDays: 5 };
+    const bars = dipThenTurn(80, 40);
+    let i = 46;
+    const book = newBook(cfg, null, null);
+    for (; i < 70; i++) {
+      if (planM3({ barsBySymbol: { X: bars.slice(0, i + 1) }, book, cfg }).orders.length) break;
+    }
+    const day = bars[i]!.t.slice(0, 10);
+    book.lastExit = { X: day }; // zojuist uitgestapt
+    expect(planM3({ barsBySymbol: { X: bars.slice(0, i + 1) }, book, cfg }).orders).toEqual([]);
+    book.lastExit = { X: '2000-01-01' }; // lang geleden
+    expect(planM3({ barsBySymbol: { X: bars.slice(0, i + 1) }, book, cfg }).orders.length).toBe(1);
+  });
+});
+
+describe('gaten in de data', () => {
+  it('vult ontbrekende dagen met een vlakke bar op het vorige slot', () => {
+    const full = makeBars(10, 100, 0.01);
+    const dates = full.map((b) => b.t.slice(0, 10));
+    const holey = full.filter((_, i) => i !== 4 && i !== 5);
+    const out = fillGaps(holey, dates);
+    expect(out).toHaveLength(10);
+    expect(out[4]).toMatchObject({ o: holey[3]!.c, c: holey[3]!.c, v: 0 });
+    expect(out.map((b) => b.t.slice(0, 10))).toEqual(dates);
+  });
+  it('vult niet vóór de eerste bar (nieuwe coin)', () => {
+    const full = makeBars(10, 100, 0.01);
+    const dates = full.map((b) => b.t.slice(0, 10));
+    expect(fillGaps(full.slice(3), dates)).toHaveLength(7);
+  });
+});
+
+describe('walk-forward verliesgrens', () => {
+  it('een gehalte versie blijft uit in de volgende vensters (zoals live)', async () => {
+    const sym = 'X';
+    const cfg = { ...crypto!, universe: [sym], topN: 1, positionPct: 1 };
+    // Venstergeometrie: warm 30, train 120 -> eerste testvenster = dagen 150..209. Dip op 160, draai 168, crash op 174.
+    const bars = dipThenTurn(520, 160);
+    for (let i = 174; i < 520; i++) {
+      const b = bars[i]!;
+      bars[i] = { ...b, o: b.o * 0.4, h: b.h * 0.4, l: b.l * 0.4, c: b.c * 0.4 };
+    }
+    const data = { barsBySymbol: { [sym]: bars }, benchmark: makeBars(520, 100, 0.0005) };
+    const args = { cfg, data, grid: [{ rsiTrigger: 30 }], trainDays: 120, testDays: 60 };
+    const persist = await walkForward(args);
+    const reset = await walkForward({ ...args, haltPersists: false });
+    expect(persist.haltedOn).not.toBeNull();
+    expect(persist.windows).toHaveLength(1);
+    expect(reset.windows.length).toBeGreaterThan(1);
+    expect(reset.haltedOn).toBeNull();
   });
 });

@@ -93,6 +93,8 @@ export interface VersionBook {
   real?: boolean;
   /** Laatste datum waarvoor decideDay draaide (idempotent per dag). */
   lastDecisionDate?: string;
+  /** Laatste volledige uitstap per symbool (datum), voor afkoelperiodes. */
+  lastExit?: Record<string, string>;
 }
 
 export type OrderIntent = {

@@ -43,7 +43,11 @@ export function planM3(input: { barsBySymbol: Record<string, Bar[]>; book: Versi
   const slots = cfg.topN - held.size;
   if (slots > 0) {
     const base = sizingBase(equityOf(book, prices), book, cfg);
-    for (const c of entryCandidates(barsBySymbol, cfg).filter((e) => !held.has(e.symbol)).slice(0, slots)) {
+    const cooled = (sym: string) => {
+      const last = book.lastExit?.[sym];
+      return !!last && !!todayStr && dayDiff(last, todayStr) < cfg.cooldownDays;
+    };
+    for (const c of entryCandidates(barsBySymbol, cfg).filter((e) => !held.has(e.symbol) && !cooled(e.symbol)).slice(0, slots)) {
       orders.push({ symbol: c.symbol, side: 'buy', notionalUsd: base * cfg.positionPct, reason: `RSI-dip ${c.rsi.toFixed(0)} en draai` });
     }
   }

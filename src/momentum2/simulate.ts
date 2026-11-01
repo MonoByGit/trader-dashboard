@@ -11,6 +11,8 @@ export interface SimData {
 
 export interface SimOptions {
   slippageBps?: number;
+  /** Vul ontbrekende dagen in de bars op met een vlakke bar (vorige slot, volume 0), tegen gaten in crypto-data. */
+  fillGaps?: boolean;
   hooks?: StrategyHooks<any>;
   veto?: VetoFn;
 }
@@ -31,11 +33,28 @@ export interface SimResult {
   };
 }
 
+/** Zet bars op de kalender: ontbrekende dagen na de eerste bar krijgen een vlakke bar op het vorige slot. */
+export function fillGaps(bars: Bar[], dates: string[]): Bar[] {
+  if (bars.length === 0) return bars;
+  const byDate = new Map(bars.map((b) => [dateOf(b), b]));
+  const first = dateOf(bars[0]!);
+  const out: Bar[] = [];
+  let prev: Bar | null = null;
+  for (const d of dates) {
+    if (d < first) continue;
+    const b = byDate.get(d);
+    if (b) { out.push(b); prev = b; }
+    else if (prev) out.push({ t: d, o: prev.c, h: prev.c, l: prev.c, c: prev.c, v: 0 });
+  }
+  return out;
+}
+
 /** Een versie door de tijd. Besluit op de close van dag i, uitvoering op de open van dag i+1 (over nacht). */
 export async function simulateVersion<C extends VersionConfig>(cfg: C, data: SimData, opts: SimOptions = {}): Promise<SimResult> {
   const hooks = (opts.hooks ?? rotationHooks) as StrategyHooks<C>;
   const slip = ((opts.slippageBps ?? 2) + (cfg.feeBps ?? 0)) / 10000;
   const dates = data.benchmark.map(dateOf);
+  if (opts.fillGaps) data = { ...data, barsBySymbol: Object.fromEntries(Object.entries(data.barsBySymbol).map(([s, b]) => [s, fillGaps(b, dates)])) };
   const idx: Record<string, Map<string, number>> = {};
   for (const [s, bars] of Object.entries(data.barsBySymbol)) {
     idx[s] = new Map(bars.map((b, i) => [dateOf(b), i]));
