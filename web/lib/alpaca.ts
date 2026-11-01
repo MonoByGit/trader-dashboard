@@ -51,7 +51,26 @@ export const alpaca = {
     get<AlpacaPortfolioHistory>(
       `${BASE}/v2/account/portfolio/history?period=${period}&timeframe=${timeframe}&extended_hours=false`,
     ),
+  cryptoBars: (symbols: string[], timeframe = '1Day', limit = 60) =>
+    get<{ bars: Record<string, AlpacaBar[]> }>(
+      `${DATA}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(symbols.join(','))}&timeframe=${timeframe}&limit=${limit}`,
+    ),
+  cryptoLatestQuotes: (symbols: string[]) =>
+    get<{ quotes: Record<string, { ap: number; bp: number; t: string }> }>(
+      `${DATA}/v1beta3/crypto/us/latest/quotes?symbols=${encodeURIComponent(symbols.join(','))}`,
+    ),
 };
+
+/** Alpaca crypto pairs use a slash (e.g. BTC/USD). */
+export function isCryptoSymbol(symbol: string): boolean {
+  return symbol.includes('/');
+}
+
+export function inferAssetClass(symbol: string, positionAssetClass?: string): 'etf' | 'crypto' {
+  if (positionAssetClass === 'crypto') return 'crypto';
+  if (isCryptoSymbol(symbol)) return 'crypto';
+  return 'etf';
+}
 
 export interface AlpacaAccount {
   id: string;

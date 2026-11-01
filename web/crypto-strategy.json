@@ -1,0 +1,26 @@
+{
+  "name": "Momentum Crypto",
+  "version": "1.0.0",
+  "description": "24/7 momentum op liquide crypto majors (paper). Strakkere budgetcaps dan ETF.",
+  "asset_class": "crypto",
+  "symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "LTC/USD"],
+  "rules": {
+    "max_positions": 3,
+    "position_size_pct": 0.025,
+    "hold_overnight": true,
+    "hard_stop_pct": 0.08,
+    "take_profit_pct": 0.12,
+    "rsi_min": 45,
+    "rsi_max": 70,
+    "volume_ratio_min": 1.05,
+    "vix_threshold": 999
+  },
+  "entry_criteria": [
+    "trend_above_sma20",
+    "momentum_rsi",
+    "volume_above_avg"
+  ],
+  "schedule_utc": {
+    "tick_interval_hours": 2
+  }
+}

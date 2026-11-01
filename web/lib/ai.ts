@@ -11,10 +11,18 @@ export type Provider = 'gemini' | 'claude' | 'deepseek';
 export type Tier = 'fast' | 'smart';
 export type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
-const aiRoutineContext = new AsyncLocalStorage<{ routine?: string; decisionId?: string }>();
+const aiRoutineContext = new AsyncLocalStorage<{
+  routine?: string;
+  decisionId?: string;
+  assetClass?: 'etf' | 'crypto';
+}>();
 
 export function withAiRoutine<T>(routine: string, fn: () => Promise<T>): Promise<T> {
   return aiRoutineContext.run({ routine }, fn);
+}
+
+export function withCryptoAiRoutine<T>(routine: string, fn: () => Promise<T>): Promise<T> {
+  return aiRoutineContext.run({ routine, assetClass: 'crypto' }, fn);
 }
 
 async function logAiUsage(
@@ -35,6 +43,7 @@ async function logAiUsage(
       inputTokens: tokens.inputTokens,
       outputTokens: tokens.outputTokens,
       decisionId: ctx?.decisionId,
+      assetClass: ctx?.assetClass ?? 'etf',
     });
   } catch {
     /* logging mag routines nooit breken */

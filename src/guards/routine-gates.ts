@@ -1,6 +1,6 @@
 import type { RoutineGateInput, RoutineGateResult } from './types';
 
-const ENTRY_ROUTINES = new Set(['market-open']);
+const ENTRY_ROUTINES = new Set(['market-open', 'crypto-tick']);
 
 /**
  * Emergency stop blocks every routine. Kill switch / circuit breaker block new entries only.

@@ -208,6 +208,25 @@ async function migrate(): Promise<void> {
       synced_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_alpaca_orders_submitted ON alpaca_orders (submitted_at DESC);
+
+    ALTER TABLE decisions ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    ALTER TABLE ai_calls ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    ALTER TABLE alpaca_orders ADD COLUMN IF NOT EXISTS asset_class TEXT DEFAULT 'etf';
+    CREATE INDEX IF NOT EXISTS idx_decisions_asset_class ON decisions (asset_class, ts DESC);
+
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS asset_breakdown JSONB;
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS btc_close NUMERIC;
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS btc_daily_return_pct NUMERIC;
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS btc_cumulative_return_pct NUMERIC;
+    ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS baseline_btc_close NUMERIC;
+
+    CREATE TABLE IF NOT EXISTS crypto_protective_stops (
+      symbol TEXT PRIMARY KEY,
+      stop_price NUMERIC NOT NULL,
+      take_profit_price NUMERIC,
+      entry_price NUMERIC NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
   await dbRun(`
