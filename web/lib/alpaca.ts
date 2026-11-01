@@ -8,6 +8,7 @@ import {
   alpacaTradingBaseUrl,
 } from '../../src/alpaca/paper-host';
 import { logAlpacaModeAtStartup } from './alpaca-startup';
+import { alpacaPositionCloseUrl } from '../../src/alpaca/symbol-path';
 
 logAlpacaModeAtStartup();
 
@@ -46,7 +47,7 @@ export const alpaca = {
   account: () => get<AlpacaAccount>(`${BASE}/v2/account`),
   positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`),
   closePosition: (symbol: string) =>
-    del<unknown>(`${BASE}/v2/positions/${symbol}`, { trading: true }),
+    del<unknown>(alpacaPositionCloseUrl(BASE, symbol), { trading: true }),
   cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`, { trading: true }),
   orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
   openOrders: (limit = 100) =>
@@ -155,15 +156,7 @@ export interface AlpacaClock {
   next_close: string;
 }
 
-export interface AlpacaBar {
-  t: string;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
-  vw: number;
-}
+export type { AlpacaBar } from './alpaca-types';
 
 export interface AlpacaQuote {
   ap: number;

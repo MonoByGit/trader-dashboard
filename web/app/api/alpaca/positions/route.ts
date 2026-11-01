@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { alpacaPositionSymbol } from '../../../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 
 export async function GET() {
@@ -24,7 +25,7 @@ export async function GET() {
 export async function DELETE(req: Request) {
   try {
     const { symbol } = await req.json();
-    const result = await alpaca.closePosition(symbol);
+    const result = await alpaca.closePosition(alpacaPositionSymbol(String(symbol ?? '')));
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

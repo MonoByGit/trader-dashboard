@@ -70,7 +70,25 @@ describe('premarket news + criteria rules', () => {
     expect(full.volume_above_avg).toBe('unknown');
   });
 
-  it('blocks soft-start BUY when LLM sends PASS uppercase but keys missing', () => {
+  it('blocks BUY when LLM sends PASS uppercase but keys missing (soft-start off)', () => {
+    const out = applyPremarketDecisionRules(
+      {
+        symbol: 'QQQ',
+        decision: 'BUY',
+        criteria: {
+          trend_above_sma20: 'PASS',
+          momentum_rsi: true,
+          volume_above_avg: 'pass',
+          vix_below_limit: 'pass',
+        },
+      },
+      { newsUsable: true, softStartEnabled: false, rsi: 72.9, rsiMin: 50, rsiMax: 75 },
+    );
+    expect(allPremarketCriteriaPass(out.criteria)).toBe(false);
+    expect(out.decision).toBe('NO_GO');
+  });
+
+  it('blocks BUY when criteria incomplete under soft-start', () => {
     const out = applyPremarketDecisionRules(
       {
         symbol: 'QQQ',
@@ -88,7 +106,7 @@ describe('premarket news + criteria rules', () => {
     expect(out.decision).toBe('NO_GO');
   });
 
-  it('allows BUY under soft-start when news ok and all pass', () => {
+  it('allows BUY when news ok and all six criteria pass', () => {
     const out = applyPremarketDecisionRules(
       {
         symbol: 'QQQ',
