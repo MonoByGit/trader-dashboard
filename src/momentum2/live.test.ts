@@ -78,3 +78,15 @@ describe('live', () => {
     expect(s.dec.find((d) => d.kind === 'veto')?.veto).toMatchObject({ model: 'deepseek-chat', modelVersion: 'v3.1', veto: true });
   });
 });
+
+describe('live idempotentie', () => {
+  it('tweede decideDay op dezelfde datum doet niets', async () => {
+    const s = fakeStore();
+    const args = { date, cfgs: [cfg], barsBySymbol: { AAA: bars, SPY: spy }, benchmark: spy, store: s.store };
+    await decideDay(args);
+    const rows = s.eq.length;
+    const second = await decideDay(args);
+    expect(second.planned).toEqual({});
+    expect(s.eq.length).toBe(rows);
+  });
+});

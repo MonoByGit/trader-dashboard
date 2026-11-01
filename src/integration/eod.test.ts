@@ -40,6 +40,9 @@ async function load(qa: string, ready: boolean, closeFails: boolean) {
       remainingLegs: ready ? [] : [{ id: 'l', status: 'new' }],
     }),
   }));
+  jest.unstable_mockModule('@/lib/momentum2/ownership', () => ({
+    foreignQtyForSymbol: async () => 0,
+  }));
   jest.unstable_mockModule('@/lib/guards/service', () => ({
     logGuardEvent: async (k: string) => {
       events.push(k);
