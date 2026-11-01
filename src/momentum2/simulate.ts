@@ -1,7 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
-import { planRebalance } from './plan';
-import { checkStop, lossLimitBreached } from './risk';
+import { rotationHooks, type StrategyHooks } from './hooks';
+import { checkStopLevel, lossLimitBreached } from './risk';
 import type { Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
 
 export interface SimData {
@@ -11,6 +11,7 @@ export interface SimData {
 
 export interface SimOptions {
   slippageBps?: number;
+  hooks?: StrategyHooks<any>;
   veto?: VetoFn;
 }
 
@@ -31,8 +32,9 @@ export interface SimResult {
 }
 
 /** Een versie door de tijd. Besluit op de close van dag i, uitvoering op de open van dag i+1 (over nacht). */
-export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: SimOptions = {}): Promise<SimResult> {
-  const slip = (opts.slippageBps ?? 2) / 10000;
+export async function simulateVersion<C extends VersionConfig>(cfg: C, data: SimData, opts: SimOptions = {}): Promise<SimResult> {
+  const hooks = (opts.hooks ?? rotationHooks) as StrategyHooks<C>;
+  const slip = ((opts.slippageBps ?? 2) + (cfg.feeBps ?? 0)) / 10000;
   const dates = data.benchmark.map(dateOf);
   const idx: Record<string, Map<string, number>> = {};
   for (const [s, bars] of Object.entries(data.barsBySymbol)) {
@@ -72,7 +74,8 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
         if (t) trades.push(t);
       } else {
         const px = bar.o * (1 + slip);
-        const qty = Math.min(Math.floor((o.notionalUsd ?? 0) / px), Math.floor(book.cash / px));
+        const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
+        const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
         const t = applyBuy(book, o.symbol, qty, px, date, o.reason);
         if (t) trades.push(t);
       }
@@ -83,7 +86,8 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
     for (const [sym, pos] of Object.entries(book.positions)) {
       const bar = barAt(sym, date);
       if (!bar) continue;
-      const r = checkStop(pos, bar, cfg);
+      const st = hooks.stopFor(pos, cfg);
+      const r = checkStopLevel(st.level, st.kind, bar);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
@@ -107,7 +111,7 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
     // 4. Besluit voor morgen.
     const due = book.lastRebalanceIndex === null || i - book.lastRebalanceIndex >= cfg.rebalanceEveryDays;
     if (book.halted || due) {
-      const plan = await planRebalance({ barsBySymbol: upTo(date), book, cfg, veto: opts.veto });
+      const plan = await hooks.plan({ barsBySymbol: upTo(date), book, cfg, veto: opts.veto });
       pending = plan.orders;
       for (const v of plan.vetoes) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
       if (!book.halted) book.lastRebalanceIndex = i;
@@ -135,7 +139,7 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
 }
 
 /** Alle versies naast elkaar, volledig onafhankelijk (eigen boek, budget en verliesgrens). */
-export async function simulateVersions(cfgs: VersionConfig[], data: SimData, opts: SimOptions = {}): Promise<SimResult[]> {
+export async function simulateVersions<C extends VersionConfig>(cfgs: C[], data: SimData, opts: SimOptions = {}): Promise<SimResult[]> {
   const out: SimResult[] = [];
   for (const c of cfgs) out.push(await simulateVersion(c, data, opts));
   return out;

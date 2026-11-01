@@ -42,6 +42,10 @@ export interface VersionConfig {
   driftTolerance: number;
   /** DeepSeek mag nieuwe instappen vetoën (nooit iets toevoegen of verkopen). */
   vetoEnabled: boolean;
+  /** Extra kosten per transactie in basispunten (crypto-fee), bovenop de slippage. */
+  feeBps?: number;
+  /** Fractionele aantallen toegestaan (crypto). Anders hele aandelen. */
+  fractional?: boolean;
 }
 
 export interface Position {

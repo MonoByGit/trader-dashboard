@@ -1,7 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
-import { planRebalance } from './plan';
-import { lossLimitBreached, stopLevel } from './risk';
+import { rotationHooks, type StrategyHooks } from './hooks';
+import { checkStopLevel, lossLimitBreached } from './risk';
 import type {
   Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict,
 } from './types';
@@ -43,15 +43,17 @@ export interface Store {
   logDecision(rec: DecisionRecord): Promise<void>;
 }
 
-export async function decideDay(input: {
+export async function decideDay<C extends VersionConfig = VersionConfig>(input: {
   date: string;
-  cfgs: VersionConfig[];
+  cfgs: C[];
+  hooks?: StrategyHooks<C>;
   barsBySymbol: Record<string, Bar[]>;
   benchmark: Bar[];
   store: Store;
   veto?: VetoFn;
 }): Promise<{ planned: Record<string, OrderIntent[]> }> {
   const { date, store } = input;
+  const hooks = (input.hooks ?? rotationHooks) as StrategyHooks<C>;
   const planned: Record<string, OrderIntent[]> = {};
   const spy = input.benchmark[input.benchmark.length - 1];
   if (!spy || dateOf(spy) !== date) throw new Error(`geen SPY-bar voor ${date}`);
@@ -69,7 +71,20 @@ export async function decideDay(input: {
     const prices: Record<string, number> = {};
     for (const [sym, pos] of Object.entries(book.positions)) {
       const last = input.barsBySymbol[sym]?.[input.barsBySymbol[sym]!.length - 1];
-      if (last && dateOf(last) === date) pos.highWater = Math.max(pos.highWater, last.h);
+      if (last && dateOf(last) === date) {
+        // Schaduwboeken hebben geen broker-stop: emuleer de stop op de dagbar (stand van vóór vandaag).
+        if (!book.real) {
+          const st = hooks.stopFor(pos, cfg);
+          const r = checkStopLevel(st.level, st.kind, last);
+          if (r.hit) {
+            const t = applySell(book, sym, pos.qty, r.fillPrice, date, `${r.kind} stop (schaduw)`);
+            if (t) { await store.logTrade(cfg.id, t); }
+            await store.logDecision({ date, versionId: cfg.id, kind: 'stop', symbol: sym, detail: `${r.kind} stop geraakt @ ${r.fillPrice.toFixed(2)} (schaduw)` });
+            continue;
+          }
+        }
+        pos.highWater = Math.max(pos.highWater, last.h);
+      }
       prices[sym] = last?.c ?? pos.entryPrice;
     }
     const eq = equityOf(book, prices);
@@ -89,7 +104,7 @@ export async function decideDay(input: {
       book.lastRebalanceIndex! += 1;
     }
     if (book.halted || due) {
-      const plan = await planRebalance({ barsBySymbol: input.barsBySymbol, book, cfg, veto: input.veto });
+      const plan = await hooks.plan({ barsBySymbol: input.barsBySymbol, book, cfg, veto: input.veto });
       for (const v of plan.vetoes) {
         await store.logDecision({
           date, versionId: cfg.id, kind: 'veto', symbol: v.symbol, veto: v.verdict,
@@ -112,15 +127,17 @@ export async function decideDay(input: {
   return { planned };
 }
 
-export async function executeDay(input: {
+export async function executeDay<C extends VersionConfig = VersionConfig>(input: {
   date: string;
-  cfgs: VersionConfig[];
+  cfgs: C[];
+  hooks?: StrategyHooks<C>;
   /** Laatste koers per symbool, voor het omrekenen van bedragen naar hele aandelen. */
   lastPrice: Record<string, number>;
   broker: Broker;
   store: Store;
 }): Promise<{ trades: TradeLogRow[] }> {
   const { date, broker, store } = input;
+  const hooks = (input.hooks ?? rotationHooks) as StrategyHooks<C>;
   const trades: TradeLogRow[] = [];
 
   for (const cfg of input.cfgs) {
@@ -151,7 +168,8 @@ export async function executeDay(input: {
         const t = applySell(book, o.symbol, fill.qty, fill.price, date, o.reason);
         if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
       } else {
-        const qty = Math.min(Math.floor((o.notionalUsd ?? 0) / px), Math.floor(book.cash / px));
+        const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
+        const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
         if (qty <= 0) continue;
         const fill = await broker.marketOrder({ versionId: cfg.id, symbol: o.symbol, side: 'buy', qty, clientOrderId: `m2-${cfg.id}-${date}-${o.symbol}-b` });
         if (!fill) continue;
@@ -163,7 +181,7 @@ export async function executeDay(input: {
 
     // 3. Stops: harde stop bij entry, daarna meebewegend omhoog.
     for (const [sym, pos] of Object.entries(book.positions)) {
-      await broker.setStop({ versionId: cfg.id, symbol: sym, qty: pos.qty, stopPrice: round2(stopLevel(pos, cfg).level) });
+      await broker.setStop({ versionId: cfg.id, symbol: sym, qty: pos.qty, stopPrice: round2(hooks.stopFor(pos, cfg).level) });
     }
     await store.saveBook(book);
   }
