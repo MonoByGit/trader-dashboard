@@ -27,6 +27,7 @@ await jest.unstable_mockModule('@/lib/alpaca', () => ({
       },
     ]),
     cryptoBars: jest.fn(async () => ({ bars: { 'BTC/USD': [{ c: 89000, v: 1 }] } })),
+    orders: jest.fn(async () => []),
   },
 }));
 
@@ -37,15 +38,38 @@ await jest.unstable_mockModule('@/lib/guards/service', () => ({
     circuitBreakerTripped: false,
   })),
   getEffectiveCryptoGuardConfig: jest.fn(),
+  getEffectiveGuardConfig: jest.fn(async () => ({ maxDailyCryptoTrades: 2, maxDailyTrades: 3 })),
   checkOrderAgainstLimits: jest.fn(),
   countDailyTrades: jest.fn(),
+  countDailyCryptoTrades: jest.fn(async () => 0),
   logGuardEvent: jest.fn(),
+}));
+
+await jest.unstable_mockModule('./daily-pnl-live', () => ({
+  cryptoDailyPnlFromLive: jest.fn(() => 0),
+  yesterdayUtcCloseBySymbol: jest.fn(() => ({})),
+}));
+
+await jest.unstable_mockModule('@/lib/buy-idempotency', () => ({
+  gateBuyIfLockLost: jest.fn(async () => ({ allowed: true, reason: '' })),
+  hasBuyDecisionTodayEt: jest.fn(async () => false),
+}));
+
+await jest.unstable_mockModule('@/lib/routine-run-context', () => ({
+  getRoutineRunContext: jest.fn(() => undefined),
+}));
+
+await jest.unstable_mockModule('@guards/index', () => ({
+  blocksNewEntries: jest.fn(() => false),
+  evaluateCryptoLimits: jest.fn(() => ({ allowed: true, failReasons: [] })),
 }));
 
 await jest.unstable_mockModule('@/lib/asset-class', () => ({
   filterByAssetClass: jest.fn((positions: { asset_class?: string }[], cls: string) =>
     cls === 'crypto' ? positions : [],
   ),
+  classifySymbol: jest.fn(() => 'crypto'),
+  isCryptoSymbol: jest.fn(() => true),
 }));
 
 await jest.unstable_mockModule('@/lib/sleeves', () => ({
@@ -76,6 +100,7 @@ await jest.unstable_mockModule('./strategy-version', () => ({
 
 await jest.unstable_mockModule('@/lib/ai', () => ({
   claudeJsonArray: jest.fn(),
+  logFailedAiCall: jest.fn(),
   MODELS: { sonnet: 'sonnet' },
   AiJsonParseError: class extends Error {},
 }));

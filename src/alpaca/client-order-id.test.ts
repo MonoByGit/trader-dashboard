@@ -1,22 +1,20 @@
-<<<<<<< HEAD
-import { buildAlpacaClientOrderId } from './client-order-id.js';
+import { buildAlpacaClientOrderId, buildEtfClientOrderId } from './client-order-id.js';
 
 describe('buildAlpacaClientOrderId', () => {
-  it('sanitises symbols and caps length at 48', () => {
+  it('sanitises crypto symbols and caps length at 48', () => {
     const id = buildAlpacaClientOrderId({
       routine: 'crypto-scan',
       runId: '1234567890',
       symbol: 'BTC/USD',
       side: 'buy',
     });
-    expect(id).toMatch(/^crypto-scan-1234567890-BTC-USD-buy$/);
     expect(id.length).toBeLessThanOrEqual(48);
-=======
-import { buildEtfClientOrderId } from './client-order-id.js';
+    expect(id).toMatch(/buy$/);
+    expect(id).toMatch(/BTC-USD/);
+  });
 
-describe('buildEtfClientOrderId', () => {
-  it('stays within 48 chars and sanitises symbol', () => {
-    const id = buildEtfClientOrderId({
+  it('stays within 48 chars for ETF market-open ids', () => {
+    const id = buildAlpacaClientOrderId({
       routine: 'market-open',
       runId: 'run-market-open-1730462400000',
       symbol: 'QQQ',
@@ -34,7 +32,7 @@ describe('buildEtfClientOrderId', () => {
       side: 'sell' as const,
       tag: 'restop',
     };
-    expect(buildEtfClientOrderId(input)).toBe(buildEtfClientOrderId(input));
->>>>>>> 8f2f496 (feat(etf): idempotent Alpaca order POSTs with client_order_id)
+    expect(buildAlpacaClientOrderId(input)).toBe(buildAlpacaClientOrderId(input));
+    expect(buildEtfClientOrderId(input)).toBe(buildAlpacaClientOrderId(input));
   });
 });

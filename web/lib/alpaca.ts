@@ -7,12 +7,6 @@ import {
   assertAlpacaPaperTrading,
   alpacaTradingBaseUrl,
 } from '../../src/alpaca/paper-host';
-import {
-  ALPACA_FETCH_TIMEOUT_MS,
-  isAbortTimeoutError,
-  parseAlpacaHttpStatus,
-  shouldRecoverOrderPostError,
-} from '../../src/alpaca/order-post-recovery';
 import { logAlpacaModeAtStartup } from './alpaca-startup';
 import { alpacaPositionCloseUrl } from '../../src/alpaca/symbol-path';
 import { AlpacaHttpError } from '../../src/alpaca/alpaca-http-error';
@@ -40,7 +34,6 @@ function headers() {
   };
 }
 
-<<<<<<< HEAD
 async function parseJsonBody<T>(res: Response): Promise<T> {
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -86,91 +79,16 @@ async function placeOrderRequest(o: AlpacaOrderRequest): Promise<AlpacaOrder> {
     submit: () => post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true }),
     lookupByClientOrderId: (id) => getOrderByClientOrderId(id),
   });
-=======
-function fetchSignal(): AbortSignal | undefined {
-  if (typeof AbortSignal.timeout === 'function') {
-    return AbortSignal.timeout(ALPACA_FETCH_TIMEOUT_MS);
-  }
-  return undefined;
-}
-
-async function tradingFetch(url: string, init: RequestInit, trading = false): Promise<Response> {
-  if (trading) assertAlpacaPaperTrading(BASE);
-  const signal = fetchSignal();
-  try {
-    return await fetch(url, { ...init, headers: headers(), cache: 'no-store', signal });
-  } catch (e) {
-    if (isAbortTimeoutError(e)) {
-      const err = new Error(`Alpaca fetch timeout ${url}`);
-      err.name = 'TimeoutError';
-      throw err;
-    }
-    throw e;
-  }
-}
-
-async function get<T>(url: string, trading = false): Promise<T> {
-  const res = await tradingFetch(url, { method: 'GET' }, trading);
-  if (!res.ok) throw new Error(`Alpaca ${url}: ${res.status} ${await res.text()}`);
-  return res.json();
-}
-
-async function getOrderByClientOrderId(clientOrderId: string): Promise<AlpacaOrder | null> {
-  const url = `${BASE}/v2/orders:by_client_order_id/${encodeURIComponent(clientOrderId)}`;
-  const res = await tradingFetch(url, { method: 'GET' }, true);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Alpaca GET ${url}: ${res.status} ${await res.text()}`);
-  return res.json() as Promise<AlpacaOrder>;
-}
-
-async function post<T>(url: string, body: unknown, options?: { trading?: boolean; clientOrderId?: string }): Promise<T> {
-  const trading = options?.trading ?? false;
-  const clientOrderId = options?.clientOrderId;
-  try {
-    const res = await tradingFetch(
-      url,
-      { method: 'POST', body: JSON.stringify(body) },
-      trading,
-    );
-    if (!res.ok) {
-      const status = res.status;
-      const text = await res.text();
-      if (clientOrderId && shouldRecoverOrderPostError(status, false)) {
-        const existing = await getOrderByClientOrderId(clientOrderId);
-        if (existing) return existing as T;
-      }
-      throw new Error(`Alpaca POST ${url}: ${status} ${text}`);
-    }
-    return res.json();
-  } catch (e) {
-    if (clientOrderId) {
-      const status = e instanceof Error ? parseAlpacaHttpStatus(e.message) : null;
-      const timeout = isAbortTimeoutError(e) || (e instanceof Error && e.name === 'TimeoutError');
-      if (shouldRecoverOrderPostError(status, timeout)) {
-        const existing = await getOrderByClientOrderId(clientOrderId);
-        if (existing) return existing as T;
-      }
-    }
-    throw e;
-  }
-}
-
-async function del<T>(url: string, options?: { trading?: boolean }): Promise<T> {
-  const res = await tradingFetch(url, { method: 'DELETE' }, options?.trading ?? false);
-  if (!res.ok) throw new Error(`Alpaca DELETE ${url}: ${res.status} ${await res.text()}`);
-  return res.json();
->>>>>>> 8f2f496 (feat(etf): idempotent Alpaca order POSTs with client_order_id)
 }
 
 export const alpaca = {
-  account: () => get<AlpacaAccount>(`${BASE}/v2/account`, true),
-  positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`, true),
+  account: () => get<AlpacaAccount>(`${BASE}/v2/account`),
+  positions: () => get<AlpacaPosition[]>(`${BASE}/v2/positions`),
   closePosition: (symbol: string) =>
     del<unknown>(alpacaPositionCloseUrl(BASE, symbol), { trading: true }),
   cancelAllOrders: () => del<{ id: number }[]>(`${BASE}/v2/orders`, { trading: true }),
-  orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`, true),
+  orders: (limit = 50) => get<AlpacaOrder[]>(`${BASE}/v2/orders?status=all&limit=${limit}&direction=desc`),
   openOrders: (limit = 100) =>
-<<<<<<< HEAD
     get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`),
   getOrder: (orderId: string) => get<AlpacaOrder>(`${BASE}/v2/orders/${orderId}`),
   cancelOrder: (orderId: string) =>
@@ -178,13 +96,6 @@ export const alpaca = {
   placeOrder: (o: AlpacaOrderRequest) => placeOrderRequest(o),
   getOrderByClientOrderId,
   clock: () => get<AlpacaClock>(`${BASE}/v2/clock`),
-=======
-    get<AlpacaOrder[]>(`${BASE}/v2/orders?status=open&limit=${limit}&direction=desc`, true),
-  getOrderByClientOrderId,
-  placeOrder: (o: AlpacaOrderRequest) =>
-    post<AlpacaOrder>(`${BASE}/v2/orders`, o, { trading: true, clientOrderId: o.client_order_id }),
-  clock: () => get<AlpacaClock>(`${BASE}/v2/clock`, true),
->>>>>>> 8f2f496 (feat(etf): idempotent Alpaca order POSTs with client_order_id)
   bars: async (symbols: string[], timeframe = '1Day', limit = 30) => {
     const bars = await fetchStockDailyBars({
       symbols,
@@ -217,7 +128,6 @@ export const alpaca = {
   portfolioHistory: (period = '1A', timeframe = '1D') =>
     get<AlpacaPortfolioHistory>(
       `${BASE}/v2/account/portfolio/history?period=${period}&timeframe=${timeframe}&extended_hours=false`,
-      true,
     ),
 };
 
@@ -246,13 +156,12 @@ export interface AlpacaPosition {
   cost_basis: string;
   unrealized_pl: string;
   unrealized_plpc: string;
-  unrealized_intraday_pl: string;
-  unrealized_intraday_plpc: string;
+  unrealized_intraday_pl?: string;
+  unrealized_intraday_plpc?: string;
   side: string;
   asset_class: string;
   /** Fractional day change (e.g. -0.05), not USD. */
   change_today: string;
-  qty_available: string;
 }
 
 export interface AlpacaOrder {

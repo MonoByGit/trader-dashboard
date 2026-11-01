@@ -1,18 +1,3 @@
-<<<<<<< HEAD
-/** Alpaca client_order_id: max 48 chars, letters, digits, hyphens. */
-export function buildAlpacaClientOrderId(parts: {
-  routine: string;
-  runId: string;
-  symbol: string;
-  side: string;
-}): string {
-  const raw = `${parts.routine}-${parts.runId}-${parts.symbol}-${parts.side}`;
-  const sanitized = raw
-    .replace(/[^A-Za-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  return sanitized.slice(0, 48);
-=======
 const MAX_LEN = 48;
 
 function compactToken(s: string, max: number): string {
@@ -21,8 +6,8 @@ function compactToken(s: string, max: number): string {
   return cleaned.slice(-max);
 }
 
-/** Deterministic Alpaca client_order_id (≤48 chars) for ETF order POST idempotency. */
-export function buildEtfClientOrderId(input: {
+/** Deterministic Alpaca client_order_id (≤48 chars) for crypto and ETF order POST idempotency. */
+export function buildAlpacaClientOrderId(input: {
   routine: string;
   runId: string;
   symbol: string;
@@ -40,5 +25,7 @@ export function buildEtfClientOrderId(input: {
     id = id.slice(0, MAX_LEN);
   }
   return id;
->>>>>>> 8f2f496 (feat(etf): idempotent Alpaca order POSTs with client_order_id)
 }
+
+/** @deprecated Use buildAlpacaClientOrderId */
+export const buildEtfClientOrderId = buildAlpacaClientOrderId;
