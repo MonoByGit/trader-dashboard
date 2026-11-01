@@ -48,6 +48,9 @@ async function load(qa: string, ready: boolean, closeFails: boolean) {
       events.push(k);
     },
   }));
+  jest.unstable_mockModule('@/lib/momentum2/ownership', () => ({
+    foreignQtyForSymbol: async () => 0,
+  }));
   const m = await import('@/lib/eod-flatten');
   return { m, placeOrder, events };
 }

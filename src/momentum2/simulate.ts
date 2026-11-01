@@ -1,8 +1,20 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
+import type { StrategyHooks } from './hooks';
 import { planRebalance } from './plan';
-import { checkStop, lossLimitBreached } from './risk';
-import type { Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
+import { lossLimitBreached, stopLevel, type StopKind } from './risk';
+import type { Bar, EquityLogRow, OrderIntent, Position, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict } from './types';
+
+function stopHit(
+  pos: Pick<Position, 'entryPrice' | 'highWater'>,
+  bar: Pick<Bar, 'o' | 'l'>,
+  cfg: VersionConfig,
+  hooks?: StrategyHooks,
+): { hit: false } | { hit: true; fillPrice: number; kind: StopKind } {
+  const { level, kind } = hooks?.stopFor?.(pos, cfg) ?? stopLevel(pos, cfg);
+  if (bar.l > level) return { hit: false };
+  return { hit: true, fillPrice: Math.min(bar.o, level), kind };
+}
 
 export interface SimData {
   barsBySymbol: Record<string, Bar[]>;
@@ -12,6 +24,7 @@ export interface SimData {
 export interface SimOptions {
   slippageBps?: number;
   veto?: VetoFn;
+  hooks?: StrategyHooks;
 }
 
 export interface SimResult {
@@ -83,7 +96,7 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
     for (const [sym, pos] of Object.entries(book.positions)) {
       const bar = barAt(sym, date);
       if (!bar) continue;
-      const r = checkStop(pos, bar, cfg);
+      const r = stopHit(pos, bar, cfg, opts.hooks);
       if (r.hit) {
         const t = applySell(book, sym, pos.qty, r.fillPrice * (1 - slip), date, `${r.kind} stop`);
         if (t) trades.push(t);
@@ -107,9 +120,16 @@ export async function simulateVersion(cfg: VersionConfig, data: SimData, opts: S
     // 4. Besluit voor morgen.
     const due = book.lastRebalanceIndex === null || i - book.lastRebalanceIndex >= cfg.rebalanceEveryDays;
     if (book.halted || due) {
-      const plan = await planRebalance({ barsBySymbol: upTo(date), book, cfg, veto: opts.veto });
-      pending = plan.orders;
-      for (const v of plan.vetoes) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
+      const barsSlice = upTo(date);
+      if (opts.hooks?.plan) {
+        const plan = await opts.hooks.plan({ barsBySymbol: barsSlice, book, cfg });
+        pending = plan.orders;
+        for (const v of plan.vetoes ?? []) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
+      } else {
+        const plan = await planRebalance({ barsBySymbol: barsSlice, book, cfg, veto: opts.veto });
+        pending = plan.orders;
+        for (const v of plan.vetoes) vetoLog.push({ date, symbol: v.symbol, verdict: v.verdict });
+      }
       if (!book.halted) book.lastRebalanceIndex = i;
     }
   }

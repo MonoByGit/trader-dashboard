@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolveMomentum2Mode } from './mode';
+import { resolveMomentum2Mode, resolveShadowMode } from './mode';
 
 describe('momentum2 modus', () => {
   it('staat standaard uit', () => {
@@ -23,5 +23,22 @@ describe('momentum2 modus', () => {
     expect(src).not.toMatch(/alpacaPaperBroker/);
     expect(src).not.toMatch(/placeOrder|cancelOrder/);
     expect(src).toMatch(/resolveMomentum2Mode/);
+  });
+});
+
+describe('resolveShadowMode (M4)', () => {
+  it('uit tenzij ENABLED=1, en DRY_RUN=0 wordt geweigerd', () => {
+    expect(resolveShadowMode({}, 'MOMENTUM4')).toMatchObject({ run: false });
+    expect(resolveShadowMode({ MOMENTUM4_ENABLED: '1' }, 'MOMENTUM4')).toEqual({ run: true, shadow: true });
+    expect(resolveShadowMode({ MOMENTUM4_ENABLED: '1', MOMENTUM4_DRY_RUN: '0' }, 'MOMENTUM4')).toMatchObject({ run: false });
+  });
+});
+
+describe('M4-route', () => {
+  it('raakt geen echte orders; 13F via SEC EDGAR', () => {
+    const src = readFileSync(new URL('../../web/lib/momentum4/run.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/alpacaPaperBroker|placeOrder|cancelOrder/);
+    expect(src).toMatch(/list13FFilings|fetch13FHoldings/);
+    expect(src).toMatch(/shadowBroker/);
   });
 });
