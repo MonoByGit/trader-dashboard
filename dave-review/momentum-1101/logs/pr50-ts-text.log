@@ -1,0 +1,8 @@
+UTC "2026-11-01 21:30:00.5+00" Date.parse(V8)= 2026-11-01T21:30:00.500Z raw isDate= true
+UTC "2026-11-01 16:18:41.219+00" Date.parse(V8)= 2026-11-01T16:18:41.219Z raw isDate= true
+Europe/Amsterdam "2026-11-01 22:30:00.5+01" Date.parse(V8)= 2026-11-01T21:30:00.500Z raw isDate= true
+Europe/Amsterdam "2026-11-01 17:18:41.219+01" Date.parse(V8)= 2026-11-01T16:18:41.219Z raw isDate= true
+America/New_York "2026-11-01 16:30:00.5-05" Date.parse(V8)= 2026-11-01T21:30:00.500Z raw isDate= true
+America/New_York "2026-11-01 11:18:41.219-05" Date.parse(V8)= 2026-11-01T16:18:41.219Z raw isDate= true
+pglite default reset -> [{"TimeZone":"America/New_York"}]
+ISO-8601 strict match: false
