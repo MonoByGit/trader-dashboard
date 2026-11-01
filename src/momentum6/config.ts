@@ -22,8 +22,8 @@ export function m6Config(paperCapitalUsd = PAPER_CAPITAL_USD): M6Config {
     smaDays: 20,
     volDays: 10,
     rebalanceEveryDays: 1,
-    hardStopPct: 0.12,
-    trailingStopPct: 0.12,
+    hardStopPct: 0.2,
+    trailingStopPct: 0.99,
     maxLossPct: 0.15,
     floatingBudget: false,
     maxGrossPct: 1,
@@ -32,6 +32,7 @@ export function m6Config(paperCapitalUsd = PAPER_CAPITAL_USD): M6Config {
     breakoutDays: 20,
     exitLowDays: 10,
     maxHoldDays: 10,
+    /** Close-trail in planM6 (exitTrailFromPeakClose); geen intraday trail. */
     trailFromPeakPct: 0.12,
     fractional: true,
     feeBps: 25,

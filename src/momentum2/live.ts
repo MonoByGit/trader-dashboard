@@ -1,7 +1,7 @@
 import { applyBuy, applySell, equityOf, logRow, newBook } from './book';
 import { dateOf } from './indicators';
 import { rotationHooks, type StrategyHooks } from './hooks';
-import { momentumOrderTag } from './order-tag';
+import { momentumClientOrderId, momentumStopClientPrefix } from './order-tag';
 import { checkStopLevel, lossLimitBreached } from './risk';
 import type {
   Bar, EquityLogRow, OrderIntent, TradeLogRow, VersionBook, VersionConfig, VetoFn, VetoVerdict,
@@ -22,7 +22,7 @@ export interface Broker {
   setStop(o: { versionId: string; symbol: string; qty: number; stopPrice: number; stopClientPrefix: string }): Promise<void>;
   cancelStop(o: { versionId: string; symbol: string; stopClientPrefix?: string }): Promise<void>;
   /** Is de stop van deze versie voor dit symbool afgegaan sinds `since` (ISO, de instapdatum)? */
-  stopFill(o: { versionId: string; symbol: string; since: string }): Promise<Fill | null>;
+  stopFill(o: { versionId: string; symbol: string; since: string; stopClientPrefix: string }): Promise<Fill | null>;
 }
 
 export interface DecisionRecord {
@@ -155,7 +155,8 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
 
     // 1. Stops die sinds gisteren zijn afgegaan.
     for (const [sym, pos] of Object.entries(book.positions)) {
-      const f = await broker.stopFill({ versionId: cfg.id, symbol: sym, since: pos.entryDate });
+      const stopPx = momentumStopClientPrefix(cfg);
+      const f = await broker.stopFill({ versionId: cfg.id, symbol: sym, since: pos.entryDate, stopClientPrefix: stopPx });
       if (f) {
         const t = applySell(book, sym, f.qty, f.price, date, 'stop (broker)');
         if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
@@ -165,15 +166,18 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
 
     // 2. Geplande orders, verkopen eerst.
     const pending = await store.loadPending(cfg.id);
-    const tag = momentumOrderTag(cfg);
+    const stopPx = momentumStopClientPrefix(cfg);
     for (const o of pending) {
       const px = input.lastPrice[o.symbol];
       if (!px) continue;
       if (o.side === 'sell') {
         const qty = Math.min(o.qty ?? 0, book.positions[o.symbol]?.qty ?? 0);
         if (qty <= 0) continue;
-        await broker.cancelStop({ versionId: cfg.id, symbol: o.symbol, stopClientPrefix: `${tag}s-${cfg.id}-` });
-        const fill = await broker.marketOrder({ versionId: cfg.id, symbol: o.symbol, side: 'sell', qty, clientOrderId: `${tag}-${date}-${o.symbol}-s` });
+        await broker.cancelStop({ versionId: cfg.id, symbol: o.symbol, stopClientPrefix: stopPx });
+        const fill = await broker.marketOrder({
+          versionId: cfg.id, symbol: o.symbol, side: 'sell', qty,
+          clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 's'),
+        });
         if (!fill) continue;
         const t = applySell(book, o.symbol, fill.qty, fill.price, date, o.reason);
         if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
@@ -181,7 +185,10 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         const whole = (x: number) => (cfg.fractional ? Math.floor(x * 1e6) / 1e6 : Math.floor(x));
         const qty = Math.min(whole((o.notionalUsd ?? 0) / px), whole(book.cash / px));
         if (qty <= 0) continue;
-        const fill = await broker.marketOrder({ versionId: cfg.id, symbol: o.symbol, side: 'buy', qty, clientOrderId: `${tag}-${date}-${o.symbol}-b` });
+        const fill = await broker.marketOrder({
+          versionId: cfg.id, symbol: o.symbol, side: 'buy', qty,
+          clientOrderId: momentumClientOrderId(cfg, date, o.symbol, 'b'),
+        });
         if (!fill) continue;
         const t = applyBuy(book, o.symbol, fill.qty, fill.price, date, o.reason);
         if (t) { trades.push(t); await store.logTrade(cfg.id, t); }
@@ -190,7 +197,6 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
     await store.savePending(cfg.id, []);
 
     // 3. Stops: harde stop bij entry, daarna meebewegend omhoog (ATR e.d. alleen t/m gisteren).
-    const stopPrefix = `${momentumOrderTag(cfg)}s-${cfg.id}-`;
     for (const [sym, pos] of Object.entries(book.positions)) {
       const hist = (input.barsBySymbol?.[sym] ?? []).filter((b) => dateOf(b) < date);
       const st = hooks.stopFor(pos, cfg, hist.length ? hist : undefined, sym);
@@ -200,7 +206,7 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
         symbol: sym,
         qty: pos.qty,
         stopPrice: round2(st.level),
-        stopClientPrefix: stopPrefix,
+        stopClientPrefix: stopPx,
       });
     }
     await store.saveBook(book);

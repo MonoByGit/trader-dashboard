@@ -1,7 +1,7 @@
 import { dateOf } from './indicators';
 import type { StrategyHooks } from './hooks';
 import { simulateVersion, type SimData, type SimOptions } from './simulate';
-import type { VersionBook, VersionConfig } from './types';
+import type { OrderIntent, VersionBook, VersionConfig } from './types';
 import {
   totalReturnPctFromEquityPath,
   totalReturnPctFromLevelPath,
@@ -43,7 +43,10 @@ function maxDrawdownFromSeries(values: number[]): number {
   return maxDd * 100;
 }
 
-/** Walk-forward zonder parameterraster: OOS-vensters met doorlopend boek (initialBook carry). */
+/**
+ * Walk-forward zonder parameterraster: OOS-vensters met doorlopend boek en pending orders.
+ * Na verliesgrens blijft de sleeve gehalt (`haltedOn`); dat is bedoeld gedrag.
+ */
 export async function walkForwardCarry<C extends VersionConfig>(input: {
   cfg: C;
   data: SimData;
@@ -60,6 +63,7 @@ export async function walkForwardCarry<C extends VersionConfig>(input: {
   const warm = cfg.smaDays;
   const windows: WalkForwardWindow[] = [];
   let carryBook: VersionBook | undefined;
+  let carryPending: OrderIntent[] = [];
   let haltedOn: string | null = null;
   let globalPeak = cfg.budgetUsd;
   let globalMaxDd = 0;
@@ -71,10 +75,17 @@ export async function walkForwardCarry<C extends VersionConfig>(input: {
   const sharpeYear = input.periodsPerYear ?? (fillGaps ? 365 : 252);
   const simOpts: SimOptions = { hooks, fillGaps, slippageBps };
 
-  for (let tStart = warm; tStart + testDays <= dates.length; tStart += testDays) {
-    const testSlice = slice(data, dates[tStart - warm]!, dates[tStart + testDays - 1]!);
-    const t = await simulateVersion(cfg, testSlice, { ...simOpts, initialBook: carryBook });
+  for (let tStart = warm; tStart < dates.length; tStart += testDays) {
+    const tEndIdx = Math.min(tStart + testDays - 1, dates.length - 1);
+    const warmFrom = Math.max(0, tStart - warm);
+    const testSlice = slice(data, dates[warmFrom]!, dates[tEndIdx]!);
+    const t = await simulateVersion(cfg, testSlice, {
+      ...simOpts,
+      initialBook: carryBook,
+      initialPending: carryPending.length ? carryPending : undefined,
+    });
     carryBook = t.book;
+    carryPending = t.pendingOrders;
     allTrades.push(...t.trades);
     for (const row of t.equity) {
       equityPath.push({ date: row.date, equity: row.equity });
@@ -89,7 +100,7 @@ export async function walkForwardCarry<C extends VersionConfig>(input: {
     windows.push({
       trainStart: dates[tStart]!,
       testStart: dates[tStart]!,
-      testEnd: dates[tStart + testDays - 1]!,
+      testEnd: dates[tEndIdx]!,
       chosen: {},
       trainScore: 0,
       testReturnPct: t.metrics.totalReturnPct,

@@ -2,7 +2,10 @@ import { stopLevel } from '../momentum2/risk';
 import type { Position } from '../momentum2/types';
 import type { M5Config } from './config';
 
-/** Alleen trailing 15% op het risico-ETF; BIL heeft geen stop. */
+/**
+ * Alleen trailing op het risico-ETF (default 25%).
+ * BIL (cash) heeft bewust geen stop: het is de vlucht naar cash, geen risicopositie.
+ */
 export function m5StopLevel(
   pos: Pick<Position, 'entryPrice' | 'highWater'>,
   cfg: M5Config,
@@ -13,3 +16,4 @@ export function m5StopLevel(
 }
 
 export const M5_AWAIT_FRESH_UP = 'm5AwaitFreshUp';
+export const M5_DIPPED_FOR_FRESH = 'm5DippedForFresh';

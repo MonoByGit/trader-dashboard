@@ -13,6 +13,22 @@ export function breakoutEntry(bars: Bar[], cfg: Pick<M6Config, 'breakoutDays'>):
 }
 
 /** Uitstap: slot onder het minimum van de vorige M closes (exclusief vandaag). */
+/** 12% trail t.o.v. hoogste close sinds instap (exclusief vandaag). */
+export function exitTrailFromPeakClose(
+  bars: Bar[],
+  cfg: Pick<M6Config, 'trailFromPeakPct'>,
+  entryDate: string,
+): boolean {
+  const entryIdx = bars.findIndex((b) => dateOf(b) >= entryDate.slice(0, 10));
+  if (entryIdx < 0 || bars.length < entryIdx + 2) return false;
+  const closes = closesOf(bars);
+  const hist = closes.slice(entryIdx, -1);
+  if (hist.length === 0) return false;
+  const peak = Math.max(...hist);
+  const today = closes[closes.length - 1]!;
+  return today < peak * (1 - cfg.trailFromPeakPct);
+}
+
 export function exitBelowLow(bars: Bar[], cfg: Pick<M6Config, 'exitLowDays'>): boolean {
   if (bars.length < cfg.exitLowDays + 1) return false;
   const closes = closesOf(bars);

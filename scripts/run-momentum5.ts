@@ -27,8 +27,8 @@ async function fetchStocks(symbols: string[], start: string, end: string): Promi
     u.searchParams.set('start', start);
     u.searchParams.set('end', end);
     u.searchParams.set('limit', '10000');
-    u.searchParams.set('adjustment', 'split');
-    u.searchParams.set('feed', process.env.ALPACA_DATA_FEED ?? 'iex');
+    u.searchParams.set('adjustment', process.env.ALPACA_STOCK_ADJUSTMENT ?? 'all');
+    u.searchParams.set('feed', process.env.ALPACA_DATA_FEED ?? 'sip');
     if (token) u.searchParams.set('page_token', token);
     const res = await fetch(u, { headers: headers() });
     if (!res.ok) throw new Error(await res.text());
@@ -41,7 +41,8 @@ async function fetchStocks(symbols: string[], start: string, end: string): Promi
 
 function print(label: string, w: Awaited<ReturnType<typeof walkForwardCarry>>, bench: string) {
   console.log(`\n=== ${label} vs ${bench} ===`);
-  console.log(`OOS ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${w.haltedOn ? `, halt ${w.haltedOn}` : ''})`);
+  const haltNote = w.haltedOn ? `, sleeve gehalt op ${w.haltedOn} (blijft gehalt)` : '';
+  console.log(`OOS ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${haltNote})`);
   console.log(
     `Return ${w.oosReturnPct.toFixed(1)}% | ${bench} ${w.oosBenchmarkPct.toFixed(1)}% | excess ${w.oosExcessPct.toFixed(1)} pp | MaxDD ${w.oosMaxDrawdownPct.toFixed(1)}% | Sharpe ${w.oosSharpe.toFixed(2)} | trades ${w.oosTradeCount}`,
   );

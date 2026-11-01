@@ -1,3 +1,4 @@
+import { alpaca } from '../alpaca';
 import { fetchStockDailyBars } from '../alpaca-bars';
 import { tradingDateEt } from '@scheduler/decide';
 import { resolveShadowMode } from '../../../src/momentum2/mode';
@@ -26,11 +27,20 @@ export async function runMomentum5(step: 'decide' | 'execute', nowMs = Date.now(
   const spy = barsBySymbol.SPY ?? [];
 
   if (step === 'decide') {
+    const qqqLast = barsBySymbol.QQQ?.at(-1)?.t.slice(0, 10);
+    if (qqqLast !== today) {
+      return { skipped: true, reason: 'geen slotbar QQQ voor vandaag', step, date: today };
+    }
     const out: Record<string, unknown> = { step, date: today, shadow: true };
     for (const cfg of cfgs) {
       out[cfg.id] = (await decideDay({ date: today, cfgs: [cfg], hooks: m5Hooks, barsBySymbol, benchmark: spy, store })).planned;
     }
     return out;
+  }
+
+  const clock = await alpaca.clock();
+  if (!clock.is_open) {
+    return { skipped: true, reason: 'markt gesloten', step, date: today };
   }
 
   const lastPrice: Record<string, number> = {};

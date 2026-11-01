@@ -1,8 +1,19 @@
+import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/cron-auth';
 import { runMomentum6 } from '@/lib/momentum6/run';
 
-/** POST { step: 'decide' | 'execute' }. Alleen schaduw; MOMENTUM6_ENABLED=1 vereist. */
+export const dynamic = 'force-dynamic';
+
+/** POST { step: 'decide' | 'execute' } met Bearer CRON_SECRET. Alleen schaduw; MOMENTUM6_ENABLED=1. */
 export async function POST(req: Request) {
-  const body = (await req.json()) as { step?: 'decide' | 'execute' };
-  const step = body.step ?? 'decide';
-  return Response.json(await runMomentum6(step));
+  if (!requireCronAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { step } = (await req.json().catch(() => ({}))) as { step?: string };
+  if (step !== 'decide' && step !== 'execute') {
+    return NextResponse.json({ error: "step moet 'decide' of 'execute' zijn" }, { status: 400 });
+  }
+  try {
+    return NextResponse.json(await runMomentum6(step));
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }

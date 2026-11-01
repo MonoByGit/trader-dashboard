@@ -6,4 +6,8 @@ Aan: `MOMENTUM6_ENABLED=1`. Schaduw alleen; `MOMENTUM6_DRY_RUN=0` wordt geweiger
 
 Boek: `m:book:m6-btc-breakout`. Orders: prefix `m6-`.
 
+Close-exits (12% trail van peak close, 10d low, max 10 dagen) worden op de slotkoers gepland en bij de volgende open gevuld; intraday blijft een 20% noodstop. Kosten: 25 bp fee + slippage in sim.
+
+Walk-forward: raakt de sleeve de verliesgrens, dan blijft hij gehalt voor de rest van de run (bedoeld).
+
 Backtest: `npx tsx scripts/run-momentum6.ts` (Alpaca keys).

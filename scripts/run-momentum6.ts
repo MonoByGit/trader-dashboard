@@ -56,7 +56,8 @@ async function main() {
     periodsPerYear: 365,
   });
   console.log(`\n=== ${cfg.id} vs BTC ===`);
-  console.log(`OOS ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${w.haltedOn ? `, halt ${w.haltedOn}` : ''})`);
+  const haltNote = w.haltedOn ? `, sleeve gehalt op ${w.haltedOn} (blijft gehalt)` : '';
+  console.log(`OOS ${w.oosPeriodStart} .. ${w.oosPeriodEnd} (${w.windows.length} vensters${haltNote})`);
   console.log(
     `Return ${w.oosReturnPct.toFixed(1)}% | BTC ${w.oosBenchmarkPct.toFixed(1)}% | excess ${w.oosExcessPct.toFixed(1)} pp | MaxDD ${w.oosMaxDrawdownPct.toFixed(1)}% | Sharpe ${w.oosSharpe.toFixed(2)} | trades ${w.oosTradeCount} | costs ~${w.oosCostsPctOfBudget.toFixed(1)}% budget`,
   );

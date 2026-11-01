@@ -10,7 +10,7 @@ function desiredHold(book: VersionBook, cfg: M5Config, qqqBars: Bar[]): 'risk' |
   const bt = bandTarget(qqqBars, cfg);
   const awaitUp = book.strategyState?.[M5_AWAIT_FRESH_UP] === true;
   if (awaitUp) {
-    if (freshUpSignal(qqqBars, cfg)) {
+    if (freshUpSignal(qqqBars, cfg, book)) {
       book.strategyState = { ...book.strategyState, [M5_AWAIT_FRESH_UP]: false };
       return 'risk';
     }
@@ -47,7 +47,6 @@ export function planM5(input: {
     const b = barsBySymbol[s]?.at(-1);
     if (b) prices[s] = b.c;
   }
-  const notional = sizingBase(equityOf(book, prices), book, cfg);
 
   for (const [sym, p] of Object.entries({ ...book.positions })) {
     if (sym !== targetSym) {
@@ -60,17 +59,39 @@ export function planM5(input: {
     }
   }
 
-  if (!book.positions[targetSym] && notional > 0 && book.cash > 1) {
+  let deployable = book.cash;
+  for (const [sym, p] of Object.entries(book.positions)) {
+    if (sym !== targetSym) deployable += p.qty * (prices[sym] ?? p.entryPrice);
+  }
+
+  const eq = equityOf(book, prices);
+  const targetNotional = sizingBase(eq, book, cfg);
+  const currentExp = book.positions[targetSym]
+    ? book.positions[targetSym]!.qty * (prices[targetSym] ?? book.positions[targetSym]!.entryPrice)
+    : 0;
+  const gap = targetNotional - currentExp;
+  const minDeploy = targetNotional * 0.95 - currentExp;
+
+  if (gap > 1 && deployable > 1 && minDeploy > 0) {
     orders.push({
       symbol: targetSym,
       side: 'buy',
-      notionalUsd: Math.min(notional, book.cash),
+      notionalUsd: Math.min(gap, deployable),
       reason: hold === 'risk' ? 'QQQ boven band / fresh up' : 'QQQ onder band / wacht op up',
     });
   }
 
   orders.sort((a, b) => (a.side === b.side ? 0 : a.side === 'sell' ? -1 : 1));
   return { orders };
+}
+
+/** Na rebalance op de open: sleeve minstens `minPct` in het doel-ETF. */
+export function m5RiskExposurePct(book: VersionBook, cfg: M5Config, prices: Record<string, number>): number {
+  const eq = equityOf(book, prices);
+  if (eq <= 0) return 0;
+  const p = book.positions[cfg.riskSymbol];
+  if (!p) return 0;
+  return (p.qty * (prices[cfg.riskSymbol] ?? p.entryPrice)) / eq;
 }
 
 export const m5Hooks: StrategyHooks<M5Config> = {

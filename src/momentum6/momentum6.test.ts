@@ -3,7 +3,7 @@ import { simulateVersion } from '../momentum2/simulate';
 import { resolveShadowMode } from '../momentum2/mode';
 import { m6Config } from './config';
 import { m6Hooks, planM6 } from './plan';
-import { breakoutEntry, exitBelowLow } from './signals';
+import { breakoutEntry, exitBelowLow, exitTrailFromPeakClose } from './signals';
 import { newBook } from '../momentum2/book';
 import { m6StopLevel } from './risk';
 
@@ -50,8 +50,14 @@ describe('momentum6 signals', () => {
 });
 
 describe('momentum6 risk', () => {
-  it('harde stop 12% bij entry', () => {
-    expect(m6StopLevel({ entryPrice: 100, highWater: 100 }, cfg).level).toBeCloseTo(88, 6);
+  it('intraday noodstop 20% bij entry', () => {
+    expect(m6StopLevel({ entryPrice: 100, highWater: 100 }, cfg).level).toBeCloseTo(80, 6);
+  });
+
+  it('close-trail 12% vanaf peak close', () => {
+    const bars = makeBars(15, 100, 0.01, 0.02);
+    bars[bars.length - 1] = { ...bars[bars.length - 1]!, c: 80, l: 80, h: 82, o: 81 };
+    expect(exitTrailFromPeakClose(bars, cfg, bars[0]!.t.slice(0, 10))).toBe(true);
   });
 });
 

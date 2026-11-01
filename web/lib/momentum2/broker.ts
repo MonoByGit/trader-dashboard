@@ -48,7 +48,7 @@ export function alpacaPaperBroker(): Broker {
     },
 
     async stopFill(o): Promise<Fill | null> {
-      const prefix = stopPrefix(`m2s-${o.versionId}-`, o.symbol);
+      const prefix = stopPrefix(o.stopClientPrefix, o.symbol);
       const hit = (await alpaca.orders(100)).find(
         (x) => x.client_order_id?.startsWith(prefix) && x.status === 'filled' && x.filled_at && x.filled_at.slice(0, 10) >= o.since,
       );

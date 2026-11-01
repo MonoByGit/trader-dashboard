@@ -46,5 +46,10 @@ describe('resolveShadowMode (M3/M4)', () => {
       expect(src).toMatch(/shadowBroker/);
       expect(src).not.toMatch(/alpacaPaperBroker/);
     }
+    for (const p of ['momentum5/run/route.ts', 'momentum6/run/route.ts']) {
+      const src = readFileSync(new URL(`../../web/app/api/${p}`, import.meta.url), 'utf8');
+      expect(src).toMatch(/requireCronAuth/);
+      expect(src).toMatch(/force-dynamic/);
+    }
   });
 });
