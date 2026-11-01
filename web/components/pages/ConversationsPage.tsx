@@ -5,7 +5,6 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Modal } from '@/components/ui/Modal';
 import { BrandLogo } from '@/components/ui/Icon';
 import { fmt } from '@/lib/format';
-import { MOCK } from '@/lib/mock';
 
 interface Message { from: string; at: string; body: string; }
 interface Thread {
@@ -55,7 +54,7 @@ async function fetchAgentReply(threadId: string, threadTitle: string, message: s
 
 export function ConversationsPage({ pendingThread, onKickoffHandled }: { pendingThread?: Thread | null; onKickoffHandled?: () => void }) {
   const [threads, setThreads] = useState<Thread[]>(() => {
-    const base = (MOCK.threads as Thread[]).map(t => ({ ...t, messages: [...t.messages] }));
+    const base: Thread[] = [];
     return pendingThread ? [pendingThread, ...base] : base;
   });
   const [selectedId, setSelectedId] = useState<string>(() => pendingThread?.id || threads[0]?.id || '');
