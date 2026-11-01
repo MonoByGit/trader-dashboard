@@ -1,7 +1,6 @@
 import { alpaca } from '@/lib/alpaca';
 import { cancelSellLegsAndWait } from '@/lib/alpaca-orders';
 import { logGuardEvent } from '@/lib/guards/service';
-import { sendMessage } from '@/lib/telegram';
 
 export type EodFlattenResult =
   | { ok: true; symbol: string }
@@ -15,7 +14,7 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
       symbol,
       remaining: cancel.remainingLegs,
     });
-    await sendMessage(`⚠️ Momentum EOD: ${msg}`).catch(() => {});
+    console.error('[eod-flatten]', msg);
     return {
       ok: false,
       symbol,
@@ -31,7 +30,7 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
   } catch (e) {
     const error = String(e);
     await logGuardEvent('eod_flatten_close_fail', error, { symbol, cancelledLegs: cancel.cancelled });
-    await sendMessage(`⚠️ Momentum EOD: kon ${symbol} niet sluiten: ${error}`).catch(() => {});
+    console.error('[eod-flatten]', symbol, error);
     return {
       ok: false,
       symbol,
