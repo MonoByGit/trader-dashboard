@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AsyncLocalStorage } from 'async_hooks';
 
 // ============================================================================
 // AI-laag — provider-agnostisch. Standaard: Gemini. AGENT_PROVIDER=claude|
@@ -9,6 +10,36 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export type Provider = 'gemini' | 'claude' | 'deepseek';
 export type Tier = 'fast' | 'smart';
 export type ChatMsg = { role: 'user' | 'assistant'; content: string };
+
+const aiRoutineContext = new AsyncLocalStorage<{ routine?: string; decisionId?: string }>();
+
+export function withAiRoutine<T>(routine: string, fn: () => Promise<T>): Promise<T> {
+  return aiRoutineContext.run({ routine }, fn);
+}
+
+async function logAiUsage(
+  model: string,
+  system: string,
+  user: string,
+  response: string,
+  usage?: { input?: number; output?: number },
+): Promise<void> {
+  const ctx = aiRoutineContext.getStore();
+  try {
+    const { recordAiCall, tokensFromUsage } = await import('./ai-calls');
+    const tokens = tokensFromUsage(usage, system, user, response);
+    await recordAiCall({
+      routine: ctx?.routine,
+      provider: activeProvider(),
+      model,
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      decisionId: ctx?.decisionId,
+    });
+  } catch {
+    /* logging mag routines nooit breken */
+  }
+}
 
 export function activeProvider(): Provider {
   const p = (process.env.AGENT_PROVIDER ?? 'gemini').toLowerCase();
@@ -69,7 +100,13 @@ async function claudeChat(model: string, system: string, messages: ChatMsg[], ma
     system,
     messages: normalizeAlternating(messages),
   });
-  return resp.content.filter((b) => b.type === 'text').map((b) => (b.type === 'text' ? b.text : '')).join('');
+  const text = resp.content.filter((b) => b.type === 'text').map((b) => (b.type === 'text' ? b.text : '')).join('');
+  const user = messages.map((m) => m.content).join('\n\n');
+  await logAiUsage(model, system, user, text, {
+    input: resp.usage?.input_tokens,
+    output: resp.usage?.output_tokens,
+  });
+  return text;
 }
 
 function normalizeAlternating(messages: ChatMsg[]): ChatMsg[] {
@@ -92,7 +129,13 @@ async function geminiGenerate(model: string, system: string, prompt: string, max
     generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
   });
   const result = await m.generateContent(prompt);
-  return result.response.text();
+  const text = result.response.text();
+  const meta = result.response.usageMetadata;
+  await logAiUsage(model, system, prompt, text, {
+    input: meta?.promptTokenCount,
+    output: meta?.candidatesTokenCount,
+  });
+  return text;
 }
 
 // ---- DeepSeek (OpenAI-compatible chat completions) -----------------------
@@ -130,8 +173,14 @@ async function deepseekChat(
   }
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  return data.choices?.[0]?.message?.content ?? '';
+  const text = data.choices?.[0]?.message?.content ?? '';
+  await logAiUsage(model, system, user, text, {
+    input: data.usage?.prompt_tokens,
+    output: data.usage?.completion_tokens,
+  });
+  return text;
 }
 
 function transcript(messages: ChatMsg[]): string {

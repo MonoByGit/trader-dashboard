@@ -45,6 +45,12 @@ export const alpaca = {
     get<{ quotes: Record<string, AlpacaQuote> }>(
       `${DATA}/v2/stocks/quotes/latest?symbols=${symbols.join(',')}&feed=iex`
     ),
+  calendar: (start: string, end: string) =>
+    get<AlpacaCalendarDay[]>(`${BASE}/v2/calendar?start=${start}&end=${end}`),
+  portfolioHistory: (period = '1A', timeframe = '1D') =>
+    get<AlpacaPortfolioHistory>(
+      `${BASE}/v2/account/portfolio/history?period=${period}&timeframe=${timeframe}&extended_hours=false`,
+    ),
 };
 
 export interface AlpacaAccount {
@@ -129,4 +135,19 @@ export interface AlpacaQuote {
   as: number;
   bs: number;
   t: string;
+}
+
+export interface AlpacaCalendarDay {
+  date: string;
+  open: string;
+  close: string;
+}
+
+export interface AlpacaPortfolioHistory {
+  timestamp: number[];
+  equity: number[];
+  profit_loss: number[];
+  profit_loss_pct: number[];
+  base_value: number;
+  timeframe: string;
 }

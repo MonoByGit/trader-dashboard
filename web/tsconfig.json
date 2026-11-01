@@ -19,7 +19,13 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@guards/*": ["../src/guards/*"]
+      "@guards/*": ["../src/guards/*"],
+      "@scheduler/*": ["../src/scheduler/*"],
+      "@scheduler/decide": ["../src/scheduler/decide.ts"],
+      "@snapshots/*": ["../src/snapshots/*"],
+      "@snapshots/returns": ["../src/snapshots/returns.ts"],
+      "@ai-cost/*": ["../src/ai-cost/*"],
+      "@ai-cost/pricing": ["../src/ai-cost/pricing.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

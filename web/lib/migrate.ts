@@ -142,6 +142,73 @@ async function migrate(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_post_mortems_closed ON trade_post_mortems (closed_at DESC);
   `);
+
+  await dbRun(`
+    ALTER TABLE decisions ADD COLUMN IF NOT EXISTS strategy_version TEXT;
+
+    CREATE TABLE IF NOT EXISTS daily_snapshots (
+      trading_date DATE PRIMARY KEY,
+      equity NUMERIC NOT NULL,
+      cash NUMERIC NOT NULL,
+      positions JSONB NOT NULL DEFAULT '[]'::jsonb,
+      spy_close NUMERIC,
+      momentum_daily_return_pct NUMERIC,
+      spy_daily_return_pct NUMERIC,
+      momentum_cumulative_return_pct NUMERIC,
+      spy_cumulative_return_pct NUMERIC,
+      baseline_equity NUMERIC,
+      baseline_spy_close NUMERIC,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS routine_runs (
+      id TEXT PRIMARY KEY,
+      routine TEXT NOT NULL,
+      trading_date DATE NOT NULL,
+      started_at TIMESTAMPTZ NOT NULL,
+      finished_at TIMESTAMPTZ,
+      status TEXT NOT NULL,
+      skip_reason TEXT,
+      duration_ms INTEGER,
+      error_message TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_runs_day ON routine_runs (trading_date, routine);
+
+    CREATE TABLE IF NOT EXISTS ai_calls (
+      id TEXT PRIMARY KEY,
+      ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      routine TEXT,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      cost_usd NUMERIC(12, 6),
+      decision_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_calls_ts ON ai_calls (ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_calls_routine ON ai_calls (routine, ts DESC);
+
+    CREATE TABLE IF NOT EXISTS alpaca_orders (
+      id TEXT PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      qty NUMERIC,
+      filled_qty NUMERIC,
+      type TEXT,
+      status TEXT,
+      limit_price NUMERIC,
+      stop_price NUMERIC,
+      filled_avg_price NUMERIC,
+      submitted_at TIMESTAMPTZ,
+      filled_at TIMESTAMPTZ,
+      raw JSONB,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_alpaca_orders_submitted ON alpaca_orders (submitted_at DESC);
+  `);
 }
 
 export function ensureSchema(): Promise<void> {
