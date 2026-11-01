@@ -6,7 +6,7 @@ import { decideDay, executeDay } from '../../../src/momentum2/live';
 import type { Bar } from '../../../src/momentum2/types';
 import { resolveMomentum2Mode } from '../../../src/momentum2/mode';
 import { shadowBroker } from './broker';
-import { deepseekVeto } from './deepseek-veto';
+import { liveVeto } from './live-veto';
 import { postgresStore } from './store';
 
 export type Momentum2Step = 'decide' | 'execute';
@@ -34,7 +34,7 @@ export async function runMomentum2(step: Momentum2Step, nowMs = Date.now()): Pro
     const benchmark = bars.SPY ?? [];
     const last = benchmark[benchmark.length - 1];
     if (!last || last.t.slice(0, 10) !== today) return { skipped: true, reason: 'geen slotbar voor vandaag (feestdag of data nog niet binnen)' };
-    const veto = process.env.DEEPSEEK_API_KEY ? deepseekVeto() : undefined;
+    const veto = liveVeto();
     const { planned } = await decideDay({ date: today, cfgs, barsBySymbol: bars, benchmark, store, veto });
     return { step, shadow, date: today, planned };
   }

@@ -38,3 +38,10 @@ Orders van andere strategieën dragen een `client_order_id`-prefix (`m2-`, `m2s-
 - Hele aandelen (stops kunnen niet op fractionele posities).
 - Meerdere versies delen het papieraccount: de som van hun stops mag de echte positie niet overstijgen, wat bij hele aandelen klopt zolang het boek en Alpaca gelijk lopen.
 - Stap 2 (nieuwscheck met Alpaca News en Finnhub-kalender) is nog niet gebouwd; het veldmodel/versie in het veto-besluit ligt er al.
+
+## Nieuwscheck (stap 2)
+De veto-check krijgt per kandidaat echte data in plaats van te gokken uit geheugen.
+- **Alpaca News**: koppen van de laatste 3 dagen per symbool (zelfde Alpaca-sleutels).
+- **Finnhub earningskalender**: komende 7 dagen. Gratis key in `FINNHUB_API_KEY` (header, nooit in de URL). Zonder key staat de bron als `unavailable` in de log en in de prompt, en het model weet dan dat het het nieuws niet kent. Let op: Finnhub dekt aandelen, geen ETF's; voor de ETF-rotatie zegt een lege kalender dus weinig.
+- Elk veto-besluit logt `model`, `modelVersion`, `strategyVersion` en `sources` (bijv. `alpaca-news:ok(5)`, `finnhub-calendar:unavailable`).
+- **Schaduwmodellen**: `MOMENTUM_SHADOW_MODELS=claude,gemini` laat die modellen op exact dezelfde input meelopen. Alleen als hun sleutel (`ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY`) al bestaat. Hun uitkomst staat in `veto.shadow` in de besluitenlog en verandert het besluit nooit. Modellen: `SHADOW_CLAUDE_MODEL`, `SHADOW_GEMINI_MODEL`. Een nieuw betaald account of nieuwe API-kosten is een keuze voor Dusty via Johnny; dit gebruikt alleen bestaande sleutels.
