@@ -8,6 +8,8 @@ import { positionQtyAvailable } from '../../../src/crypto/buy-fill-qty';
 import { alpacaPositionSymbol, alpacaSymbolsEqual } from '../../../src/alpaca/symbol-path';
 import { alpaca } from '@/lib/alpaca';
 import { logGuardEvent } from '@/lib/guards/service';
+import { foreignQtyForSymbol } from '@/lib/momentum2/ownership';
+import { isForeignStrategyOrder, m1CloseQty } from '../../../src/trading/strategy-tags';
 import { acquireExitLock, releaseExitLock, verifyExitLockOwner } from './exit-lock';
 
 export type CryptoExitReason = 'software_stop' | 'take_profit' | 'manual_close' | 'emergency_flatten' | (string & {});
@@ -17,7 +19,7 @@ export type ExitCryptoPositionMode = 'market_sell' | 'close_position';
 export type ExitCryptoPositionResult = {
   exited: boolean;
   orderId?: string;
-  skippedReason?: 'locked' | 'lock_lost' | 'no_qty' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
+  skippedReason?: 'locked' | 'lock_lost' | 'no_qty' | 'qty_reserved' | 'broker_filled' | 'cancel_failed' | 'cancel_timeout';
 };
 
 export async function clearCryptoExitSettings(symbol: string): Promise<void> {
@@ -71,7 +73,10 @@ async function abortIfLockLost(
 async function cancelOpenSellOrders(symbol: string, reason: CryptoExitReason): Promise<ExitCryptoPositionResult | null> {
   const open = await alpaca.openOrders(200);
   const sellOrders = open.filter(
-    (o) => o.side === 'sell' && alpacaSymbolsEqual(o.symbol, symbol),
+    (o) =>
+      o.side === 'sell' &&
+      alpacaSymbolsEqual(o.symbol, symbol) &&
+      !isForeignStrategyOrder(o.client_order_id),
   );
 
   for (const o of sellOrders) {
@@ -129,9 +134,25 @@ export async function exitCryptoPosition(
       await clearCryptoExitSettings(symbol);
       return { exited: false, skippedReason: 'no_qty' };
     }
-    const sellQty = positionQtyAvailable(pos!);
+    const foreign = await foreignQtyForSymbol(symbol);
+    const m1Qty = m1CloseQty(positionQty, foreign);
+    if (!(m1Qty > 0)) {
+      await clearCryptoExitSettings(symbol);
+      return { exited: false, skippedReason: 'no_qty' };
+    }
+    const sellQty = Math.min(positionQtyAvailable(pos!), m1Qty);
+    if (!(sellQty > 0)) {
+      // M1 bezit nog stukken, maar een order van een andere sleeve houdt ze vast: settings NIET wissen
+      await logGuardEvent('crypto_exit_qty_reserved', `M1 owns ${m1Qty} ${symbol} but none available`, {
+        symbol,
+        reason,
+        positionQty,
+        m1Qty,
+      });
+      return { exited: false, skippedReason: 'qty_reserved' };
+    }
 
-    if (mode === 'close_position') {
+    if (mode === 'close_position' && sellQty >= positionQty - 1e-9) {
       const lockBlock = await abortIfLockLost(symbol, owner, reason);
       if (lockBlock) return lockBlock;
       await logExitReason(symbol, reason, `Close position ${sellQty} (${reason})`);

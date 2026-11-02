@@ -1,6 +1,6 @@
 import { makeBars } from '../momentum2/fixtures';
 import { simulateVersion } from '../momentum2/simulate';
-import { resolveShadowMode } from '../momentum2/mode';
+import { resolveMomentumPaperMode } from '../momentum2/mode';
 import { m6Config } from './config';
 import { m6Hooks, planM6 } from './plan';
 import { breakoutEntry, exitBelowLow, exitTrailFromPeakClose } from './signals';
@@ -22,8 +22,12 @@ function btcBreakoutSeries(): ReturnType<typeof makeBars> {
 }
 
 describe('momentum6 modus', () => {
-  it('DRY_RUN=0 wordt geweigerd', () => {
-    expect(resolveShadowMode({ MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' }, 'MOMENTUM6')).toMatchObject({ run: false });
+  it('standaard schaduw; DRY_RUN=0 is papier', () => {
+    expect(resolveMomentumPaperMode({ MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' }, 'MOMENTUM6')).toEqual({
+      run: true,
+      shadow: false,
+      paper: true,
+    });
   });
 });
 
@@ -50,8 +54,10 @@ describe('momentum6 signals', () => {
 });
 
 describe('momentum6 risk', () => {
-  it('geen intraday stop (disaster is close-based in plan)', () => {
-    expect(m6StopLevel({ entryPrice: 100, highWater: 100 }, cfg).level).toBeLessThan(0);
+  it('disaster stop uit peak close (plan doet geen dubbele 20% exit)', () => {
+    const bars = makeBars(25, 100, 0.01, 0.02);
+    const p = { entryPrice: 100, highWater: 100, entryDate: bars[0]!.t.slice(0, 10), signalDate: bars[0]!.t.slice(0, 10) };
+    expect(m6StopLevel(p, cfg, 'BTC/USD', bars).level).toBeGreaterThan(0);
   });
 
   it('close-trail 12% vanaf peak close', () => {

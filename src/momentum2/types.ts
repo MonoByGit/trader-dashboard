@@ -101,6 +101,15 @@ export interface VersionBook {
   lastExit?: Record<string, string>;
   /** Strategie-specifieke staat (serialiseerbaar, geen lookahead). */
   strategyState?: Record<string, unknown>;
+  /** Per broker-order-id: hoeveel van de (cumulatieve) fill al in dit boek is verwerkt. */
+  fillsApplied?: Record<string, number>;
+  /** Market orders die nog niet terminaal waren (partial fill): volgende run de rest verwerken. */
+  openOrders?: Record<
+    string,
+    { symbol: string; side: 'buy' | 'sell'; reason: string; signalDate?: string; /** exit opnieuw als de sell niet alles verkocht */ requeue?: OrderIntent }
+  >;
+  /** Symbolen waarvoor de broker-stop ontbreekt (datum van de mislukte poging). */
+  stopMissing?: Record<string, string>;
 }
 
 export type OrderIntent = {
@@ -112,6 +121,11 @@ export type OrderIntent = {
   reason: string;
   /** Close-datum van het instapsignaal (uitvoering volgende open). */
   signalDate?: string;
+  /**
+   * Vastgezet als de order misschien al bij de broker staat (time-out, onbekende status): een nieuwe
+   * poging gebruikt dezelfde id, zodat de broker een dubbele weigert.
+   */
+  clientOrderId?: string;
 };
 
 export interface VetoVerdict {

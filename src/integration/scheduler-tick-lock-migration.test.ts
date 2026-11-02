@@ -30,6 +30,10 @@ describe('scheduler tick lock migration', () => {
     // routine_run_locks intentionally missing (simulates DB before PR 31 migrate applied)
   });
 
+  afterAll(async () => {
+    if (pg && 'close' in pg && typeof pg.close === 'function') await pg.close();
+  });
+
   beforeEach(() => {
     jest.resetModules();
   });

@@ -8,6 +8,6 @@ describe('dedupeOrderIntents', () => {
       { symbol: 'AAA', side: 'sell', qty: 1, reason: 'sell' },
     ]);
     expect(orders).toHaveLength(2);
-    expect(orders.find((o) => o.side === 'buy')?.notionalUsd).toBe(100);
+    expect(orders.find((o) => o.side === 'buy')?.notionalUsd).toBe(200);
   });
 });

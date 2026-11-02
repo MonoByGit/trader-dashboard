@@ -20,4 +20,12 @@ describe('middleware health bypass', () => {
     expect(authLine).toBeGreaterThan(-1);
     expect(healthLine).toBeLessThan(authLine);
   });
+
+  it('momentum cron-routes bypassen app-cookie in middleware', async () => {
+    const src = await import('fs/promises').then((fs) =>
+      fs.readFile(new URL('../../web/middleware.ts', import.meta.url), 'utf8'),
+    );
+    expect(src).toMatch(/\/api\/momentum5\/run/);
+    expect(src).not.toMatch(/pathname\.startsWith\('\/api\/momentum'\)/);
+  });
 });

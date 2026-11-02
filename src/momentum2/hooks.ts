@@ -11,6 +11,8 @@ export interface StrategyHooks<C extends VersionConfig = VersionConfig> {
     cfg: C;
     veto?: VetoFn;
   }): Promise<{ orders: OrderIntent[]; vetoes: Array<{ symbol: string; verdict: VetoVerdict }> }>;
+  /** Na broker- of sim-stop op een symbool (bijv. M5 fresh-up). */
+  onStopFilled?: (input: { book: VersionBook; cfg: C; symbol: string; date: string }) => void;
 }
 
 export const rotationHooks: StrategyHooks = {

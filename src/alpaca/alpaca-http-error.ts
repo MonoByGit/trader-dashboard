@@ -2,7 +2,7 @@ export class AlpacaHttpError extends Error {
   readonly status: number;
 
   constructor(
-    readonly method: 'GET' | 'POST' | 'DELETE',
+    readonly method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     readonly url: string,
     status: number,
     readonly body: string,

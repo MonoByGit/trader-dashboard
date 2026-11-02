@@ -1,6 +1,6 @@
 import { makeBars } from '../momentum2/fixtures';
 import { simulateVersion } from '../momentum2/simulate';
-import { resolveShadowMode } from '../momentum2/mode';
+import { resolveMomentumPaperMode } from '../momentum2/mode';
 import type { Bar } from '../momentum2/types';
 import { m5Versions } from './config';
 import { m5Hooks, planM5, m5RiskExposurePct } from './plan';
@@ -16,9 +16,13 @@ function qqqTrend(n: number, drift: number): Bar[] {
 }
 
 describe('momentum5 modus', () => {
-  it('DRY_RUN=0 wordt geweigerd', () => {
-    expect(resolveShadowMode({ MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, 'MOMENTUM5')).toMatchObject({ run: false });
-    expect(resolveShadowMode({ MOMENTUM5_ENABLED: '1' }, 'MOMENTUM5')).toEqual({ run: true, shadow: true });
+  it('standaard schaduw; DRY_RUN=0 is papier', () => {
+    expect(resolveMomentumPaperMode({ MOMENTUM5_ENABLED: '1' }, 'MOMENTUM5')).toEqual({ run: true, shadow: true });
+    expect(resolveMomentumPaperMode({ MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, 'MOMENTUM5')).toEqual({
+      run: true,
+      shadow: false,
+      paper: true,
+    });
   });
 });
 
@@ -67,10 +71,11 @@ describe('momentum5 signals', () => {
 });
 
 describe('momentum5 risk', () => {
-  it('geen intraday stop op QLD, geen stop op BIL', () => {
-    const p = { entryPrice: 100, highWater: 120 };
-    expect(m5StopLevel(p, cfg!, 'QLD').level).toBeLessThan(0);
-    expect(m5StopLevel(p, cfg!, 'BIL').level).toBeLessThan(0);
+  it('disaster stop op QLD, geen stop op BIL', () => {
+    const bars = makeBars(30, 100, 0.01, 0.02);
+    const p = { entryPrice: 100, highWater: 120, entryDate: bars[0]!.t.slice(0, 10) };
+    expect(m5StopLevel(p, cfg!, 'QLD', bars).level).toBeGreaterThan(0);
+    expect(m5StopLevel(p, cfg!, 'BIL', bars).level).toBeLessThan(0);
   });
 });
 

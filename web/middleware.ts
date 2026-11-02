@@ -28,6 +28,14 @@ export async function middleware(req: NextRequest) {
   // Cron/scheduler: Bearer CRON_SECRET (geen app-cookie).
   if (pathname.startsWith('/api/cron')) return NextResponse.next();
   if (pathname.startsWith('/api/scheduler/')) return NextResponse.next();
+  if (
+    pathname === '/api/momentum2/run' ||
+    pathname === '/api/momentum3/run' ||
+    pathname === '/api/momentum5/run' ||
+    pathname === '/api/momentum6/run'
+  ) {
+    return NextResponse.next();
+  }
   if (pathname === '/api/snapshots' && req.method === 'POST') return NextResponse.next();
 
   if (pathname.startsWith('/api/auth/')) return NextResponse.next();

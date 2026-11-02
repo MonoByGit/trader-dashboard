@@ -5,7 +5,6 @@ import type { StrategyHooks } from '../momentum2/hooks';
 import type { Bar, OrderIntent, VersionBook } from '../momentum2/types';
 import type { M6Config } from './config';
 import { m6StopLevel } from './risk';
-import { exitCloseDisasterFromPeak } from '../momentum5/signals-close';
 import { breakoutEntry, dayDiff, exitBelowLow, exitTrailFromPeakClose } from './signals';
 
 const sym = (cfg: M6Config) => cfg.universe[0]!;
@@ -33,9 +32,7 @@ export function planM6(input: {
   if (pos && todayStr) {
     const signalDate = pos.signalDate ?? pos.entryDate;
     const holdDays = dayDiff(signalDate, todayStr);
-    if (exitCloseDisasterFromPeak(bars, cfg.hardStopPct, signalDate)) {
-      orders.push({ symbol, side: 'sell', qty: pos.qty, reason: `${(cfg.hardStopPct * 100).toFixed(0)}% close disaster` });
-    } else if (holdDays >= cfg.maxHoldDays) {
+    if (holdDays >= cfg.maxHoldDays) {
       orders.push({ symbol, side: 'sell', qty: pos.qty, reason: `${cfg.maxHoldDays} dagen vast` });
     } else if (exitBelowLow(bars, cfg)) {
       orders.push({ symbol, side: 'sell', qty: pos.qty, reason: 'onder 10d low' });
@@ -61,6 +58,6 @@ export function planM6(input: {
 }
 
 export const m6Hooks: StrategyHooks<M6Config> = {
-  stopFor: (pos, cfg) => m6StopLevel(pos, cfg),
+  stopFor: (pos, cfg, bars, symbol) => m6StopLevel(pos, cfg, symbol ?? sym(cfg), bars),
   plan: async (i) => ({ ...planM6(i), vetoes: [] }),
 };

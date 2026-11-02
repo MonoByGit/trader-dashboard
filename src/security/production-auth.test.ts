@@ -48,4 +48,16 @@ describe('production auth env', () => {
     process.env.CRON_SECRET = 'test-secret';
     expect(verifyCronBearer('Bearer test-secret')).toBe(true);
   });
+
+  it('weigert verkeerde lengte timing-safe', () => {
+    process.env.CRON_SECRET = 'test-secret';
+    expect(verifyCronBearer('Bearer test-secre')).toBe(false);
+    expect(verifyCronBearer('Bearer test-secrett')).toBe(false);
+  });
+
+  it('niet-ASCII bearer van gelijke stringlengte geeft false, geen RangeError', () => {
+    process.env.CRON_SECRET = 'test-secret';
+    expect(() => verifyCronBearer('Bearer test-secreé')).not.toThrow();
+    expect(verifyCronBearer('Bearer test-secreé')).toBe(false);
+  });
 });

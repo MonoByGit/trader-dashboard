@@ -26,7 +26,7 @@ describe('momentum2 modus', () => {
   });
 });
 
-import { resolveShadowMode } from './mode';
+import { resolveMomentumPaperMode, resolveShadowMode } from './mode';
 describe('resolveShadowMode (M3/M4)', () => {
   it('uit tenzij ENABLED=1, en DRY_RUN=0 wordt geweigerd', () => {
     expect(resolveShadowMode({}, 'MOMENTUM3')).toMatchObject({ run: false });
@@ -38,13 +38,17 @@ describe('resolveShadowMode (M3/M4)', () => {
     expect(src).not.toMatch(/alpacaPaperBroker|placeOrder|cancelOrder/);
     expect(src).toMatch(/shadowBroker/);
   });
-  it('M5/M6-routes: shadow only, DRY_RUN=0 geweigerd', () => {
-    expect(resolveShadowMode({ MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, 'MOMENTUM5')).toMatchObject({ run: false });
-    expect(resolveShadowMode({ MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' }, 'MOMENTUM6')).toMatchObject({ run: false });
+  it('M5/M6: standaard schaduw; papier via resolveMomentumPaperMode + brokerForMode', () => {
+    expect(resolveMomentumPaperMode({ MOMENTUM5_ENABLED: '1' }, 'MOMENTUM5')).toEqual({ run: true, shadow: true });
+    expect(resolveMomentumPaperMode({ MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, 'MOMENTUM5')).toEqual({
+      run: true,
+      shadow: false,
+      paper: true,
+    });
     for (const p of ['momentum5/run.ts', 'momentum6/run.ts']) {
       const src = readFileSync(new URL(`../../web/lib/${p}`, import.meta.url), 'utf8');
-      expect(src).toMatch(/shadowBroker/);
-      expect(src).not.toMatch(/alpacaPaperBroker/);
+      expect(src).toMatch(/brokerForMode/);
+      expect(src).toMatch(/runReconcile/);
     }
     for (const p of ['momentum5/run/route.ts', 'momentum6/run/route.ts']) {
       const src = readFileSync(new URL(`../../web/app/api/${p}`, import.meta.url), 'utf8');

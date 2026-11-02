@@ -19,10 +19,14 @@ describe('buildHome', () => {
     }
     expect(h.strategieen.some((s) => s.id === 'momentum4')).toBe(false);
   });
-  it('ENABLED=1 is schaduw, DRY_RUN=0 is geblokkeerd', () => {
+  it('ENABLED=1 is schaduw; M5 met DRY_RUN=0 is papier, M2 met DRY_RUN=0 geblokkeerd', () => {
     const h = buildHome({ ...base, env: { MOMENTUM2_ENABLED: '1', MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' } });
     expect(h.strategieen.find((s) => s.id === 'momentum2')?.status).toBe('schaduw');
-    expect(h.strategieen.find((s) => s.id === 'momentum5')?.status).toBe('geblokkeerd');
+    expect(h.strategieen.find((s) => s.id === 'momentum5')?.status).toBe('papier');
+    expect(h.strategieen.find((s) => s.id === 'momentum5')?.reden).toMatch(/Papierorders bij Alpaca/);
+    const h2 = buildHome({ ...base, env: { MOMENTUM2_ENABLED: '1', MOMENTUM2_DRY_RUN: '0', MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' } });
+    expect(h2.strategieen.find((s) => s.id === 'momentum2')?.status).toBe('geblokkeerd');
+    expect(h2.strategieen.find((s) => s.id === 'momentum6')?.status).toBe('papier');
   });
   it('noodstop maakt M1 geblokkeerd met reden', () => {
     const h = buildHome({ ...base, guards: { tradingEnabled: true, emergencyStop: true, circuitBreakerTripped: false } });

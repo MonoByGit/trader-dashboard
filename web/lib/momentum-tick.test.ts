@@ -22,10 +22,10 @@ await jest.unstable_mockModule('@/lib/guards/service', () => ({
 const never = async () => { throw new Error('echte runner mag in de test niet draaien'); };
 await jest.unstable_mockModule('@/lib/momentum2/run', () => ({ runMomentum2: never }));
 await jest.unstable_mockModule('@/lib/momentum3/run', () => ({ runMomentum3: never }));
-await jest.unstable_mockModule('@/lib/momentum5/run', () => ({ runMomentum5: never }));
-await jest.unstable_mockModule('@/lib/momentum6/run', () => ({ runMomentum6: never }));
+await jest.unstable_mockModule('@/lib/momentum5/run', () => ({ runMomentum5: never, runMomentum5StopGuard: never }));
+await jest.unstable_mockModule('@/lib/momentum6/run', () => ({ runMomentum6: never, runMomentum6StopGuard: never }));
 
-const { runMomentumTick } = await import('./momentum-tick');
+const { runMomentumTick, momentumTickMode } = await import('./momentum-tick');
 
 const cal = { date: '2026-11-02', open: '09:30', close: '16:00' };
 const afterOpen = new Date('2026-11-02T14:50:00Z').getTime();
@@ -83,5 +83,50 @@ describe('runMomentumTick', () => {
     });
     expect(runs.every((r) => r.status === 'skipped')).toBe(true);
     expect(lines.some((l) => l.includes('MOMENTUM5_ENABLED staat niet aan'))).toBe(true);
+  });
+
+  it('logregel noemt de echte modus: papier als M5 met DRY_RUN=0 naar Alpaca PAPER gaat', async () => {
+    const lines: string[] = [];
+    const calls: string[] = [];
+    const r = fakeRunners(calls);
+    const runners = { ...r, momentum5: async (step: string) => ({ step, shadow: false, date: '2026-11-02', trades: 1 }) };
+    const env = { MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' };
+    await runMomentumTick(afterOpen, cal, { runners, env, stopGuards: { momentum5: async () => null }, log: (l) => lines.push(l) });
+    expect(lines.some((l) => /^\[momentum-tick\] momentum5-execute 2026-11-02 ok papier /.test(l))).toBe(true);
+    expect(lines.some((l) => /momentum5-execute .* schaduw/.test(l))).toBe(false);
+    expect(lines.some((l) => /^\[momentum-tick\] momentum2-execute 2026-11-02 ok schaduw /.test(l))).toBe(true);
+  });
+
+  it('momentumTickMode volgt dezelfde regels als de runners', () => {
+    expect(momentumTickMode('momentum5', {})).toBe('uit');
+    expect(momentumTickMode('momentum5', { MOMENTUM5_ENABLED: '1' })).toBe('schaduw');
+    expect(momentumTickMode('momentum6', { MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' })).toBe('papier');
+    expect(momentumTickMode('momentum2', { MOMENTUM2_ENABLED: '1', MOMENTUM2_DRY_RUN: '0' })).toBe('geblokkeerd');
+    expect(momentumTickMode('momentum3', { MOMENTUM3_ENABLED: '1' })).toBe('schaduw');
+  });
+
+  it('stopwacht draait elke tick in papier, ook als er geen dagstap is; nooit in schaduw', async () => {
+    const lines: string[] = [];
+    let guarded = 0;
+    const quiet = new Date('2026-11-02T03:00:00Z').getTime(); // markt dicht: geen ETF-stap
+    const g = async () => { guarded++; return { repaired: ['m5-x:QLD'], failed: [] }; };
+    await runMomentumTick(quiet, cal, { runners: fakeRunners([]), env: { MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, stopGuards: { momentum5: g }, log: (l) => lines.push(l) });
+    await runMomentumTick(quiet + 5 * 60_000, cal, { runners: fakeRunners([]), env: { MOMENTUM5_ENABLED: '1', MOMENTUM5_DRY_RUN: '0' }, stopGuards: { momentum5: g }, log: (l) => lines.push(l) });
+    expect(guarded).toBe(2);
+    expect(lines.filter((l) => l.startsWith('[momentum-tick] momentum5-stopwacht papier')).length).toBe(2);
+
+    guarded = 0;
+    await runMomentumTick(quiet, cal, { runners: fakeRunners([]), env: { MOMENTUM5_ENABLED: '1' }, stopGuards: { momentum5: g }, log: () => {} });
+    expect(guarded).toBe(0);
+  });
+
+  it('een fout in de stopwacht raakt de tick niet', async () => {
+    const lines: string[] = [];
+    const out = await runMomentumTick(afterOpen, cal, {
+      runners: fakeRunners([]), env: { MOMENTUM6_ENABLED: '1', MOMENTUM6_DRY_RUN: '0' },
+      stopGuards: { momentum6: async () => { throw new Error('503'); } }, log: (l) => lines.push(l),
+    });
+    expect(out['momentum2-execute']).toBeDefined();
+    expect(lines.some((l) => l.startsWith('[momentum-tick] momentum6-stopwacht failed papier: 503'))).toBe(true);
   });
 });
