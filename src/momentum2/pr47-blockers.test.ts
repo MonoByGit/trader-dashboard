@@ -15,6 +15,7 @@ import type { StrategyHooks } from './hooks';
 import { FakeAlpaca } from './testing/fake-alpaca';
 import type { OrderIntent, VersionBook, VersionConfig } from './types';
 import { makeBars } from './fixtures';
+import { AlpacaHttpError } from '../alpaca/alpaca-http-error';
 
 const [m5Cfg] = m5Versions(100_000);
 const m6Cfg = m6Config(100_000);
@@ -1035,5 +1036,120 @@ describe('PR 47 ronde 5 (review Dave op 2651b41): B6 stopwacht volgt ook open se
     expect(stopQty(x.fake)).toBe(20);
     expect(marketSells(x.fake)).toHaveLength(1);
     expect(x.mem.pending()).toHaveLength(1);
+  });
+});
+
+describe('PR 47 ronde 6 (review Dave op 26cacc1): B7 sell die nooit aankwam, K3 pending-exit overleeft decide', () => {
+  const stopQty = (fake: FakeAlpaca) => fake.openStops('QLD').reduce((s, o) => s + Number(o.qty), 0);
+  const marketSells = (fake: FakeAlpaca) => fake.orders_.filter((o) => o.type === 'market' && o.side === 'sell');
+  const guard = (fake: FakeAlpaca, mem: ReturnType<typeof memStore>, date = '2024-06-03') =>
+    repairMissingStops({
+      date, cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }),
+      broker: makeAlpacaPaperBroker(fake, { sleep: noSleep }), store: mem.store,
+    });
+  const day = (broker: ReturnType<typeof makeAlpacaPaperBroker>, mem: ReturnType<typeof memStore>, date: string) =>
+    executeDay({ date, cfgs: [m5Cfg!], hooks: fixedStop(m5Hooks, { v: 40 }), lastPrice: { QLD: 55 }, broker, store: mem.store, expectReal: true });
+
+  /** De sell-POST faalt zonder dat er iets geplaatst wordt; opzoeken vindt niets. */
+  async function lostSell(failure: () => Error) {
+    const x = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    x.fake.seedPosition('QLD', 20);
+    x.fake.prices.QLD = 55;
+    await x.broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: x.prefix });
+    const place = x.fake.placeOrder.bind(x.fake);
+    let first = true;
+    x.fake.placeOrder = async (r) => {
+      if (r.type === 'market' && r.side === 'sell' && first) { first = false; throw failure(); }
+      return place(r);
+    };
+    x.mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await day(x.broker, x.mem, '2024-06-03');
+    return x;
+  }
+
+  const variants: Array<[string, () => Error]> = [
+    ['socket-timeout', () => new Error('socket hang up (ETIMEDOUT)')],
+    ['504', () => new AlpacaHttpError('POST', 'https://paper-api.alpaca.markets/v2/orders', 504, 'gateway timeout')],
+  ];
+
+  for (const [name, failure] of variants) {
+    it(`B7 (${name}): sell kwam nooit aan: de positie staat in dezelfde run al op een stop, geen tweede sell`, async () => {
+      const { fake, mem } = await lostSell(failure);
+      expect(mem.book().positions.QLD!.qty).toBe(20);
+      expect(stopQty(fake)).toBe(20);
+      expect(fake.openStops('QLD')).toHaveLength(1);
+      expect(marketSells(fake)).toHaveLength(0);
+    });
+
+    it(`B7 (${name}): stop weg en de wacht draait: stop terug binnen één tick, de wacht plaatst geen market order`, async () => {
+      const { fake, mem, prefix } = await lostSell(failure);
+      // zet de situatie van Dave's repro na: positie zonder stop, sell-marker staat nog open
+      for (const o of fake.openStops('QLD')) await fake.cancelOrder(o.id);
+      fake.settle();
+      expect(stopQty(fake)).toBe(0);
+      expect(Object.keys(mem.book().openOrders ?? {})[0]).toMatch(/^cid:/);
+      expect(await hasMissingStops([m5Cfg!], mem.store)).toBe(true);
+      const r = await guard(fake, mem);
+      await guard(fake, mem); // tweede tick: niets dubbel
+      expect(r.failed).toEqual([]);
+      expect(stopQty(fake)).toBe(20);
+      expect(fake.openStops('QLD')).toHaveLength(1);
+      expect(marketSells(fake)).toHaveLength(0);
+      expect(prefix).toBeTruthy();
+    });
+
+    it(`B7 (${name}): de volgende executeDay verkoopt de exit één keer`, async () => {
+      const { fake, broker, mem } = await lostSell(failure);
+      await day(broker, mem, '2024-06-04');
+      expect(marketSells(fake)).toHaveLength(1);
+      expect(fake.pos.QLD ?? 0).toBe(0);
+      expect(mem.book().positions.QLD).toBeUndefined();
+      expect(fake.openStops('QLD')).toHaveLength(0);
+    });
+  }
+
+  it('B7: de sell bestond wel maar is nog onzichtbaar (reservering): de stop wordt geweigerd, er komt geen tweede sell en niets raakt kwijt', async () => {
+    const x = setup(m5Cfg!, realBook(m5Cfg!, { QLD: pos(20) }));
+    x.fake.seedPosition('QLD', 20);
+    x.fake.prices.QLD = 55;
+    await x.broker.setStop({ versionId: m5Cfg!.id, symbol: 'QLD', qty: 20, stopPrice: 40, stopClientPrefix: x.prefix });
+    const place = x.fake.placeOrder.bind(x.fake);
+    let first = true;
+    x.fake.placeOrder = async (r) => {
+      const o = await place(r);
+      if (r.type === 'market' && r.side === 'sell' && first) { first = false; throw new Error('socket hang up (ETIMEDOUT)'); }
+      return o;
+    };
+    const byCid = x.fake.getOrderByClientOrderId.bind(x.fake);
+    let visible = false;
+    x.fake.getOrderByClientOrderId = async (c) => (visible ? byCid(c) : null);
+    x.fake.marketFillRatio = 0; // de sell staat open en reserveert de stukken
+    x.mem.setPending([{ symbol: 'QLD', side: 'sell', qty: 20, reason: 'exit' }]);
+    await day(x.broker, x.mem, '2024-06-03');
+    const r = await guard(x.fake, x.mem); // stop weigert (403), geen crash
+    expect(r.repaired).toEqual([]);
+    expect(marketSells(x.fake)).toHaveLength(1);
+    visible = true;
+    x.fake.fillOpenMarkets(55);
+    await guard(x.fake, x.mem);
+    expect(marketSells(x.fake)).toHaveLength(1);
+    expect(x.fake.pos.QLD ?? 0).toBe(0);
+    expect(x.mem.book().positions.QLD).toBeUndefined();
+    expect(stopQty(x.fake)).toBe(0);
+  });
+
+  it('K3: zonder herbalans vandaag overschrijft decideDay een teruggezette exit niet', async () => {
+    const book = realBook({ ...m5Cfg!, rebalanceEveryDays: 5 }, { QLD: pos(15) }, 100_000);
+    book.lastRebalanceIndex = 0;
+    const mem = memStore(book);
+    mem.setPending([
+      { symbol: 'QLD', side: 'sell', qty: 15, reason: 'exit' },
+      { symbol: 'BIL', side: 'buy', notionalUsd: 500, reason: 'oud plan' },
+      { symbol: 'XYZ', side: 'sell', qty: 5, reason: 'positie bestaat niet meer' },
+    ]);
+    const bars = { QQQ: makeBars(260, 300, 0.001, 0.01), QLD: makeBars(260, 50, 0.002, 0.02), BIL: makeBars(260, 91, 0, 0), SPY: makeBars(260, 400, 0.001, 0.01) };
+    const date = bars.SPY.at(-1)!.t.slice(0, 10);
+    await decideDay({ date, cfgs: [{ ...m5Cfg!, rebalanceEveryDays: 5 }], hooks: m5Hooks, barsBySymbol: bars, benchmark: bars.SPY, store: mem.store, expectReal: true });
+    expect(mem.pending()).toEqual([{ symbol: 'QLD', side: 'sell', qty: 15, reason: 'exit' }]);
   });
 });

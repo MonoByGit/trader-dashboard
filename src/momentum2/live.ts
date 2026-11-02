@@ -194,14 +194,24 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
         if (t) await input.store.logTrade(cfg.id, t);
       };
       const requeue: OrderIntent[] = [];
+      /** Een niet bevestigde sell (cid-marker) houdt geen stukken vast: de positie moet gewoon een stop hebben. */
+      const markSellMarker = (orderId: string, meta: OpenOrderMeta) => {
+        if (meta.side === 'sell' && orderId.startsWith('cid:') && book.positions[meta.symbol]) {
+          (book.stopMissing ??= {})[meta.symbol] ??= input.date;
+        }
+      };
       for (const [orderId, meta] of Object.entries({ ...(book.openOrders ?? {}) })) {
         let f: Fill | null;
         try {
           f = await input.broker.orderFill({ orderId });
         } catch {
+          markSellMarker(orderId, meta);
           continue; // status onbekend: volgende tick opnieuw
         }
-        if (f?.missing) continue; // nog niet te vinden: executeDay beslist, de wacht plaatst nooit een order
+        if (f?.missing) {
+          markSellMarker(orderId, meta); // nog niet te vinden: executeDay beslist, de wacht plaatst nooit een order
+          continue;
+        }
         const sym = meta.symbol;
         if (meta.side === 'buy') {
           if (!f || f.qty <= 0) continue; // terminaal zonder fill beslist executeDay (requeue)
@@ -250,8 +260,7 @@ export async function repairMissingStops<C extends VersionConfig = VersionConfig
         delete book.stopMissing[sym];
         continue;
       }
-      const sellOpen = Object.values(book.openOrders ?? {}).some((m) => m.symbol === sym && m.side === 'sell');
-      if (sellOpen) continue; // de lopende sell houdt de stukken vast; executeDay volgt hem
+      if (sellHoldsShares(book, sym)) continue; // de lopende sell houdt de stukken vast; executeDay volgt hem
       try {
         await placeDisasterStop({
           broker: input.broker, book, cfg, sym, hooks: input.hooks as StrategyHooks, stopPx,
@@ -280,6 +289,16 @@ export async function hasMissingStops(cfgs: VersionConfig[], store: Pick<Store, 
     if (b?.real && bookNeedsGuard(b)) return true;
   }
   return false;
+}
+
+/**
+ * Houdt een gevolgde sell de stukken vast? Een cid-marker (plaatsen gaf een time-out of 5xx, de order is
+ * niet bevestigd en bij de broker misschien niet te vinden) telt niet mee: dan proberen we de stop toch.
+ * Bestaat de sell wel, dan reserveert hij de stukken en weigert Alpaca de stop (403): veilig, de vlag blijft staan.
+ * Bestaat hij niet, dan staat de positie binnen een tick weer op een stop.
+ */
+function sellHoldsShares(book: VersionBook, sym: string): boolean {
+  return Object.entries(book.openOrders ?? {}).some(([id, m]) => m.symbol === sym && m.side === 'sell' && !id.startsWith('cid:'));
 }
 
 /** Werk voor de stopwacht: een gemarkeerde ontbrekende stop, of een open order (buy, sell, cid-marker) die nog kan vullen of aflopen. */
@@ -384,7 +403,10 @@ export async function decideDay<C extends VersionConfig = VersionConfig>(input: 
       planned[cfg.id] = plan.orders;
       if (!book.halted) book.lastRebalanceIndex = 0;
     } else {
-      await store.savePending(cfg.id, []);
+      // Geen herbalans vandaag: een exit die nog openstaat (sell die niet gelukt of verlopen is, door executeDay
+      // of de stopwacht teruggezet) blijft staan zolang de positie er nog is. Alleen nieuwe plannen vervangen de rij.
+      const carried = (await store.loadPending(cfg.id)).filter((o) => o.side === 'sell' && book.positions[o.symbol]);
+      await store.savePending(cfg.id, carried);
     }
     book.lastDecisionDate = date;
     await store.saveBook(book);
@@ -463,8 +485,7 @@ export async function executeDay<C extends VersionConfig = VersionConfig>(input:
 
     const ensureStop = async (sym: string) => {
       if (!book.positions[sym]) return;
-      const sellOpen = Object.values(book.openOrders ?? {}).some((m) => m.symbol === sym && m.side === 'sell');
-      if (sellOpen) return; // een lopende market sell houdt de stukken vast
+      if (sellHoldsShares(book, sym)) return; // een lopende market sell houdt de stukken vast
       try {
         await placeDisasterStop({
           broker, book, cfg, sym, hooks: hooks as StrategyHooks, stopPx,
