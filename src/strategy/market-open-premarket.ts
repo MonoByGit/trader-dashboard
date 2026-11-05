@@ -65,6 +65,12 @@ export function marketOpenNoPremarketSkip(
 export const MARKET_OPEN_NO_APPROVAL_SKIP_REASON =
   'Premarket keurde vandaag geen symbool goed op alle zes criteria';
 
+/** Reden om market-open over te slaan als er niets te overwegen valt. */
+export function marketOpenEmptyUniverseReason(approved: string[]): string {
+  if (approved.length === 0) return MARKET_OPEN_NO_APPROVAL_SKIP_REASON;
+  return `Alle premarket-goedkeuringen (${approved.join(', ')}) staan al open`;
+}
+
 /**
  * Welke symbolen de market-open AI mag overwegen: alleen wat premarket vandaag
  * goedkeurde en nog niet open staat. De AI ziet zo de premarket-goedkeuring en

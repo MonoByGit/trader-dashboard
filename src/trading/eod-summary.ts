@@ -4,13 +4,24 @@ export type EodExit = {
   price?: number;
 };
 
+import { isForeignStrategyOrder } from './strategy-tags.js';
+
 export type SellOrderLike = {
   symbol: string;
   side: string;
   status: string;
+  client_order_id?: string | null;
+  filled_qty?: string | null;
   filled_at?: string | null;
   filled_avg_price?: string | null;
 };
+
+/** Een sell telt als (deels) gevuld: volledig gevuld, of gedeeltelijk en daarna geannuleerd of nog open. */
+function hasFill(o: SellOrderLike): boolean {
+  if (o.status === 'filled') return true;
+  if (o.status !== 'partially_filled' && o.status !== 'canceled') return false;
+  return parseFloat(o.filled_qty ?? '0') > 0;
+}
 
 /**
  * Alle sluitingen van vandaag (ET-handelsdag): stop- en take-profit-fills bij
@@ -27,7 +38,9 @@ export function eodExitsToday<O extends SellOrderLike>(
 ): EodExit[] {
   const exits: EodExit[] = [];
   for (const o of orders) {
-    if (o.side !== 'sell' || o.status !== 'filled' || !o.filled_at) continue;
+    if (o.side !== 'sell' || !hasFill(o) || !o.filled_at) continue;
+    // Andere strategieën (M2 t/m M6) horen niet in het Momentum 1-dagrapport.
+    if (isForeignStrategyOrder(o.client_order_id)) continue;
     if (tradingDateOf(Date.parse(o.filled_at)) !== tradingDate) continue;
     const how = classify(o);
     if (!how) continue;

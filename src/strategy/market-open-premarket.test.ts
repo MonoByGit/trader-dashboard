@@ -35,7 +35,12 @@ describe('premarketApprovedBuySymbols', () => {
   });
 });
 
-import { marketOpenCandidateUniverse, marketOpenPremarketPromptLine } from './market-open-premarket.js';
+import {
+  MARKET_OPEN_NO_APPROVAL_SKIP_REASON,
+  marketOpenCandidateUniverse,
+  marketOpenEmptyUniverseReason,
+  marketOpenPremarketPromptLine,
+} from './market-open-premarket.js';
 
 describe('marketOpenCandidateUniverse (casus 2-11: XLF goedgekeurd, AI stelde XLV en XLE voor)', () => {
   it('geeft de AI alleen de premarket-goedgekeurde symbolen', () => {
@@ -51,5 +56,10 @@ describe('marketOpenCandidateUniverse (casus 2-11: XLF goedgekeurd, AI stelde XL
 
   it('is leeg zonder goedkeuring, dan hoeft de AI niet te draaien', () => {
     expect(marketOpenCandidateUniverse([], ['SPY'])).toEqual([]);
+  });
+
+  it('geeft een eerlijke skip-reden: niets goedgekeurd of alles al open', () => {
+    expect(marketOpenEmptyUniverseReason([])).toBe(MARKET_OPEN_NO_APPROVAL_SKIP_REASON);
+    expect(marketOpenEmptyUniverseReason(['XLF'])).toBe('Alle premarket-goedkeuringen (XLF) staan al open');
   });
 });

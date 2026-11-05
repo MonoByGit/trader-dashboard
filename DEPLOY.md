@@ -79,7 +79,6 @@ npm run build   # de echte poort; dit is wat Railway ook doet
 Staan al: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_BASE_URL`, `ANTHROPIC_API_KEY`,
 `GOOGLE_AI_API_KEY`, `DATABASE_URL`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, `OPEN_BRAIN_URL`.
 
-Optioneel (observability, degradeert veilig): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-`MONO_API_KEY` (de `x-mono-key` van de eigen Mono API voor Open Brain-sync).
+Optioneel (observability, degradeert veilig): `MONO_API_KEY` (de `x-mono-key` van de eigen Mono API voor Open Brain-sync).
 
 Zie `.env.example` voor de volledige lijst.

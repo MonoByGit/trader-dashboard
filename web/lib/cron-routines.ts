@@ -32,12 +32,13 @@ import {
   recordLessonInfluence,
 } from '@/lib/lessons';
 import { postMortemFromEodClose, postMortemFromFilledSell } from '@/lib/postmortem';
+import { isForeignStrategyOrder } from '../../src/trading/strategy-tags';
 import { hasOpenBuyOrderForSymbol, isStopFill, isTakeProfitFill } from '@/lib/alpaca-orders';
 import { flattenEtfPositionAtEod } from '@/lib/eod-flatten';
 import { loadPremarketDecisionsForTradingDate } from '@/lib/premarket-store';
 import {
-  MARKET_OPEN_NO_APPROVAL_SKIP_REASON,
   marketOpenCandidateUniverse,
+  marketOpenEmptyUniverseReason,
   marketOpenNoPremarketSkip,
   marketOpenPremarketPromptLine,
   premarketApprovedBuySymbols,
@@ -83,11 +84,12 @@ async function notifyStopFills() {
   if (!hasDb()) return;
   try {
     await initDb();
-    const orders = await alpaca.orders(50);
-    const today = new Date().toISOString().split('T')[0];
+    const orders = await alpaca.orders(500);
+    const today = tradingDateEt(Date.now());
     for (const o of orders) {
       if (o.side !== 'sell' || o.status !== 'filled' || !o.filled_at) continue;
-      if (!o.filled_at.startsWith(today)) continue;
+      if (isForeignStrategyOrder(o.client_order_id)) continue;
+      if (tradingDateEt(Date.parse(o.filled_at)) !== today) continue;
       const isStop = isStopFill(o);
       const isTp = isTakeProfitFill(o);
       if (!isStop && !isTp) continue;
@@ -272,7 +274,7 @@ export async function runMarketOpen() {
       routine: 'market-open',
       orders: [],
       skipped: true,
-      reason: MARKET_OPEN_NO_APPROVAL_SKIP_REASON,
+      reason: marketOpenEmptyUniverseReason(Array.from(approvedPremarket)),
       premarketApproved: Array.from(approvedPremarket),
     };
   }
@@ -581,6 +583,10 @@ async function runEod() {
       const entry = parseFloat(p.avg_entry_price);
       const exitPx = parseFloat(p.current_price);
       const result = await flattenEtfPositionAtEod(p.symbol);
+      if (result.ok && result.closedQty === 0) {
+        // Positie hoort volledig bij een andere strategie: Momentum 1 sloot niets.
+        continue;
+      }
       if (result.ok) {
         closed.push(p.symbol);
         flattenedAt.push({ symbol: p.symbol, price: exitPx });
@@ -642,7 +648,8 @@ async function runEod() {
 
   // Alle sluitingen van vandaag, niet alleen de EOD-flatten (casus 4-11: XLI
   // raakte de stop, de samenvatting noemde alleen XLV).
-  const todayOrders = await alpaca.orders(100).catch((e) => {
+  // 500 is het Alpaca-maximum; met M2 t/m M6 (bracket = 3 orders) is 100 te krap.
+  const todayOrders = await alpaca.orders(500).catch((e) => {
     console.error('[eod] orders lezen mislukt', e);
     return [] as Awaited<ReturnType<typeof alpaca.orders>>;
   });
@@ -651,7 +658,11 @@ async function runEod() {
     flattenedAt,
     tradingDateEt(Date.now()),
     tradingDateEt,
-    (o) => (isStopFill(o) ? 'stop' : isTakeProfitFill(o) ? 'take_profit' : null),
+    // Status-onafhankelijk zodat ook deels gevulde, daarna geannuleerde legs meetellen.
+    (o) => {
+      const asFilled = { ...o, status: 'filled' };
+      return isStopFill(asFilled) ? 'stop' : isTakeProfitFill(asFilled) ? 'take_profit' : null;
+    },
   );
   const exitsLabel = eodExitsLabel(exits);
 

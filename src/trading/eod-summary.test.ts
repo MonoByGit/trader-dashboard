@@ -28,6 +28,23 @@ describe('eodExitsToday', () => {
     expect(exits.map((e) => e.symbol)).toEqual(['QQQ']);
   });
 
+  it('laat stops van andere strategieën buiten het label (m2s-)', () => {
+    const orders = [
+      { symbol: 'XLI', side: 'sell', status: 'filled', client_order_id: 'm2s-XLI-1', filled_at: '2026-11-04T18:25:40Z', filled_avg_price: '167.47' },
+    ];
+    expect(eodExitsToday(orders, [], '2026-11-04', tradingDateEt, classify)).toEqual([]);
+  });
+
+  it('neemt een gedeeltelijk gevulde en daarna geannuleerde stop mee', () => {
+    const orders = [
+      { symbol: 'XLI', side: 'sell', status: 'canceled', filled_qty: '10', filled_at: '2026-11-04T18:25:40Z', filled_avg_price: '167.47' },
+      { symbol: 'XLI', side: 'sell', status: 'canceled', filled_qty: '0', filled_at: null, filled_avg_price: null },
+    ];
+    expect(eodExitsToday(orders, [], '2026-11-04', tradingDateEt, classify)).toEqual([
+      { symbol: 'XLI', how: 'stop', price: 167.47 },
+    ]);
+  });
+
   it('zegt niets als er niets gesloten is', () => {
     expect(eodExitsLabel([])).toBe('niets');
   });

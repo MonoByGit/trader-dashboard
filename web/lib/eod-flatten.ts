@@ -8,7 +8,7 @@ import { m1CloseQty } from '../../src/trading/strategy-tags';
 import { foreignQtyForSymbol } from '@/lib/momentum2/ownership';
 
 export type EodFlattenResult =
-  | { ok: true; symbol: string }
+  | { ok: true; symbol: string; /** 0 = niets van Momentum 1 om te sluiten (positie hoort bij een andere strategie). */ closedQty?: number }
   | { ok: false; symbol: string; error: string; cancelReady: boolean; remainingLegs: number; restopPlaced?: boolean };
 
 async function placeEodSafetyStop(symbol: string, position: AlpacaPosition): Promise<boolean> {
@@ -98,7 +98,7 @@ export async function flattenEtfPositionAtEod(symbol: string): Promise<EodFlatte
           { attempts: 3, delayMs: 400, backoff: 1.5 },
         );
       }
-      return { ok: true, symbol };
+      return { ok: true, symbol, closedQty: qty };
     }
     await retryAsync(() => alpaca.closePosition(symbol), {
       attempts: 3,
