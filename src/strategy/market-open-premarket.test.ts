@@ -34,3 +34,22 @@ describe('premarketApprovedBuySymbols', () => {
     expect(approved).toEqual([]);
   });
 });
+
+import { marketOpenCandidateUniverse, marketOpenPremarketPromptLine } from './market-open-premarket.js';
+
+describe('marketOpenCandidateUniverse (casus 2-11: XLF goedgekeurd, AI stelde XLV en XLE voor)', () => {
+  it('geeft de AI alleen de premarket-goedgekeurde symbolen', () => {
+    const universe = marketOpenCandidateUniverse(['XLF'], []);
+    expect(universe).toEqual(['XLF']);
+    expect(marketOpenPremarketPromptLine(universe)).toContain('XLF');
+    expect(marketOpenPremarketPromptLine(universe)).not.toContain('XLV');
+  });
+
+  it('laat al open symbolen weg', () => {
+    expect(marketOpenCandidateUniverse(['XLF', 'QQQ'], ['QQQ'])).toEqual(['XLF']);
+  });
+
+  it('is leeg zonder goedkeuring, dan hoeft de AI niet te draaien', () => {
+    expect(marketOpenCandidateUniverse([], ['SPY'])).toEqual([]);
+  });
+});

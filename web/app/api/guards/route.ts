@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { alpaca } from '@/lib/alpaca';
-import { sendMessage, killSwitchMessage } from '@/lib/telegram';
 import { openOrAppendThread } from '@/lib/threads';
 import { buildGuardStatus, setTradingEnabled, loadGuardState } from '@/lib/guards/service';
 import { applySoftStartToGuardConfig, loadGuardConfig, SOFT_START_DEFAULTS } from '@guards/index';
@@ -97,7 +96,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { tradingEnabled, who } = await req.json();
+  const { tradingEnabled } = await req.json();
   const enabled = !!tradingEnabled;
 
   const state = await loadGuardState();
@@ -112,7 +111,6 @@ export async function POST(req: Request) {
   await setTradingEnabled(enabled);
 
   if (previous !== enabled) {
-    await sendMessage(killSwitchMessage(enabled, typeof who === 'string' && who ? who : 'Dusty'));
     const day = new Date().toISOString().slice(0, 10);
     await openOrAppendThread({
       title: enabled ? 'Trading weer ingeschakeld' : 'Trading gestopt (kill switch)',

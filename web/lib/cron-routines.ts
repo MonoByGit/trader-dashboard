@@ -12,7 +12,6 @@ import { saveDecision } from '@/lib/decisions';
 import { registerRoutineHandler } from '@/lib/routine-dispatch';
 import { syncRecentOrders } from '@/lib/orders-store';
 import { writeDailySnapshot } from '@/lib/snapshots';
-import { sendMessage, buyMessage, stopHitMessage, eodDigestMessage } from '@/lib/telegram';
 import { captureEvent } from '@/lib/openbrain';
 import { computePositionSize } from '@/lib/sizing';
 import { openOrAppendThread } from '@/lib/threads';
@@ -37,9 +36,13 @@ import { hasOpenBuyOrderForSymbol, isStopFill, isTakeProfitFill } from '@/lib/al
 import { flattenEtfPositionAtEod } from '@/lib/eod-flatten';
 import { loadPremarketDecisionsForTradingDate } from '@/lib/premarket-store';
 import {
+  MARKET_OPEN_NO_APPROVAL_SKIP_REASON,
+  marketOpenCandidateUniverse,
   marketOpenNoPremarketSkip,
+  marketOpenPremarketPromptLine,
   premarketApprovedBuySymbols,
 } from '../../src/strategy/market-open-premarket';
+import { eodExitsLabel, eodExitsToday } from '../../src/trading/eod-summary';
 import { nextDailyTradeCount } from '../../src/guards/daily-trades';
 import { tradingDateEt } from '@scheduler/decide';
 import { runWeeklyReview } from '@/lib/weekly-review';
@@ -72,9 +75,10 @@ async function liveStrategy(): Promise<StrategyContent> {
   }
 }
 
-// Detect filled stop-loss legs today and ping Telegram once per order.
-// Dedup uses the settings table (key = notified:<orderId>) so midday and eod
-// never double-notify. Fully fail-safe.
+// Detect filled stop-loss and take-profit legs today and write a post-mortem
+// once per order. Dedup uses the settings table (key = notified:<orderId>) so
+// midday and eod never double-process. Fully fail-safe. Trading gebruikt geen
+// Telegram (5-11-2026): meldingen lopen via de draden in de app.
 async function notifyStopFills() {
   if (!hasDb()) return;
   try {
@@ -90,8 +94,6 @@ async function notifyStopFills() {
       const key = `notified:${o.id}`;
       const seen = await dbQuery(`SELECT 1 FROM settings WHERE key=$1`, [key]);
       if (seen.length) continue;
-      const exit = parseFloat(o.filled_avg_price ?? o.stop_price ?? '0');
-      if (isStop) await sendMessage(stopHitMessage(o.symbol, exit));
       await postMortemFromFilledSell(o, isStop ? 'stop' : 'take_profit').catch((e) => console.error('[postMortem]', e));
       await dbRun(`INSERT INTO settings (key, value) VALUES ($1, '1') ON CONFLICT (key) DO NOTHING`, [key]);
     }
@@ -262,6 +264,19 @@ export async function runMarketOpen() {
     };
   }
 
+  // De AI krijgt alleen te zien wat premarket vandaag goedkeurde (casus 2-11:
+  // XLF goedgekeurd, AI stelde XLV en XLE voor). Niets goedgekeurd: geen AI-call.
+  const universe = marketOpenCandidateUniverse(Array.from(approvedPremarket), openSymbols);
+  if (universe.length === 0) {
+    return {
+      routine: 'market-open',
+      orders: [],
+      skipped: true,
+      reason: MARKET_OPEN_NO_APPROVAL_SKIP_REASON,
+      premarketApproved: Array.from(approvedPremarket),
+    };
+  }
+
   let quoteBySymbol: Record<string, { ap: number; bp: number }> = {};
   try {
     const q = await alpaca.latestQuotes(watchlist);
@@ -290,8 +305,8 @@ export async function runMarketOpen() {
   try {
     candidates = await claudeJsonArray<{ symbol: string; action: 'buy' | 'skip'; qty: number; reason: string }>(
       MODELS.sonnet,
-      `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strat.rules.max_positions} posities. Position size: ${(strat.rules.position_size_pct ?? 0.25) * 100}% equity. Cash floor: ${(strat.rules.cash_floor_pct ?? 0.1) * 100}%.${lessonSuffix}`,
-      `Bars data:\n${JSON.stringify(Object.fromEntries(watchlist.map(s => [s, (snapshotBars[s] ?? []).slice(-5)])))}\nGeef JSON-object: {"candidates":[{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]}`,
+      `Je bent Momentum. Bepaal entry orders. Equity: $${equity.toFixed(0)}. Al open: ${openSymbols.join(',') || 'geen'}. Max ${strat.rules.max_positions} posities. Position size: ${(strat.rules.position_size_pct ?? 0.25) * 100}% equity. Cash floor: ${(strat.rules.cash_floor_pct ?? 0.1) * 100}%.${marketOpenPremarketPromptLine(universe)}${lessonSuffix}`,
+      `Bars data:\n${JSON.stringify(Object.fromEntries(universe.map(s => [s, (snapshotBars[s] ?? []).slice(-5)])))}\nGeef JSON-object: {"candidates":[{"symbol":"QQQ","action":"buy","qty":25,"reason":"reden"}]}`,
     );
   } catch (e) {
     const msg = e instanceof AiJsonParseError ? e.message : String(e);
@@ -502,7 +517,6 @@ export async function runMarketOpen() {
           'prompt',
         );
       }
-      await sendMessage(buyMessage(c.symbol, c.qty, lastPrice, stopPrice, takeProfitPrice));
       // Verankering: open een draad bij elke nieuwe positie (beurt -> Dusty).
       await openOrAppendThread({
         title: `Nieuwe positie: ${c.symbol}`,
@@ -557,6 +571,7 @@ async function runEod() {
   const guardConfig = loadGuardConfig();
   const eodPlan = planEodClose(clock, positions.length > 0, guardConfig);
   const closed: string[] = [];
+  const flattenedAt: { symbol: string; price?: number }[] = [];
   const eodNote = eodPlan.reason;
 
   const flattenFailures: string[] = [];
@@ -568,6 +583,7 @@ async function runEod() {
       const result = await flattenEtfPositionAtEod(p.symbol);
       if (result.ok) {
         closed.push(p.symbol);
+        flattenedAt.push({ symbol: p.symbol, price: exitPx });
         await saveDecision({
           routine: 'eod',
           symbol: p.symbol,
@@ -623,9 +639,25 @@ async function runEod() {
   }
   const equity = parseFloat(account.equity);
   const lastEquity = parseFloat(account.last_equity);
+
+  // Alle sluitingen van vandaag, niet alleen de EOD-flatten (casus 4-11: XLI
+  // raakte de stop, de samenvatting noemde alleen XLV).
+  const todayOrders = await alpaca.orders(100).catch((e) => {
+    console.error('[eod] orders lezen mislukt', e);
+    return [] as Awaited<ReturnType<typeof alpaca.orders>>;
+  });
+  const exits = eodExitsToday(
+    todayOrders,
+    flattenedAt,
+    tradingDateEt(Date.now()),
+    tradingDateEt,
+    (o) => (isStopFill(o) ? 'stop' : isTakeProfitFill(o) ? 'take_profit' : null),
+  );
+  const exitsLabel = eodExitsLabel(exits);
+
   const report = await claudeText(MODELS.sonnet,
     'Je bent Momentum. Schrijf een EOD rapport in het Nederlands. Max 3 alinea\'s. Wat is er gebeurd, wat zijn de lessen, wat kijk ik naar morgen.',
-    `Dag P&L: $${(equity - lastEquity).toFixed(2)} (${((equity - lastEquity) / lastEquity * 100).toFixed(2)}%). Equity: $${lastEquity.toFixed(0)} → $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}. EOD: ${eodNote}.${guardEventsSummary}`,
+    `Dag P&L: $${(equity - lastEquity).toFixed(2)} (${((equity - lastEquity) / lastEquity * 100).toFixed(2)}%). Equity: $${lastEquity.toFixed(0)} → $${equity.toFixed(0)}. Gesloten vandaag: ${exitsLabel}. EOD: ${eodNote}.${guardEventsSummary}`,
     1024);
 
   const reportId = `report-${Date.now()}`;
@@ -633,18 +665,15 @@ async function runEod() {
     await initDb();
     await dbRun(
       `INSERT INTO agent_reports (id, date, generated_at, kpis, narrative) VALUES ($1,NOW()::DATE,NOW(),$2,$3)`,
-      [reportId, JSON.stringify({ equityStart: lastEquity, equityEnd: equity, closed }), report]
+      [reportId, JSON.stringify({ equityStart: lastEquity, equityEnd: equity, closed, exits }), report]
     );
   }
-
-  // Daily Telegram digest.
-  await sendMessage(eodDigestMessage(lastEquity, equity, closed, report));
 
   // Significant P&L event to Open Brain (drawdown or spike beyond 1.5%).
   const dayPct = lastEquity > 0 ? ((equity - lastEquity) / lastEquity) * 100 : 0;
   if (Math.abs(dayPct) >= 1.5) {
     await captureEvent(
-      `Dag-P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% ($${(equity - lastEquity).toFixed(2)}). Equity $${lastEquity.toFixed(0)} naar $${equity.toFixed(0)}. Gesloten: ${closed.join(', ') || 'niets'}.`
+      `Dag-P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% ($${(equity - lastEquity).toFixed(2)}). Equity $${lastEquity.toFixed(0)} naar $${equity.toFixed(0)}. Gesloten vandaag: ${exitsLabel}.`
     );
   }
 
@@ -654,7 +683,7 @@ async function runEod() {
     title: `Dagrapport ${new Date().toLocaleDateString('nl-NL')}`,
     type: 'gesprek', priority: bigDay ? 'hoog' : 'normaal',
     anchorType: 'report', anchorId: reportId,
-    summary: `P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% · ${closed.length} gesloten`,
+    summary: `P&L ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}% · gesloten: ${exitsLabel}`,
     tags: ['#dagrapport'],
     body: `${report}\n\nResultaat vandaag: ${dayPct >= 0 ? '+' : ''}${dayPct.toFixed(2)}%. ${bigDay ? 'Dit was een opvallende dag. ' : ''}Wil je dat ik ergens dieper op inga?`,
   }).catch(() => {});
@@ -672,6 +701,7 @@ async function runEod() {
   return {
     routine: 'eod',
     closed,
+    exits,
     flattenFailures,
     equity,
     eodPlan: eodPlan.action,
