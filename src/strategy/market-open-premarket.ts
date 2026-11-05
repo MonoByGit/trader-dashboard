@@ -61,3 +61,27 @@ export function marketOpenNoPremarketSkip(
   }
   return null;
 }
+
+export const MARKET_OPEN_NO_APPROVAL_SKIP_REASON =
+  'Premarket keurde vandaag geen symbool goed op alle zes criteria';
+
+/** Reden om market-open over te slaan als er niets te overwegen valt. */
+export function marketOpenEmptyUniverseReason(approved: string[]): string {
+  if (approved.length === 0) return MARKET_OPEN_NO_APPROVAL_SKIP_REASON;
+  return `Alle premarket-goedkeuringen (${approved.join(', ')}) staan al open`;
+}
+
+/**
+ * Welke symbolen de market-open AI mag overwegen: alleen wat premarket vandaag
+ * goedkeurde en nog niet open staat. De AI ziet zo de premarket-goedkeuring en
+ * stelt geen symbool voor dat de harde poort daarna toch weigert (casus 2-11).
+ */
+export function marketOpenCandidateUniverse(approved: string[], openSymbols: string[]): string[] {
+  const open = new Set(openSymbols);
+  return approved.filter((s) => !open.has(s));
+}
+
+/** Regel voor de systeemprompt van market-open met de premarket-goedkeuring van vandaag. */
+export function marketOpenPremarketPromptLine(universe: string[]): string {
+  return ` Premarket keurde vandaag goed op alle zes criteria: ${universe.join(', ')}. Kies ALLEEN uit deze symbolen; elk ander symbool wordt geweigerd.`;
+}
